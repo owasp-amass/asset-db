@@ -17,10 +17,18 @@ jobs:
   unit:
     name: unit
     runs-on: ubuntu-20.04
+    env:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      SQLITE3_DB: test.db
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
+      - name: Setup PostgreSQL
+        uses: ikalnytskyi/action-setup-postgres@v4
+        id: postgres
       - run: |
           go test -race -timeout 240s ./...
