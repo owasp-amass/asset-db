@@ -15,8 +15,7 @@ func ExampleMigrations() {
 	password := os.Getenv("POSTGRES_PASSWORD")
 	dbname := os.Getenv("POSTGRES_DB")
 
-	dsn := fmt.Sprintf("postgresql://localhost/%s?user=%s&password=%s", dbname, user, password)
-
+	dsn := fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", user, password, dbname)
 	db, err := gorm.Open(pg.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic("failed to connect database")
