@@ -11,9 +11,9 @@ import (
 )
 
 func ExampleMigrations() {
-	dns := os.Getenv("SQLITE3_DB")
+	dsn := os.Getenv("SQLITE3_DB")
 
-	db, err := gorm.Open(sqlite.Open(dns), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic("failed to connect database")
 	}
@@ -35,7 +35,7 @@ func ExampleMigrations() {
 		fmt.Println(db.Migrator().HasTable(table))
 	}
 
-	err = os.Remove("./" + dns)
+	err = os.Remove(dsn)
 	if err != nil {
 		panic(err)
 	}
