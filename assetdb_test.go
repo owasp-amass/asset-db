@@ -38,6 +38,16 @@ func (m *mockAssetDB) Link(source *types.Asset, relation string, destination *ty
 	return args.Get(0).(*types.Relation), args.Error(1)
 }
 
+func (m *mockAssetDB) IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	args := m.Called(asset, relationTypes)
+	return args.Get(0).([]*types.Relation), args.Error(1)
+}
+
+func (m *mockAssetDB) OutgoingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	args := m.Called(asset, relationTypes)
+	return args.Get(0).([]*types.Relation), args.Error(1)
+}
+
 func TestMain(m *testing.M) {
 	exitVal := m.Run()
 
@@ -158,4 +168,6 @@ func TestAssetDB(t *testing.T) {
 			})
 		}
 	})
+
+	// TODO: Additional tests for IncomingRelations, OutgoingRelations
 }

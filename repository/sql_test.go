@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"log"
 	"net/netip"
 	"os"
 	"testing"
@@ -21,7 +22,9 @@ import (
 var user = os.Getenv("POSTGRES_USER")
 var password = os.Getenv("POSTGRES_PASSWORD")
 var pgdbname = os.Getenv("POSTGRES_DB")
-var sqlitedbname = os.Getenv("SQLITE3_DB")
+
+// var sqlitedbname = os.Getenv("SQLITE3_DB")
+var sqlitedbname = "test.db"
 
 var store *sqlRepository
 
@@ -33,6 +36,7 @@ type testSetup struct {
 }
 
 func setupSqlite(dsn string) (*gorm.DB, error) {
+
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
@@ -48,8 +52,10 @@ func setupSqlite(dsn string) (*gorm.DB, error) {
 		return nil, err
 	}
 
+	log.Println("Running SQLite Migrations")
 	_, err = migrate.Exec(sqlDb, "sqlite3", migrationsSource, migrate.Up)
 	if err != nil {
+		log.Println("Error Running SQLite Migrations; ", err)
 		return nil, err
 	}
 
@@ -251,6 +257,42 @@ func TestRepository(t *testing.T) {
 			relation, err := store.Link(sourceAsset, tc.relation, destinationAsset)
 			if err != nil {
 				t.Fatalf("failed to link assets: %s", err)
+			}
+
+			incoming, err := store.IncomingRelations(destinationAsset, tc.relation)
+			if err != nil {
+				t.Fatalf("failed to query incoming relations: %s", err)
+			}
+
+			if incoming == nil {
+				t.Fatalf("failed to query incoming relations: incoming relations is nil %s", err)
+			}
+			if incoming[0].Type != tc.relation {
+				t.Fatalf("expected relation %s, got %s", tc.relation, incoming[0].Type)
+			}
+			if incoming[0].FromAsset.ID != sourceAsset.ID {
+				t.Fatalf("expected ToAsset.ID %s, got %v", sourceAsset.ID, incoming[0])
+			}
+			if incoming[0].ToAsset.ID != destinationAsset.ID {
+				t.Fatalf("expected destination asset id %s, got %s", destinationAsset.ID, incoming[0].ToAsset.ID)
+			}
+
+			outgoing, err := store.OutgoingRelations(sourceAsset, tc.relation)
+			if err != nil {
+				t.Fatalf("failed to query outgoing relations: %s", err)
+			}
+			if outgoing == nil {
+				t.Fatalf("failed to query outgoing relations: outgoing relations is nil")
+			}
+
+			if outgoing[0].Type != tc.relation {
+				t.Fatalf("expected relation %s, got %s", tc.relation, outgoing[0].Type)
+			}
+			if outgoing[0].FromAsset.ID != sourceAsset.ID {
+				t.Fatalf("expected FromAsset.ID %s, got %s", sourceAsset.ID, outgoing[0].FromAsset.ID)
+			}
+			if outgoing[0].ToAsset.ID != destinationAsset.ID {
+				t.Fatalf("expected destination asset id %s, got %s", destinationAsset.ID, outgoing[0].ToAsset.ID)
 			}
 
 			if relation == nil {

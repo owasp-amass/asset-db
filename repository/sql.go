@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -153,6 +154,71 @@ func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
 		ID:    strconv.FormatInt(asset.ID, 10),
 		Asset: assetData,
 	}, nil
+}
+
+// IncomingRelations finds all relations pointing to the asset.
+// Pass types to filter to a specific set of relations.
+func (sql *sqlRepository) IncomingRelations(asset *types.Asset, types ...string) ([]*types.Relation, error) {
+	assetId, err := strconv.ParseInt(asset.ID, 10, 64)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	relations := []Relation{}
+	// Query relations where FromAssetId = assetId and Type in types
+	res := sql.db.Where("to_asset_id = ? AND type IN ?", assetId, types).Find(&relations)
+	if res.Error != nil {
+		log.Println(res.Error)
+		return nil, res.Error
+	}
+
+	return toRelations(relations), nil
+}
+
+// toRelation converts a database Relation to a types.Relation.
+func toRelation(r Relation) *types.Relation {
+	rel := &types.Relation{
+		ID:   strconv.FormatInt(r.ID, 10),
+		Type: r.Type,
+		FromAsset: &types.Asset{
+			ID: strconv.FormatInt(r.FromAssetID, 10),
+			// Not joining to Asset to get Content
+		},
+		ToAsset: &types.Asset{
+			ID: strconv.FormatInt(r.ToAssetID, 10),
+			// Not joining to Asset to get Content
+		},
+	}
+
+	return rel
+}
+
+// toRelations converts a slice database Relations to a slice of types.Relation structs.
+func toRelations(relations []Relation) []*types.Relation {
+	var res []*types.Relation
+	for _, r := range relations {
+		res = append(res, toRelation(r))
+	}
+
+	return res
+}
+
+// OutgoingRelations finds all relations pointing from the asset.
+func (sql *sqlRepository) OutgoingRelations(asset *types.Asset, types ...string) ([]*types.Relation, error) {
+	assetId, err := strconv.ParseInt(asset.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	relations := []Relation{}
+	// Query relations where FromAssetId = assetId and Type in types
+	res := sql.db.Where("from_asset_id = ? AND type IN ?", assetId, types).Find(&relations)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
+	return toRelations(relations), nil
 }
 
 // Link creates a relation between two assets in the database.

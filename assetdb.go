@@ -54,3 +54,11 @@ func (as *assetDB) FindByContent(asset oam.Asset) ([]*types.Asset, error) {
 func (as *assetDB) FindById(id string) (*types.Asset, error) {
 	return as.repository.FindAssetById(id)
 }
+
+func (as *assetDB) IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	return as.repository.IncomingRelations(asset, relationTypes...)
+}
+
+func (as *assetDB) OutgoingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	return as.repository.OutgoingRelations(asset, relationTypes...)
+}
