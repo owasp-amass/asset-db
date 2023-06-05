@@ -13,6 +13,8 @@ jobs:
           go-version-file: 'go.mod'
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout=5m
 
   unit:
     name: unit
