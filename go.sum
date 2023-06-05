@@ -313,6 +313,8 @@ github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn
 github.com/olekukonko/tablewriter v0.0.5/go.mod h1:hPp6KlRPjbx+hW8ykQs1w3UBbZlj6HuIJcUGPhkA7kY=
 github.com/owasp-amass/open-asset-model v0.0.0-20230518152847-c39671e6337c h1:/JkgcUncWpm1bPgpicpI5ZK0l20xguglFXS179GjXwo=
 github.com/owasp-amass/open-asset-model v0.0.0-20230518152847-c39671e6337c/go.mod h1:nwviDUc6sKkHScZFwXeNJNP2M4pgMTvB7we5r+EfNSk=
+github.com/owasp-amass/open-asset-model v0.1.0-alpha h1:lQMHc94YtIS1WwWYAoTQWMkipiKkzUKNxZbRAnKROsc=
+github.com/owasp-amass/open-asset-model v0.1.0-alpha/go.mod h1:nwviDUc6sKkHScZFwXeNJNP2M4pgMTvB7we5r+EfNSk=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/pelletier/go-toml v1.9.3/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
