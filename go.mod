@@ -3,7 +3,7 @@ module github.com/owasp-amass/asset-db
 go 1.20
 
 require (
-	github.com/owasp-amass/open-asset-model v0.0.0-20230518152847-c39671e6337c
+	github.com/owasp-amass/open-asset-model v0.1.0-alpha
 	github.com/rubenv/sql-migrate v1.4.0
 	github.com/stretchr/testify v1.8.2
 	gorm.io/datatypes v1.2.0
