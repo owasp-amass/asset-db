@@ -252,7 +252,7 @@ func TestRepository(t *testing.T) {
 			}
 
 			if relation == nil {
-				t.Fatalf("failed to query outgoing relations: failed to link assets: relation is nil")
+				t.Fatalf("failed to link assets: relation is nil")
 			}
 
 			incoming, err := store.IncomingRelations(destinationAsset, tc.relation)
