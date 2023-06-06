@@ -2,7 +2,6 @@ package repository
 
 import (
 	"fmt"
-	"log"
 	"net/netip"
 	"os"
 	"testing"
@@ -23,20 +22,18 @@ var user = os.Getenv("POSTGRES_USER")
 var password = os.Getenv("POSTGRES_PASSWORD")
 var pgdbname = os.Getenv("POSTGRES_DB")
 
-// var sqlitedbname = os.Getenv("SQLITE3_DB")
 var sqlitedbname = "test.db"
 
 var store *sqlRepository
 
 type testSetup struct {
 	name     DBType
-	dns      string
+	dsn      string
 	setup    func(string) (*gorm.DB, error)
 	teardown func(string)
 }
 
 func setupSqlite(dsn string) (*gorm.DB, error) {
-
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
@@ -52,18 +49,16 @@ func setupSqlite(dsn string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	log.Println("Running SQLite Migrations")
 	_, err = migrate.Exec(sqlDb, "sqlite3", migrationsSource, migrate.Up)
 	if err != nil {
-		log.Println("Error Running SQLite Migrations; ", err)
 		return nil, err
 	}
 
 	return db, nil
 }
 
-func teardownSqlite(dns string) {
-	err := os.Remove(dns)
+func teardownSqlite(dsn string) {
+	err := os.Remove(dsn)
 	if err != nil {
 		panic(err)
 	}
@@ -93,8 +88,8 @@ func setupPostgres(dsn string) (*gorm.DB, error) {
 	return db, nil
 }
 
-func teardownPostgres(dns string) {
-	db, err := gorm.Open(postgres.Open(dns), &gorm.Config{})
+func teardownPostgres(dsn string) {
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -120,13 +115,13 @@ func TestMain(m *testing.M) {
 		{
 			name:     Postgres,
 			setup:    setupPostgres,
-			dns:      fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", user, password, pgdbname),
+			dsn:      fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", user, password, pgdbname),
 			teardown: teardownPostgres,
 		},
 		{
 			name:     SQLite,
 			setup:    setupSqlite,
-			dns:      sqlitedbname,
+			dsn:      sqlitedbname,
 			teardown: teardownSqlite,
 		},
 	}
@@ -134,18 +129,15 @@ func TestMain(m *testing.M) {
 	exitCodes := make([]int, len(wrappers))
 
 	for i, w := range wrappers {
-		_, err := w.setup(w.dns)
+		_, err := w.setup(w.dsn)
 		if err != nil {
 			panic(err)
 		}
 
-		store = New(w.name, w.dns)
-
-		fmt.Printf("Running tests for %s\n", w.name)
+		store = New(w.name, w.dsn)
 		exitCodes[i] = m.Run()
-
 		if w.teardown != nil {
-			w.teardown(w.dns)
+			w.teardown(w.dsn)
 		}
 	}
 
@@ -259,6 +251,10 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to link assets: %s", err)
 			}
 
+			if relation == nil {
+				t.Fatalf("failed to query outgoing relations: failed to link assets: relation is nil")
+			}
+
 			incoming, err := store.IncomingRelations(destinationAsset, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query incoming relations: %s", err)
@@ -267,36 +263,38 @@ func TestRepository(t *testing.T) {
 			if incoming == nil {
 				t.Fatalf("failed to query incoming relations: incoming relations is nil %s", err)
 			}
+
 			if incoming[0].Type != tc.relation {
-				t.Fatalf("expected relation %s, got %s", tc.relation, incoming[0].Type)
+				t.Fatalf("failed to query incoming relations: expected relation %s, got %s", tc.relation, incoming[0].Type)
 			}
+
 			if incoming[0].FromAsset.ID != sourceAsset.ID {
-				t.Fatalf("expected ToAsset.ID %s, got %v", sourceAsset.ID, incoming[0])
+				t.Fatalf("failed to query incoming relations: expected source asset id %s, got %v", sourceAsset.ID, incoming[0].FromAsset.ID)
 			}
+
 			if incoming[0].ToAsset.ID != destinationAsset.ID {
-				t.Fatalf("expected destination asset id %s, got %s", destinationAsset.ID, incoming[0].ToAsset.ID)
+				t.Fatalf("failed to query incoming relations: expected destination asset id %s, got %s", destinationAsset.ID, incoming[0].ToAsset.ID)
 			}
 
 			outgoing, err := store.OutgoingRelations(sourceAsset, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query outgoing relations: %s", err)
 			}
+
 			if outgoing == nil {
 				t.Fatalf("failed to query outgoing relations: outgoing relations is nil")
 			}
 
 			if outgoing[0].Type != tc.relation {
-				t.Fatalf("expected relation %s, got %s", tc.relation, outgoing[0].Type)
-			}
-			if outgoing[0].FromAsset.ID != sourceAsset.ID {
-				t.Fatalf("expected FromAsset.ID %s, got %s", sourceAsset.ID, outgoing[0].FromAsset.ID)
-			}
-			if outgoing[0].ToAsset.ID != destinationAsset.ID {
-				t.Fatalf("expected destination asset id %s, got %s", destinationAsset.ID, outgoing[0].ToAsset.ID)
+				t.Fatalf("failed to query outgoing relations: expected relation %s, got %s", tc.relation, outgoing[0].Type)
 			}
 
-			if relation == nil {
-				t.Fatalf("failed to link assets: relation is nil")
+			if outgoing[0].FromAsset.ID != sourceAsset.ID {
+				t.Fatalf("failed to query outgoing relations: expected source asset id %s, got %s", sourceAsset.ID, outgoing[0].FromAsset.ID)
+			}
+
+			if outgoing[0].ToAsset.ID != destinationAsset.ID {
+				t.Fatalf("failed to query outgoing relations: expected destination asset id %s, got %s", destinationAsset.ID, outgoing[0].ToAsset.ID)
 			}
 		})
 	}

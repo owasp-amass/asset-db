@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"log"
 	"strconv"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -161,7 +160,6 @@ func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
 func (sql *sqlRepository) IncomingRelations(asset *types.Asset, types ...string) ([]*types.Relation, error) {
 	assetId, err := strconv.ParseInt(asset.ID, 10, 64)
 	if err != nil {
-		log.Println(err)
 		return nil, err
 	}
 
@@ -169,7 +167,6 @@ func (sql *sqlRepository) IncomingRelations(asset *types.Asset, types ...string)
 	// Query relations where FromAssetId = assetId and Type in types
 	res := sql.db.Where("to_asset_id = ? AND type IN ?", assetId, types).Find(&relations)
 	if res.Error != nil {
-		log.Println(res.Error)
 		return nil, res.Error
 	}
 

@@ -55,10 +55,14 @@ func (as *assetDB) FindById(id string) (*types.Asset, error) {
 	return as.repository.FindAssetById(id)
 }
 
+// IncomingRelations finds all incoming relations for the specified asset and relation types.
+// It returns a list of incoming relations and an error, if any.
 func (as *assetDB) IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
 	return as.repository.IncomingRelations(asset, relationTypes...)
 }
 
+// OutgoingRelations finds all outgoing relations for the specified asset and relation types.
+// It returns a list of outgoing relations and an error, if any.
 func (as *assetDB) OutgoingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
 	return as.repository.OutgoingRelations(asset, relationTypes...)
 }

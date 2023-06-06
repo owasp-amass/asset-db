@@ -116,8 +116,8 @@ func TestAssetDB(t *testing.T) {
 			expected      *types.Asset
 			expectedError error
 		}{
-			{"An asset is found", "1", &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}, nil},
-			{"An asset is not found", "2", &types.Asset{}, fmt.Errorf("Asset not found")},
+			{"an asset is found", "1", &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}, nil},
+			{"an asset is not found", "2", &types.Asset{}, fmt.Errorf("Asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -146,8 +146,8 @@ func TestAssetDB(t *testing.T) {
 			expected      []*types.Asset
 			expectedError error
 		}{
-			{"An asset is found", domain.FQDN{Name: "www.domain.com"}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"An asset is not found", domain.FQDN{Name: "www.domain.com"}, []*types.Asset{}, fmt.Errorf("Asset not found")},
+			{"an asset is found", domain.FQDN{Name: "www.domain.com"}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"an asset is not found", domain.FQDN{Name: "www.domain.com"}, []*types.Asset{}, fmt.Errorf("Asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -169,5 +169,115 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
-	// TODO: Additional tests for IncomingRelations, OutgoingRelations
+	t.Run("IncomingRelations", func(t *testing.T) {
+		testCases := []struct {
+			description   string
+			asset         *types.Asset
+			relationTypes []string
+			expected      []*types.Relation
+			expectedError error
+		}{
+			{
+				description:   "successfully find incoming relations",
+				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				relationTypes: []string{"ns_record", "cname_record"},
+				expected: []*types.Relation{
+					{
+						ID:        "1",
+						Type:      "ns_record",
+						FromAsset: &types.Asset{ID: "2", Asset: domain.FQDN{Name: "www.subdomain1.com"}},
+						ToAsset:   &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+					},
+					{
+						ID:        "2",
+						Type:      "cname_record",
+						FromAsset: &types.Asset{ID: "3", Asset: domain.FQDN{Name: "www.subdomain2.com"}},
+						ToAsset:   &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+					},
+				},
+				expectedError: nil,
+			},
+			{
+				description:   "error finding incoming relations",
+				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				relationTypes: []string{"ns_record", "cname_record"},
+				expected:      []*types.Relation{},
+				expectedError: fmt.Errorf("error finding incoming relations"),
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.description, func(t *testing.T) {
+				mockAssetDB := new(mockAssetDB)
+				adb := assetDB{
+					repository: mockAssetDB,
+				}
+
+				mockAssetDB.On("IncomingRelations", tc.asset, tc.relationTypes).Return(tc.expected, tc.expectedError)
+
+				result, err := adb.IncomingRelations(tc.asset, tc.relationTypes...)
+
+				assert.Equal(t, tc.expected, result)
+				assert.Equal(t, tc.expectedError, err)
+
+				mockAssetDB.AssertExpectations(t)
+			})
+		}
+	})
+
+	t.Run("OutgoingRelations", func(t *testing.T) {
+		testCases := []struct {
+			description   string
+			asset         *types.Asset
+			relationTypes []string
+			expected      []*types.Relation
+			expectedError error
+		}{
+			{
+				description:   "successfully find incoming relations",
+				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				relationTypes: []string{"ns_record", "cname_record"},
+				expected: []*types.Relation{
+					{
+						ID:        "1",
+						Type:      "ns_record",
+						FromAsset: &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+						ToAsset:   &types.Asset{ID: "2", Asset: domain.FQDN{Name: "www.subdomain1.com"}},
+					},
+					{
+						ID:        "2",
+						Type:      "cname_record",
+						FromAsset: &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+						ToAsset:   &types.Asset{ID: "2", Asset: domain.FQDN{Name: "www.subdomain2.com"}},
+					},
+				},
+				expectedError: nil,
+			},
+			{
+				description:   "error finding outgoing relations",
+				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				relationTypes: []string{"ns_record", "cname_record"},
+				expected:      []*types.Relation{},
+				expectedError: fmt.Errorf("error finding outgoing relations"),
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.description, func(t *testing.T) {
+				mockAssetDB := new(mockAssetDB)
+				adb := assetDB{
+					repository: mockAssetDB,
+				}
+
+				mockAssetDB.On("OutgoingRelations", tc.asset, tc.relationTypes).Return(tc.expected, tc.expectedError)
+
+				result, err := adb.OutgoingRelations(tc.asset, tc.relationTypes...)
+
+				assert.Equal(t, tc.expected, result)
+				assert.Equal(t, tc.expectedError, err)
+
+				mockAssetDB.AssertExpectations(t)
+			})
+		}
+	})
 }
