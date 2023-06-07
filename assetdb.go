@@ -32,12 +32,12 @@ func (as *assetDB) Create(source *types.Asset, relation *string, discovered oam.
 
 	newAsset, err := as.repository.CreateAsset(discovered)
 	if err != nil {
-		return &types.Asset{}, err
+		return nil, err
 	}
 
 	_, err = as.repository.Link(source, *relation, newAsset)
 	if err != nil {
-		return &types.Asset{}, err
+		return nil, err
 	}
 
 	return newAsset, nil
@@ -53,4 +53,16 @@ func (as *assetDB) FindByContent(asset oam.Asset) ([]*types.Asset, error) {
 // It returns the matching asset and an error, if any.
 func (as *assetDB) FindById(id string) (*types.Asset, error) {
 	return as.repository.FindAssetById(id)
+}
+
+// IncomingRelations finds all relations pointing to `asset“ for the specified `relationTypes`, if any.
+// If no `relationTypes` are specified, all incoming relations are returned.
+func (as *assetDB) IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	return as.repository.IncomingRelations(asset, relationTypes...)
+}
+
+// OutgoingRelations finds all relations from `asset“ to another asset for the specified `relationTypes`, if any.
+// If no `relationTypes` are specified, all outgoing relations are returned.
+func (as *assetDB) OutgoingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	return as.repository.OutgoingRelations(asset, relationTypes...)
 }
