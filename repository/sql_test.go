@@ -9,6 +9,7 @@ import (
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
+	"github.com/stretchr/testify/assert"
 
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -21,8 +22,7 @@ import (
 var user = os.Getenv("POSTGRES_USER")
 var password = os.Getenv("POSTGRES_PASSWORD")
 var pgdbname = os.Getenv("POSTGRES_DB")
-
-var sqlitedbname = "test.db"
+var sqlitedbname = os.Getenv("SQLITE3_DB")
 
 var store *sqlRepository
 
@@ -148,6 +148,70 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(0)
+}
+
+func TestUnfilteredRelations(t *testing.T) {
+	source := domain.FQDN{Name: "owasp.com"}
+	dest1 := domain.FQDN{Name: "www.example.owasp.org"}
+	rel1 := "cname_record"
+
+	sourceAsset, err := store.CreateAsset(source)
+	if err != nil {
+		t.Fatalf("failed to create asset: %s", err)
+	}
+
+	dest1Asset, err := store.CreateAsset(dest1)
+	if err != nil {
+		t.Fatalf("failed to create asset: %s", err)
+	}
+
+	ip, _ := netip.ParseAddr("192.168.1.1")
+	dest2 := network.IPAddress{Address: ip, Type: "IPv4"}
+	rel2 := "a_record"
+
+	dest2Asset, err := store.CreateAsset(dest2)
+	if err != nil {
+		t.Fatalf("failed to create asset: %s", err)
+	}
+
+	_, err = store.Link(sourceAsset, rel1, dest1Asset)
+	assert.NoError(t, err)
+	_, err = store.Link(sourceAsset, rel2, dest2Asset)
+	assert.NoError(t, err)
+
+	// Outgoing relations with no filter returns all outgoing relations.
+	outs, err := store.OutgoingRelations(sourceAsset)
+	assert.NoError(t, err)
+	assert.Equal(t, len(outs), 2)
+
+	// Outgoing relations with a filter returns
+	outs, err = store.OutgoingRelations(sourceAsset, rel1)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
+	assert.Equal(t, rel1, outs[0].Type)
+	assert.Equal(t, dest1Asset.ID, outs[0].ToAsset.ID)
+
+	// Incoming relations with a filter returns
+	ins, err := store.IncomingRelations(dest1Asset, rel1)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
+	assert.Equal(t, rel1, ins[0].Type)
+	assert.Equal(t, dest1Asset.ID, ins[0].ToAsset.ID)
+
+	// Outgoing with source -> a_record -> dest2Asset
+	outs, err = store.OutgoingRelations(sourceAsset, rel2)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
+	assert.Equal(t, rel2, outs[0].Type)
+	assert.Equal(t, dest2Asset.ID, outs[0].ToAsset.ID)
+
+	// Incoming for source -> a_record -> dest2asset
+	ins, err = store.IncomingRelations(dest2Asset, rel2)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
+	assert.Equal(t, rel2, ins[0].Type)
+	assert.Equal(t, dest2Asset.ID, ins[0].ToAsset.ID)
+
 }
 
 func TestRepository(t *testing.T) {
