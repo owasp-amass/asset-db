@@ -188,3 +188,80 @@ func (sql *sqlRepository) Link(source *types.Asset, relation string, destination
 		ToAsset:   destination,
 	}, nil
 }
+
+// IncomingRelations finds all relations pointing to the asset for the specified relation types, if any.
+// If no relationTypes are specified, all outgoing relations are returned.
+func (sql *sqlRepository) IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	assetId, err := strconv.ParseInt(asset.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	relations := []Relation{}
+	if len(relationTypes) > 0 {
+		res := sql.db.Where("to_asset_id = ? AND type IN ?", assetId, relationTypes).Find(&relations)
+		if res.Error != nil {
+			return nil, res.Error
+		}
+	} else {
+		res := sql.db.Where("to_asset_id = ?", assetId).Find(&relations)
+		if res.Error != nil {
+			return nil, res.Error
+		}
+	}
+
+	return toRelations(relations), nil
+}
+
+// OutgoingRelations finds all relations from the asset to another asset for the specified relation types, if any.
+// If no relationTypes are specified, all outgoing relations are returned.
+func (sql *sqlRepository) OutgoingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
+	assetId, err := strconv.ParseInt(asset.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	relations := []Relation{}
+
+	if len(relationTypes) > 0 {
+		res := sql.db.Where("from_asset_id = ? AND type IN ?", assetId, relationTypes).Find(&relations)
+		if res.Error != nil {
+			return nil, res.Error
+		}
+	} else {
+		res := sql.db.Where("from_asset_id = ?", assetId).Find(&relations)
+		if res.Error != nil {
+			return nil, res.Error
+		}
+	}
+
+	return toRelations(relations), nil
+}
+
+// toRelation converts a database Relation to a types.Relation.
+func toRelation(r Relation) *types.Relation {
+	rel := &types.Relation{
+		ID:   strconv.FormatInt(r.ID, 10),
+		Type: r.Type,
+		FromAsset: &types.Asset{
+			ID: strconv.FormatInt(r.FromAssetID, 10),
+			// Not joining to Asset to get Content
+		},
+		ToAsset: &types.Asset{
+			ID: strconv.FormatInt(r.ToAssetID, 10),
+			// Not joining to Asset to get Content
+		},
+	}
+
+	return rel
+}
+
+// toRelations converts a slice database Relations to a slice of types.Relation structs.
+func toRelations(relations []Relation) []*types.Relation {
+	var res []*types.Relation
+	for _, r := range relations {
+		res = append(res, toRelation(r))
+	}
+
+	return res
+}

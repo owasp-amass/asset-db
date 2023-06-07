@@ -9,6 +9,7 @@ import (
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
+	"github.com/stretchr/testify/assert"
 
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -27,7 +28,7 @@ var store *sqlRepository
 
 type testSetup struct {
 	name     DBType
-	dns      string
+	dsn      string
 	setup    func(string) (*gorm.DB, error)
 	teardown func(string)
 }
@@ -56,8 +57,8 @@ func setupSqlite(dsn string) (*gorm.DB, error) {
 	return db, nil
 }
 
-func teardownSqlite(dns string) {
-	err := os.Remove(dns)
+func teardownSqlite(dsn string) {
+	err := os.Remove(dsn)
 	if err != nil {
 		panic(err)
 	}
@@ -87,8 +88,8 @@ func setupPostgres(dsn string) (*gorm.DB, error) {
 	return db, nil
 }
 
-func teardownPostgres(dns string) {
-	db, err := gorm.Open(postgres.Open(dns), &gorm.Config{})
+func teardownPostgres(dsn string) {
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -114,13 +115,13 @@ func TestMain(m *testing.M) {
 		{
 			name:     Postgres,
 			setup:    setupPostgres,
-			dns:      fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", user, password, pgdbname),
+			dsn:      fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", user, password, pgdbname),
 			teardown: teardownPostgres,
 		},
 		{
 			name:     SQLite,
 			setup:    setupSqlite,
-			dns:      sqlitedbname,
+			dsn:      sqlitedbname,
 			teardown: teardownSqlite,
 		},
 	}
@@ -128,18 +129,15 @@ func TestMain(m *testing.M) {
 	exitCodes := make([]int, len(wrappers))
 
 	for i, w := range wrappers {
-		_, err := w.setup(w.dns)
+		_, err := w.setup(w.dsn)
 		if err != nil {
 			panic(err)
 		}
 
-		store = New(w.name, w.dns)
-
-		fmt.Printf("Running tests for %s\n", w.name)
+		store = New(w.name, w.dsn)
 		exitCodes[i] = m.Run()
-
 		if w.teardown != nil {
-			w.teardown(w.dns)
+			w.teardown(w.dsn)
 		}
 	}
 
@@ -150,6 +148,70 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(0)
+}
+
+func TestUnfilteredRelations(t *testing.T) {
+	source := domain.FQDN{Name: "owasp.com"}
+	dest1 := domain.FQDN{Name: "www.example.owasp.org"}
+	rel1 := "cname_record"
+
+	sourceAsset, err := store.CreateAsset(source)
+	if err != nil {
+		t.Fatalf("failed to create asset: %s", err)
+	}
+
+	dest1Asset, err := store.CreateAsset(dest1)
+	if err != nil {
+		t.Fatalf("failed to create asset: %s", err)
+	}
+
+	ip, _ := netip.ParseAddr("192.168.1.1")
+	dest2 := network.IPAddress{Address: ip, Type: "IPv4"}
+	rel2 := "a_record"
+
+	dest2Asset, err := store.CreateAsset(dest2)
+	if err != nil {
+		t.Fatalf("failed to create asset: %s", err)
+	}
+
+	_, err = store.Link(sourceAsset, rel1, dest1Asset)
+	assert.NoError(t, err)
+	_, err = store.Link(sourceAsset, rel2, dest2Asset)
+	assert.NoError(t, err)
+
+	// Outgoing relations with no filter returns all outgoing relations.
+	outs, err := store.OutgoingRelations(sourceAsset)
+	assert.NoError(t, err)
+	assert.Equal(t, len(outs), 2)
+
+	// Outgoing relations with a filter returns
+	outs, err = store.OutgoingRelations(sourceAsset, rel1)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
+	assert.Equal(t, rel1, outs[0].Type)
+	assert.Equal(t, dest1Asset.ID, outs[0].ToAsset.ID)
+
+	// Incoming relations with a filter returns
+	ins, err := store.IncomingRelations(dest1Asset, rel1)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
+	assert.Equal(t, rel1, ins[0].Type)
+	assert.Equal(t, dest1Asset.ID, ins[0].ToAsset.ID)
+
+	// Outgoing with source -> a_record -> dest2Asset
+	outs, err = store.OutgoingRelations(sourceAsset, rel2)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
+	assert.Equal(t, rel2, outs[0].Type)
+	assert.Equal(t, dest2Asset.ID, outs[0].ToAsset.ID)
+
+	// Incoming for source -> a_record -> dest2asset
+	ins, err = store.IncomingRelations(dest2Asset, rel2)
+	assert.NoError(t, err)
+	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
+	assert.Equal(t, rel2, ins[0].Type)
+	assert.Equal(t, dest2Asset.ID, ins[0].ToAsset.ID)
+
 }
 
 func TestRepository(t *testing.T) {
@@ -255,6 +317,48 @@ func TestRepository(t *testing.T) {
 
 			if relation == nil {
 				t.Fatalf("failed to link assets: relation is nil")
+			}
+
+			incoming, err := store.IncomingRelations(destinationAsset, tc.relation)
+			if err != nil {
+				t.Fatalf("failed to query incoming relations: %s", err)
+			}
+
+			if incoming == nil {
+				t.Fatalf("failed to query incoming relations: incoming relations is nil %s", err)
+			}
+
+			if incoming[0].Type != tc.relation {
+				t.Fatalf("failed to query incoming relations: expected relation %s, got %s", tc.relation, incoming[0].Type)
+			}
+
+			if incoming[0].FromAsset.ID != sourceAsset.ID {
+				t.Fatalf("failed to query incoming relations: expected source asset id %s, got %v", sourceAsset.ID, incoming[0].FromAsset.ID)
+			}
+
+			if incoming[0].ToAsset.ID != destinationAsset.ID {
+				t.Fatalf("failed to query incoming relations: expected destination asset id %s, got %s", destinationAsset.ID, incoming[0].ToAsset.ID)
+			}
+
+			outgoing, err := store.OutgoingRelations(sourceAsset, tc.relation)
+			if err != nil {
+				t.Fatalf("failed to query outgoing relations: %s", err)
+			}
+
+			if outgoing == nil {
+				t.Fatalf("failed to query outgoing relations: outgoing relations is nil")
+			}
+
+			if outgoing[0].Type != tc.relation {
+				t.Fatalf("failed to query outgoing relations: expected relation %s, got %s", tc.relation, outgoing[0].Type)
+			}
+
+			if outgoing[0].FromAsset.ID != sourceAsset.ID {
+				t.Fatalf("failed to query outgoing relations: expected source asset id %s, got %s", sourceAsset.ID, outgoing[0].FromAsset.ID)
+			}
+
+			if outgoing[0].ToAsset.ID != destinationAsset.ID {
+				t.Fatalf("failed to query outgoing relations: expected destination asset id %s, got %s", destinationAsset.ID, outgoing[0].ToAsset.ID)
 			}
 		})
 	}
