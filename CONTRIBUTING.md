@@ -1,39 +1,59 @@
 # Contributing
 
-Thank you for considering making contributions to Amass! Start by taking a look at the [open issues](https://github.com/owasp-amass/asset-db/issues) for things we need help with!
+Thank you for your interest in contributing to the amass ecosystem!
+If you are looking for ways to contribute to the project,
+please consider checking out [open issues][issue-url].
 
-Please follow standard github best practices: fork the repo, branch from the tip of develop, make some commits, and submit a pull request to develop.
+## Getting Started
 
-Please make sure to use `gofmt` before every commit - the easiest way to do this is have your editor run it for you upon saving a file. Otherwise, run the following command in the project root directory: `go fmt ./...`
+Open Asset Model uses a fork & pull model for contributions.
+This means that you will need to fork this repository using
+the *Fork* button in the top right of the page.
 
-## Forking
+1. Once you have forked the repository, you'll need to clone it.
+   The following commands will clone the repository to your local
+   machine and allow Go to resolve the import paths correctly.
+   This will set owasp-amass as your origin remote and your fork
+   as a secondary remote.
 
-Please note that Go requires code to live under absolute paths, which complicates forking.
-While the fork for user 'foo' lives at `https://github.com/foo/asset-db`,
-the code should never exist at  `$GOPATH/src/github.com/foo/asset-db`.
-Instead, we use `git remote` to add the fork as a new remote for the original repo,
-`$GOPATH/src/github.com/owasp-amass/asset-db`, and do all the work there.
+```bash
+git clone https://github.com/owasp-amass/asset-db $GOPATH/src/github.com/owasp-amass/asset-db
+git remote add [github-user] https://github.com/[github-user]/asset-db
+```
 
-For instance, to create a fork and work on a branch of it, user 'foo' would:
+1. Create a new branch for your contribution.
 
-  * Create the fork on github, using the fork button.
-  * Go to the original repo checked out locally (ie. `$GOPATH/src/github.com/owasp-amass/asset-db`)
-  * `git remote rename origin upstream`
-  * `git remote add origin git@github.com:foo/asset-db.git`
+```bash
+git checkout --track origin/develop
+git pull origin develop
+git checkout -b [fix-or-improvment-name]
+```
 
-Now `origin` refers to the foo fork and `upstream` refers to the OWASP version.
-So foo can `git push -u origin master` to update his/her fork, and make pull requests to OWASP from there.
-Of course, replace `foo` with your git handle.
+2. Make the changes that you wish to contribute.
 
-To pull in updates from the original repo, run
+3. Commit your changes to your branch.
 
-    * `git fetch upstream`
-    * `git rebase upstream/master` (or whatever branch you want)
+```bash
+git add <updated files>
+git commit -m "A short description of the changes"
+```
 
-Please don't make Pull Requests to `master`.
+4. Push your branch to your fork
 
-### Development Procedure:
-- the latest state of development is on `develop`
-- no --force onto `develop` (except when reverting a broken commit, which should seldom happen)
-- create a development branch on your fork (using `git add origin`)
-- before submitting a pull request, begin `git rebase` on top of `develop`
+```bash
+git push [github-user] [fix-or-improvment-name]
+```
+
+5. Create a pull request into the `develop` branch of `owasp-amass/asset-db`
+
+### Notes regarding contributions
+
+- All commits should be pushed to your fork and be submitted as
+  pull requests into the `develop` branch of `owasp-amass/asset-db`.
+- Force pushing is not allowed. If you need to update your
+  pull request, simply make an additional commit.
+- Ensure that your pull request is up-to-date with the `develop` branch
+  before submitting.
+
+
+[issue-url]: https://github.com/owasp-amass/asset-db/issues
