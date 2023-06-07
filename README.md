@@ -8,3 +8,7 @@
 [![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
 
 This repository offers services and repositories to interact with an asset database. It aims to foster the development of an ecosystem of scanning tools, allowing them to store assets (from [open-asset-model](https://github.com/owasp-amass/open-asset-model) and their relationships.
+
+## Contributing
+
+If you have interest in contributing, please refer to the [contributing doc](CONTRIBUTING.md)
