@@ -87,7 +87,7 @@ func TestAssetDB(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
-				adb := assetDB{
+				adb := AssetDB{
 					repository: mockAssetDB,
 				}
 
@@ -123,7 +123,7 @@ func TestAssetDB(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
-				adb := assetDB{
+				adb := AssetDB{
 					repository: mockAssetDB,
 				}
 
@@ -153,7 +153,7 @@ func TestAssetDB(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
-				adb := assetDB{
+				adb := AssetDB{
 					repository: mockAssetDB,
 				}
 
@@ -209,7 +209,7 @@ func TestAssetDB(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
-				adb := assetDB{
+				adb := AssetDB{
 					repository: mockAssetDB,
 				}
 
@@ -265,7 +265,7 @@ func TestAssetDB(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
-				adb := assetDB{
+				adb := AssetDB{
 					repository: mockAssetDB,
 				}
 
