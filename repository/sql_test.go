@@ -216,7 +216,9 @@ func TestUnfilteredRelations(t *testing.T) {
 
 func TestRepository(t *testing.T) {
 	ip, _ := netip.ParseAddr("192.168.1.1")
+	ip2, _ := netip.ParseAddr("192.168.1.2")
 	cidr, _ := netip.ParsePrefix("198.51.100.0/24")
+	cidr2, _ := netip.ParsePrefix("198.52.100.0/24")
 
 	testCases := []struct {
 		description      string
@@ -245,13 +247,13 @@ func TestRepository(t *testing.T) {
 		{
 			description:      "create an FQDN and link it with an IP address",
 			sourceAsset:      domain.FQDN{Name: "www.domain.com"},
-			destinationAsset: network.IPAddress{Address: ip, Type: "IPv4"},
+			destinationAsset: network.IPAddress{Address: ip2, Type: "IPv4"},
 			relation:         "a_record",
 		},
 		{
-			description:      "create an Autonomous System and link it with an IP address",
+			description:      "create an Autonomous System and link it with a Netblock",
 			sourceAsset:      network.AutonomousSystem{Number: 2},
-			destinationAsset: network.IPAddress{Address: ip, Type: "IPv4"},
+			destinationAsset: network.Netblock{Cidr: cidr2, Type: "IPv4"},
 			relation:         "announces",
 		},
 	}
