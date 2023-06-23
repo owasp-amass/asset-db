@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -66,6 +67,15 @@ func sqliteDatabase(dsn string) (*gorm.DB, error) {
 // The asset is serialized to JSON and stored in the Content field of the Asset struct.
 // Returns the created asset as a types.Asset or an error if the creation fails.
 func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error) {
+	// ensure that duplicate relationships are not entered into the database
+	if assets, err := sql.FindAssetByContent(assetData); err == nil && len(assets) > 0 {
+		for _, a := range assets {
+			if assetData.AssetType() == a.Asset.AssetType() {
+				return a, nil
+			}
+		}
+	}
+
 	jsonContent, err := assetData.JSON()
 	if err != nil {
 		return &types.Asset{}, err
@@ -160,6 +170,18 @@ func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
 // The relation is established by creating a new Relation struct in the database, linking the two assets.
 // Returns the created relation as a types.Relation or an error if the link creation fails.
 func (sql *sqlRepository) Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error) {
+	// check that this link will create a valid relationship within the taxonomy
+	srctype := source.Asset.AssetType()
+	destype := destination.Asset.AssetType()
+	if !oam.ValidRelationship(srctype, relation, destype) {
+		return &types.Relation{}, fmt.Errorf("%s -%s-> %s is not valid in the taxonomy", srctype, relation, destype)
+	}
+
+	// ensure that duplicate relationships are not entered into the database
+	if rel, found := sql.duplicateLink(source, relation, destination); found {
+		return rel, nil
+	}
+
 	fromAssetId, err := strconv.ParseInt(source.ID, 10, 64)
 	if err != nil {
 		return &types.Relation{}, err
@@ -187,6 +209,22 @@ func (sql *sqlRepository) Link(source *types.Asset, relation string, destination
 		FromAsset: source,
 		ToAsset:   destination,
 	}, nil
+}
+
+func (sql *sqlRepository) duplicateLink(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, bool) {
+	var dup bool
+	var rel *types.Relation
+
+	if outs, err := sql.OutgoingRelations(source, relation); err == nil {
+		for _, out := range outs {
+			if destination.ID == out.ToAsset.ID {
+				rel = out
+				dup = true
+				break
+			}
+		}
+	}
+	return rel, dup
 }
 
 // IncomingRelations finds all relations pointing to the asset for the specified relation types, if any.
