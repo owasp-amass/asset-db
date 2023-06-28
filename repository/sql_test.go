@@ -95,7 +95,7 @@ func teardownPostgres(dsn string) {
 	}
 
 	migrationsSource := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: sqlitemigrations.Migrations(),
+		FileSystem: pgmigrations.Migrations(),
 		Root:       "/",
 	}
 
