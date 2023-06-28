@@ -62,7 +62,7 @@ func TestAssetDB(t *testing.T) {
 			description   string
 			discovered    oam.Asset
 			source        *types.Asset
-			relation      *string
+			relation      string
 			expected      *types.Asset
 			expectedError error
 		}{
@@ -70,7 +70,7 @@ func TestAssetDB(t *testing.T) {
 				description:   "successfully create initial asset",
 				discovered:    domain.FQDN{Name: "www.domain.com"},
 				source:        nil,
-				relation:      nil,
+				relation:      "",
 				expected:      &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
 				expectedError: nil,
 			},
@@ -78,7 +78,7 @@ func TestAssetDB(t *testing.T) {
 				description:   "successfully create an asset with relation",
 				discovered:    network.AutonomousSystem{Number: 1},
 				source:        &types.Asset{ID: "2", Asset: network.RIROrganization{Name: "RIPE NCC"}},
-				relation:      &relationType,
+				relation:      relationType,
 				expected:      &types.Asset{ID: "3", Asset: network.AutonomousSystem{Number: 1}},
 				expectedError: nil,
 			},
@@ -95,8 +95,8 @@ func TestAssetDB(t *testing.T) {
 					mockAssetDB.On("CreateAsset", tc.discovered).Return(tc.expected, tc.expectedError)
 				}
 
-				if tc.source != nil && tc.relation != nil {
-					mockAssetDB.On("Link", tc.source, *tc.relation, tc.expected).Return(&types.Relation{}, nil)
+				if tc.source != nil && tc.relation != "" {
+					mockAssetDB.On("Link", tc.source, tc.relation, tc.expected).Return(&types.Relation{}, nil)
 				}
 
 				result, err := adb.Create(tc.source, tc.relation, tc.discovered)

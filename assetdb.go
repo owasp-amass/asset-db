@@ -25,8 +25,8 @@ func New(dbType repository.DBType, dsn string) *AssetDB {
 // If source is nil, the discovered asset will be created and relation will be ignored
 // If source and relation are provided, the asset is created and linked to the source asset using the specified relation.
 // It returns the newly created asset and an error, if any.
-func (as *AssetDB) Create(source *types.Asset, relation *string, discovered oam.Asset) (*types.Asset, error) {
-	if source == nil || relation == nil {
+func (as *AssetDB) Create(source *types.Asset, relation string, discovered oam.Asset) (*types.Asset, error) {
+	if source == nil || relation == "" {
 		return as.repository.CreateAsset(discovered)
 	}
 
@@ -35,7 +35,7 @@ func (as *AssetDB) Create(source *types.Asset, relation *string, discovered oam.
 		return nil, err
 	}
 
-	_, err = as.repository.Link(source, *relation, newAsset)
+	_, err = as.repository.Link(source, relation, newAsset)
 	if err != nil {
 		return nil, err
 	}
