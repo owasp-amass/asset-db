@@ -1,11 +1,13 @@
 package repository
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/domain"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -165,6 +167,44 @@ func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
 	}, nil
 }
 
+// FindAssetByScope finds assets in the database by applying all the scope constraints provided.
+// It takes variadic arguments representing the set of constraints to serve as the scope and
+// retrieves the corresponding assets from the database.
+// Returns a slice of matching assets as []*types.Asset or an error if the search fails.
+func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.Asset, error) {
+	var names []*types.Asset
+
+	for _, constraint := range constraints {
+		fqdn, ok := constraint.(domain.FQDN)
+		if !ok {
+			continue
+		}
+
+		assets := []Asset{}
+		result := sql.db.Where("type = ? AND content->>'name' LIKE ?", "fqdn", "%"+fqdn.Name).Find(&assets)
+		if result.Error != nil {
+			continue
+		}
+
+		for _, a := range assets {
+			f, err := a.Parse()
+			if err != nil {
+				continue
+			}
+
+			names = append(names, &types.Asset{
+				ID:    strconv.FormatInt(a.ID, 10),
+				Asset: f,
+			})
+		}
+	}
+
+	if len(names) == 0 {
+		return nil, errors.New("no assets in scope")
+	}
+	return names, nil
+}
+
 // Link creates a relation between two assets in the database.
 // It takes the source asset, relation type, and destination asset as inputs.
 // The relation is established by creating a new Relation struct in the database, linking the two assets.
@@ -260,7 +300,6 @@ func (sql *sqlRepository) OutgoingRelations(asset *types.Asset, relationTypes ..
 	}
 
 	relations := []Relation{}
-
 	if len(relationTypes) > 0 {
 		res := sql.db.Where("from_asset_id = ? AND type IN ?", assetId, relationTypes).Find(&relations)
 		if res.Error != nil {
@@ -290,13 +329,13 @@ func toRelation(r Relation) *types.Relation {
 			// Not joining to Asset to get Content
 		},
 	}
-
 	return rel
 }
 
 // toRelations converts a slice database Relations to a slice of types.Relation structs.
 func toRelations(relations []Relation) []*types.Relation {
 	var res []*types.Relation
+
 	for _, r := range relations {
 		res = append(res, toRelation(r))
 	}

@@ -169,6 +169,36 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
+	t.Run("FindByScope", func(t *testing.T) {
+		testCases := []struct {
+			description   string
+			asset         oam.Asset
+			expected      []*types.Asset
+			expectedError error
+		}{
+			{"an asset is found", domain.FQDN{Name: "domain.com"}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"an asset is not found", domain.FQDN{Name: "domain.com"}, []*types.Asset{}, fmt.Errorf("Asset not found")},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.description, func(t *testing.T) {
+				mockAssetDB := new(mockAssetDB)
+				adb := AssetDB{
+					repository: mockAssetDB,
+				}
+
+				mockAssetDB.On("FindAssetByScope", tc.asset).Return(tc.expected, tc.expectedError)
+
+				result, err := adb.FindByScope(tc.asset)
+
+				assert.Equal(t, tc.expected, result)
+				assert.Equal(t, tc.expectedError, err)
+
+				mockAssetDB.AssertExpectations(t)
+			})
+		}
+	})
+
 	t.Run("IncomingRelations", func(t *testing.T) {
 		testCases := []struct {
 			description   string
