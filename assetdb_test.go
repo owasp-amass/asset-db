@@ -33,6 +33,11 @@ func (m *mockAssetDB) FindAssetByContent(asset oam.Asset) ([]*types.Asset, error
 	return args.Get(0).([]*types.Asset), args.Error(1)
 }
 
+func (m *mockAssetDB) FindAssetByScope(constraints ...oam.Asset) ([]*types.Asset, error) {
+	args := m.Called(constraints)
+	return args.Get(0).([]*types.Asset), args.Error(1)
+}
+
 func (m *mockAssetDB) Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error) {
 	args := m.Called(source, relation, destination)
 	return args.Get(0).(*types.Relation), args.Error(1)
