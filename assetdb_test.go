@@ -177,12 +177,12 @@ func TestAssetDB(t *testing.T) {
 	t.Run("FindByScope", func(t *testing.T) {
 		testCases := []struct {
 			description   string
-			asset         oam.Asset
+			assets        []oam.Asset
 			expected      []*types.Asset
 			expectedError error
 		}{
-			{"an asset is found", domain.FQDN{Name: "domain.com"}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"an asset is not found", domain.FQDN{Name: "domain.com"}, []*types.Asset{}, fmt.Errorf("Asset not found")},
+			{"an asset is found", []oam.Asset{domain.FQDN{Name: "domain.com"}}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"an asset is not found", []oam.Asset{domain.FQDN{Name: "domain.com"}}, []*types.Asset{}, fmt.Errorf("Asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -192,9 +192,9 @@ func TestAssetDB(t *testing.T) {
 					repository: mockAssetDB,
 				}
 
-				mockAssetDB.On("FindAssetByScope", tc.asset).Return(tc.expected, tc.expectedError)
+				mockAssetDB.On("FindAssetByScope", tc.assets).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.FindByScope(tc.asset)
+				result, err := adb.FindByScope(tc.assets...)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)
