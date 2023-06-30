@@ -303,7 +303,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by content: expected asset %s, got %s", sourceAsset.Asset, foundAssetByContent[0].Asset)
 			}
 
-			foundAssetByType, err := store.FindAssetByType(tc.sourceAsset.AssetType())
+			foundAssetByType, err := store.FindAssetByType(sourceAsset.Asset.AssetType())
 			if err != nil {
 				t.Fatalf("failed to find asset by type: %s", err)
 			}
