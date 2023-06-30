@@ -13,6 +13,7 @@ type Repository interface {
 	CreateAsset(asset oam.Asset) (*types.Asset, error)
 	FindAssetById(id string) (*types.Asset, error)
 	FindAssetByContent(asset oam.Asset) ([]*types.Asset, error)
+	FindAssetByType(atype oam.AssetType) ([]*types.Asset, error)
 	FindAssetByScope(constraints ...oam.Asset) ([]*types.Asset, error)
 	Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error)
 	IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error)

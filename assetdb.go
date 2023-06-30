@@ -61,6 +61,12 @@ func (as *AssetDB) FindByScope(constraints ...oam.Asset) ([]*types.Asset, error)
 	return as.repository.FindAssetByScope(constraints...)
 }
 
+// FindByType finds all assets in the database of the provided asset type.
+// It returns the matching assets and an error, if any.
+func (as *AssetDB) FindByType(atype oam.AssetType) ([]*types.Asset, error) {
+	return as.repository.FindAssetByType(atype)
+}
+
 // IncomingRelations finds all relations pointing to `asset“ for the specified `relationTypes`, if any.
 // If no `relationTypes` are specified, all incoming relations are returned.
 func (as *AssetDB) IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {

@@ -303,6 +303,23 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by content: expected asset %s, got %s", sourceAsset.Asset, foundAssetByContent[0].Asset)
 			}
 
+			foundAssetByType, err := store.FindAssetByType(sourceAsset.Asset.AssetType())
+			if err != nil {
+				t.Fatalf("failed to find asset by type: %s", err)
+			}
+
+			if len(foundAssetByType) == 0 {
+				t.Fatalf("failed to find assets by type: 0 assets found")
+			}
+
+			if foundAssetByType[0].ID != sourceAsset.ID {
+				t.Fatalf("failed to find asset by type: expected asset id %s, got %s", sourceAsset.ID, foundAssetByType[0].ID)
+			}
+
+			if foundAssetByType[0].Asset != sourceAsset.Asset {
+				t.Fatalf("failed to find asset by type: expected asset %s, got %s", sourceAsset.Asset, foundAssetByType[0].Asset)
+			}
+
 			destinationAsset, err := store.CreateAsset(tc.destinationAsset)
 			if err != nil {
 				t.Fatalf("failed to create destination asset: %s", err)

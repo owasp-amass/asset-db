@@ -38,6 +38,11 @@ func (m *mockAssetDB) FindAssetByScope(constraints ...oam.Asset) ([]*types.Asset
 	return args.Get(0).([]*types.Asset), args.Error(1)
 }
 
+func (m *mockAssetDB) FindAssetByType(atype oam.AssetType) ([]*types.Asset, error) {
+	args := m.Called(atype)
+	return args.Get(0).([]*types.Asset), args.Error(1)
+}
+
 func (m *mockAssetDB) Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error) {
 	args := m.Called(source, relation, destination)
 	return args.Get(0).(*types.Relation), args.Error(1)
@@ -195,6 +200,36 @@ func TestAssetDB(t *testing.T) {
 				mockAssetDB.On("FindAssetByScope", tc.assets).Return(tc.expected, tc.expectedError)
 
 				result, err := adb.FindByScope(tc.assets...)
+
+				assert.Equal(t, tc.expected, result)
+				assert.Equal(t, tc.expectedError, err)
+
+				mockAssetDB.AssertExpectations(t)
+			})
+		}
+	})
+
+	t.Run("FindByType", func(t *testing.T) {
+		testCases := []struct {
+			description   string
+			atype         oam.AssetType
+			expected      []*types.Asset
+			expectedError error
+		}{
+			{"an asset is found", oam.FQDN, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"an asset is not found", oam.FQDN, []*types.Asset{}, fmt.Errorf("Asset not found")},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.description, func(t *testing.T) {
+				mockAssetDB := new(mockAssetDB)
+				adb := AssetDB{
+					repository: mockAssetDB,
+				}
+
+				mockAssetDB.On("FindAssetByType", tc.atype).Return(tc.expected, tc.expectedError)
+
+				result, err := adb.FindByType(tc.atype)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)

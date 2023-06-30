@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -187,15 +188,12 @@ func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.A
 		}
 
 		for _, a := range assets {
-			f, err := a.Parse()
-			if err != nil {
-				continue
+			if f, err := a.Parse(); err == nil {
+				names = append(names, &types.Asset{
+					ID:    strconv.FormatInt(a.ID, 10),
+					Asset: f,
+				})
 			}
-
-			names = append(names, &types.Asset{
-				ID:    strconv.FormatInt(a.ID, 10),
-				Asset: f,
-			})
 		}
 	}
 
@@ -203,6 +201,33 @@ func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.A
 		return nil, errors.New("no assets in scope")
 	}
 	return names, nil
+}
+
+// FindByType finds all assets in the database of the provided asset type.
+// It takes an asset type and retrieves the corresponding assets from the database.
+// Returns a slice of matching assets as []*types.Asset or an error if the search fails.
+func (sql *sqlRepository) FindAssetByType(atype oam.AssetType) ([]*types.Asset, error) {
+	var results []*types.Asset
+
+	assets := []Asset{}
+	res := sql.db.Where("type = ?", strings.ToLower(string(atype))).Find(&assets)
+	if res.Error != nil {
+		return results, res.Error
+	}
+
+	for _, a := range assets {
+		if f, err := a.Parse(); err == nil {
+			results = append(results, &types.Asset{
+				ID:    strconv.FormatInt(a.ID, 10),
+				Asset: f,
+			})
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("no assets of the specified type")
+	}
+	return results, nil
 }
 
 // Link creates a relation between two assets in the database.
