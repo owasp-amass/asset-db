@@ -181,7 +181,7 @@ func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.A
 		}
 
 		var assets []Asset
-		result := sql.db.Where("type = ? AND content->>'name' LIKE ?", "fqdn", "%"+fqdn.Name).Find(&assets)
+		result := sql.db.Where("type = ? AND content->>'name' LIKE ?", oam.FQDN, "%"+fqdn.Name).Find(&assets)
 		if result.Error != nil {
 			continue
 		}
