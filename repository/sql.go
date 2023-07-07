@@ -243,7 +243,6 @@ func (sql *sqlRepository) FindAssetById(id string, since time.Time) (*types.Asse
 		result = sql.db.First(&asset)
 	} else {
 		result = sql.db.Where("last_seen > ?", since).First(&asset)
-		fmt.Println(result)
 	}
 	if result.Error != nil {
 		return &types.Asset{}, result.Error

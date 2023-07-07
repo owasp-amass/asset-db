@@ -246,7 +246,7 @@ func TestLastSeenUpdates(t *testing.T) {
 }
 
 func TestRepository(t *testing.T) {
-	start := time.Now()
+	start := time.Now().Truncate(time.Hour)
 	ip, _ := netip.ParseAddr("192.168.1.1")
 	ip2, _ := netip.ParseAddr("192.168.1.2")
 	cidr, _ := netip.ParsePrefix("198.51.100.0/24")
