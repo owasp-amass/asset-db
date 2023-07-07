@@ -11,6 +11,8 @@ import (
 // It provides operations for creating, retrieving, and linking assets.
 type Repository interface {
 	CreateAsset(asset oam.Asset) (*types.Asset, error)
+	DeleteAsset(id string) error
+	DeleteRelation(id string) error
 	FindAssetById(id string) (*types.Asset, error)
 	FindAssetByContent(asset oam.Asset) ([]*types.Asset, error)
 	FindAssetByType(atype oam.AssetType) ([]*types.Asset, error)

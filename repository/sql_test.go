@@ -393,6 +393,20 @@ func TestRepository(t *testing.T) {
 			if outgoing[0].ToAsset.ID != destinationAsset.ID {
 				t.Fatalf("failed to query outgoing relations: expected destination asset id %s, got %s", destinationAsset.ID, outgoing[0].ToAsset.ID)
 			}
+
+			err = store.DeleteRelation(relation.ID)
+			if err != nil {
+				t.Fatalf("failed to delete relation: %s", err)
+			}
+
+			err = store.DeleteAsset(destinationAsset.ID)
+			if err != nil {
+				t.Fatalf("failed to delete asset: %s", err)
+			}
+
+			if _, err = store.FindAssetById(destinationAsset.ID); err == nil {
+				t.Fatal("failed to delete asset: the asset was not removed from the database")
+			}
 		})
 	}
 }

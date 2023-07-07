@@ -23,6 +23,16 @@ func (m *mockAssetDB) CreateAsset(asset oam.Asset) (*types.Asset, error) {
 	return args.Get(0).(*types.Asset), args.Error(1)
 }
 
+func (m *mockAssetDB) DeleteAsset(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *mockAssetDB) DeleteRelation(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
 func (m *mockAssetDB) FindAssetById(id string) (*types.Asset, error) {
 	args := m.Called(id)
 	return args.Get(0).(*types.Asset), args.Error(1)
@@ -127,7 +137,7 @@ func TestAssetDB(t *testing.T) {
 			expectedError error
 		}{
 			{"an asset is found", "1", &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}, nil},
-			{"an asset is not found", "2", &types.Asset{}, fmt.Errorf("Asset not found")},
+			{"an asset is not found", "2", &types.Asset{}, fmt.Errorf("asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -157,7 +167,7 @@ func TestAssetDB(t *testing.T) {
 			expectedError error
 		}{
 			{"an asset is found", domain.FQDN{Name: "www.domain.com"}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"an asset is not found", domain.FQDN{Name: "www.domain.com"}, []*types.Asset{}, fmt.Errorf("Asset not found")},
+			{"an asset is not found", domain.FQDN{Name: "www.domain.com"}, []*types.Asset{}, fmt.Errorf("asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -187,7 +197,7 @@ func TestAssetDB(t *testing.T) {
 			expectedError error
 		}{
 			{"an asset is found", []oam.Asset{domain.FQDN{Name: "domain.com"}}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"an asset is not found", []oam.Asset{domain.FQDN{Name: "domain.com"}}, []*types.Asset{}, fmt.Errorf("Asset not found")},
+			{"an asset is not found", []oam.Asset{domain.FQDN{Name: "domain.com"}}, []*types.Asset{}, fmt.Errorf("asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -217,7 +227,7 @@ func TestAssetDB(t *testing.T) {
 			expectedError error
 		}{
 			{"an asset is found", oam.FQDN, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"an asset is not found", oam.FQDN, []*types.Asset{}, fmt.Errorf("Asset not found")},
+			{"an asset is not found", oam.FQDN, []*types.Asset{}, fmt.Errorf("asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -344,6 +354,62 @@ func TestAssetDB(t *testing.T) {
 				result, err := adb.OutgoingRelations(tc.asset, tc.relationTypes...)
 
 				assert.Equal(t, tc.expected, result)
+				assert.Equal(t, tc.expectedError, err)
+
+				mockAssetDB.AssertExpectations(t)
+			})
+		}
+	})
+
+	t.Run("DeleteRelation", func(t *testing.T) {
+		testCases := []struct {
+			description   string
+			id            string
+			expectedError error
+		}{
+			{"relation was deleted", "1", nil},
+			{"relation was not deleted", "2", fmt.Errorf("relation was not found")},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.description, func(t *testing.T) {
+				mockAssetDB := new(mockAssetDB)
+				adb := AssetDB{
+					repository: mockAssetDB,
+				}
+
+				mockAssetDB.On("DeleteRelation", tc.id).Return(tc.expectedError)
+
+				err := adb.DeleteRelation(tc.id)
+
+				assert.Equal(t, tc.expectedError, err)
+
+				mockAssetDB.AssertExpectations(t)
+			})
+		}
+	})
+
+	t.Run("DeleteAsset", func(t *testing.T) {
+		testCases := []struct {
+			description   string
+			id            string
+			expectedError error
+		}{
+			{"asset was deleted", "1", nil},
+			{"asset was not deleted", "2", fmt.Errorf("asset was not found")},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.description, func(t *testing.T) {
+				mockAssetDB := new(mockAssetDB)
+				adb := AssetDB{
+					repository: mockAssetDB,
+				}
+
+				mockAssetDB.On("DeleteAsset", tc.id).Return(tc.expectedError)
+
+				err := adb.DeleteAsset(tc.id)
+
 				assert.Equal(t, tc.expectedError, err)
 
 				mockAssetDB.AssertExpectations(t)

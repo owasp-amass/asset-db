@@ -43,6 +43,16 @@ func (as *AssetDB) Create(source *types.Asset, relation string, discovered oam.A
 	return newAsset, nil
 }
 
+// DeleteAsset removes an asset in the database by its ID.
+func (as *AssetDB) DeleteAsset(id string) error {
+	return as.repository.DeleteAsset(id)
+}
+
+// DeleteRelation removes a relation in the database by its ID.
+func (as *AssetDB) DeleteRelation(id string) error {
+	return as.repository.DeleteRelation(id)
+}
+
 // FindByContent finds assets in the database based on their content.
 // It returns a list of matching assets and an error, if any.
 func (as *AssetDB) FindByContent(asset oam.Asset) ([]*types.Asset, error) {
