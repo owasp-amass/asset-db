@@ -14,8 +14,9 @@ import (
 
 // Asset represents an asset stored in the database.
 type Asset struct {
-	ID        int64          `gorm:"primaryKey;autoIncrement:true"` // The unique identifier of the asset.
-	CreatedAt time.Time      `gorm:"type:datetime"`                 // The creation timestamp of the asset.
+	ID        int64          `gorm:"primaryKey;autoIncrement:true"`                               // The unique identifier of the asset.
+	CreatedAt time.Time      `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column=created_at"` // The creation timestamp of the asset.
+	LastSeen  time.Time      `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column=last_seen"`  // The last seen timestamp of the asset.
 	Type      string         // The type of the asset.
 	Content   datatypes.JSON // The JSON-encoded content of the asset.
 }

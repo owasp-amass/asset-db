@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"testing"
+	"time"
 
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
@@ -165,7 +166,7 @@ func TestUnfilteredRelations(t *testing.T) {
 		t.Fatalf("failed to create asset: %s", err)
 	}
 
-	ip, _ := netip.ParseAddr("192.168.1.1")
+	ip, _ := netip.ParseAddr("192.168.1.100")
 	dest2 := network.IPAddress{Address: ip, Type: "IPv4"}
 	rel2 := "a_record"
 
@@ -211,7 +212,26 @@ func TestUnfilteredRelations(t *testing.T) {
 	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
 	assert.Equal(t, rel2, ins[0].Type)
 	assert.Equal(t, dest2Asset.ID, ins[0].ToAsset.ID)
+}
 
+func TestLastSeenUpdates(t *testing.T) {
+	ip, _ := netip.ParseAddr("45.73.25.1")
+	asset := network.IPAddress{Address: ip, Type: "IPv4"}
+	a1, err := store.CreateAsset(asset)
+	assert.NoError(t, err)
+
+	// Nanoseconds are truncated by the database, so we need to sleep for a bit.
+	time.Sleep(1000 * time.Millisecond)
+
+	a2, err := store.CreateAsset(asset)
+	assert.NoError(t, err)
+
+	assert.Equal(t, a1.ID, a2.ID)
+	// assert.NotEqual(t, time.Time{}, a1.CreatedAt)
+	assert.Equal(t, a1.CreatedAt, a2.CreatedAt)
+	if !(a2.LastSeen.UnixMilli() > a1.LastSeen.UnixMilli()) {
+		t.Errorf("a2.LastSeen: %d, a1.LastSeen: %d", a2.LastSeen.UnixMilli(), a1.LastSeen.UnixMilli())
+	}
 }
 
 func TestRepository(t *testing.T) {
