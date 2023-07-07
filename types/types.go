@@ -21,6 +21,8 @@ type Asset struct {
 type Relation struct {
 	ID        string // The unique identifier of the relation.
 	Type      string // The type of the relationship.
+	CreatedAt time.Time
+	LastSeen  time.Time
 	FromAsset *Asset // The source asset of the relation.
 	ToAsset   *Asset // The destination asset of the relation.
 }

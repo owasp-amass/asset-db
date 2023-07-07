@@ -74,7 +74,7 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 	if assets, err := sql.FindAssetByContent(assetData); err == nil && len(assets) > 0 {
 		for _, a := range assets {
 			if assetData.AssetType() == a.Asset.AssetType() {
-				err := sql.updateLastSeen(a)
+				err := sql.assetSeen(a)
 				if err != nil {
 					log.Println("[ERROR]: Failed to update last_seen: ", err)
 					return nil, err
@@ -109,7 +109,7 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 
 // updateLastSeen performs an update on the asset.
 // this function delegates to the database so that the Timezone information is preserved.
-func (sql *sqlRepository) updateLastSeen(asset *types.Asset) error {
+func (sql *sqlRepository) assetSeen(asset *types.Asset) error {
 
 	id, err := strconv.ParseInt(asset.ID, 10, 64)
 	if err != nil {
@@ -327,7 +327,7 @@ func (sql *sqlRepository) Link(source *types.Asset, relation string, destination
 	}
 
 	// ensure that duplicate relationships are not entered into the database
-	if rel, found := sql.duplicateLink(source, relation, destination); found {
+	if rel, found := sql.isDuplicateRelation(source, relation, destination); found {
 		return rel, nil
 	}
 
@@ -352,28 +352,43 @@ func (sql *sqlRepository) Link(source *types.Asset, relation string, destination
 		return &types.Relation{}, result.Error
 	}
 
-	return &types.Relation{
-		ID:        strconv.FormatInt(r.ID, 10),
-		Type:      r.Type,
-		FromAsset: source,
-		ToAsset:   destination,
-	}, nil
+	return toRelation(r), nil
 }
 
-func (sql *sqlRepository) duplicateLink(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, bool) {
+// isDuplicateRelation checks if the relationship between source and dest already exists.
+func (sql *sqlRepository) isDuplicateRelation(source *types.Asset, relation string, dest *types.Asset) (*types.Relation, bool) {
 	var dup bool
 	var rel *types.Relation
 
 	if outs, err := sql.OutgoingRelations(source, relation); err == nil {
 		for _, out := range outs {
-			if destination.ID == out.ToAsset.ID {
-				rel = out
+			if dest.ID == out.ToAsset.ID {
+				sql.relationSeen(out)
+				rel, err = sql.relationById(out.ID)
+				if err != nil {
+					log.Println("[ERROR] failed to when re-retrieving relation", err)
+					return nil, false
+				}
 				dup = true
 				break
 			}
 		}
 	}
 	return rel, dup
+}
+
+// updateRelationLastSeen updates the last seen timestamp for the specified relation.
+func (sql *sqlRepository) relationSeen(rel *types.Relation) error {
+	id, err := strconv.ParseInt(rel.ID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed to update last seen for ID %s could not parse id; err: %w", rel.ID, err)
+	}
+	result := sql.db.Exec("UPDATE relations SET last_seen = current_timestamp WHERE id = ?", id)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
 }
 
 // IncomingRelations finds all relations pointing to the asset for the specified relation types, if any.
@@ -424,11 +439,22 @@ func (sql *sqlRepository) OutgoingRelations(asset *types.Asset, relationTypes ..
 	return toRelations(relations), nil
 }
 
+func (sql *sqlRepository) relationById(id string) (*types.Relation, error) {
+	rel := Relation{}
+	result := sql.db.Where("id = ?", id).First(&rel)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return toRelation(rel), nil
+}
+
 // toRelation converts a database Relation to a types.Relation.
 func toRelation(r Relation) *types.Relation {
 	rel := &types.Relation{
-		ID:   strconv.FormatInt(r.ID, 10),
-		Type: r.Type,
+		ID:       strconv.FormatInt(r.ID, 10),
+		Type:     r.Type,
+		LastSeen: r.LastSeen,
 		FromAsset: &types.Asset{
 			ID: strconv.FormatInt(r.FromAssetID, 10),
 			// Not joining to Asset to get Content

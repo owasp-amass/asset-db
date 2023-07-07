@@ -177,7 +177,7 @@ func TestUnfilteredRelations(t *testing.T) {
 
 	_, err = store.Link(sourceAsset, rel1, dest1Asset)
 	assert.NoError(t, err)
-	_, err = store.Link(sourceAsset, rel2, dest2Asset)
+	r2Rel, err := store.Link(sourceAsset, rel2, dest2Asset)
 	assert.NoError(t, err)
 
 	// Outgoing relations with no filter returns all outgoing relations.
@@ -212,6 +212,17 @@ func TestUnfilteredRelations(t *testing.T) {
 	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
 	assert.Equal(t, rel2, ins[0].Type)
 	assert.Equal(t, dest2Asset.ID, ins[0].ToAsset.ID)
+
+	// Nanoseconds are truncated by the database; sleep for 1s
+	time.Sleep(1000 * time.Millisecond)
+
+	// Store a duplicate relation and validate last_seen is updated
+	rr, err := store.Link(sourceAsset, rel2, dest2Asset)
+	assert.NoError(t, err)
+	assert.NotNil(t, rr)
+	if rr.LastSeen.UnixNano() <= r2Rel.LastSeen.UnixNano() {
+		t.Errorf("rr.LastSeen: %s, r2Rel.LastSeen: %s", rr.LastSeen.Format(time.RFC3339Nano), r2Rel.LastSeen.Format(time.RFC3339Nano))
+	}
 }
 
 func TestLastSeenUpdates(t *testing.T) {
@@ -229,8 +240,8 @@ func TestLastSeenUpdates(t *testing.T) {
 	assert.Equal(t, a1.ID, a2.ID)
 	// assert.NotEqual(t, time.Time{}, a1.CreatedAt)
 	assert.Equal(t, a1.CreatedAt, a2.CreatedAt)
-	if !(a2.LastSeen.UnixMilli() > a1.LastSeen.UnixMilli()) {
-		t.Errorf("a2.LastSeen: %d, a1.LastSeen: %d", a2.LastSeen.UnixMilli(), a1.LastSeen.UnixMilli())
+	if a2.LastSeen.UnixNano() <= a1.LastSeen.UnixNano() {
+		t.Errorf("a2.LastSeen: %s, a1.LastSeen: %s", a2.LastSeen.Format(time.RFC3339Nano), a1.LastSeen.Format(time.RFC3339Nano))
 	}
 }
 
