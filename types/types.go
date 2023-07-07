@@ -2,14 +2,18 @@
 package types
 
 import (
+	"time"
+
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
 // Asset represents an asset in the asset database.
 // It contains an ID and the corresponding oam.Asset.
 type Asset struct {
-	ID    string    // The unique identifier of the asset.
-	Asset oam.Asset // The actual asset data.
+	ID        string    // The unique identifier of the asset.
+	CreatedAt time.Time // The creation timestamp of the asset.
+	LastSeen  time.Time
+	Asset     oam.Asset // The actual asset data.
 }
 
 // Relation represents a relationship between two assets in the asset database.

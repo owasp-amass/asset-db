@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -73,7 +74,12 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 	if assets, err := sql.FindAssetByContent(assetData); err == nil && len(assets) > 0 {
 		for _, a := range assets {
 			if assetData.AssetType() == a.Asset.AssetType() {
-				return a, nil
+				err := sql.updateLastSeen(a)
+				if err != nil {
+					log.Println("[ERROR]: Failed to update last_seen: ", err)
+					return nil, err
+				}
+				return sql.FindAssetById(a.ID)
 			}
 		}
 	}
@@ -94,9 +100,27 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 	}
 
 	return &types.Asset{
-		ID:    strconv.FormatInt(asset.ID, 10),
-		Asset: assetData,
+		ID:        strconv.FormatInt(asset.ID, 10),
+		CreatedAt: asset.CreatedAt,
+		LastSeen:  asset.LastSeen,
+		Asset:     assetData,
 	}, nil
+}
+
+// updateLastSeen performs an update on the asset.
+// this function delegates to the database so that the Timezone information is preserved.
+func (sql *sqlRepository) updateLastSeen(asset *types.Asset) error {
+
+	id, err := strconv.ParseInt(asset.ID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed to update last seen for ID %s could not parse id; err: %w", asset.ID, err)
+	}
+	result := sql.db.Exec("UPDATE assets SET last_seen = current_timestamp WHERE id = ?", id)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
 }
 
 // DeleteAsset removes an asset in the database by its ID.
@@ -185,8 +209,10 @@ func (sql *sqlRepository) FindAssetByContent(assetData oam.Asset) ([]*types.Asse
 		}
 
 		storedAssets = append(storedAssets, &types.Asset{
-			ID:    strconv.FormatInt(asset.ID, 10),
-			Asset: assetData,
+			ID:        strconv.FormatInt(asset.ID, 10),
+			CreatedAt: asset.CreatedAt,
+			LastSeen:  asset.LastSeen,
+			Asset:     assetData,
 		})
 	}
 
@@ -214,8 +240,10 @@ func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
 	}
 
 	return &types.Asset{
-		ID:    strconv.FormatInt(asset.ID, 10),
-		Asset: assetData,
+		ID:        strconv.FormatInt(asset.ID, 10),
+		CreatedAt: asset.CreatedAt,
+		LastSeen:  asset.LastSeen,
+		Asset:     assetData,
 	}, nil
 }
 
@@ -223,6 +251,7 @@ func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
 // It takes variadic arguments representing the set of constraints to serve as the scope and
 // retrieves the corresponding assets from the database.
 // Returns a slice of matching assets as []*types.Asset or an error if the search fails.
+// TODO update this signature in a future commit.
 func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.Asset, error) {
 	var names []*types.Asset
 
@@ -241,8 +270,10 @@ func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.A
 		for _, a := range assets {
 			if f, err := a.Parse(); err == nil {
 				names = append(names, &types.Asset{
-					ID:    strconv.FormatInt(a.ID, 10),
-					Asset: f,
+					ID:        strconv.FormatInt(a.ID, 10),
+					CreatedAt: a.CreatedAt,
+					LastSeen:  a.LastSeen,
+					Asset:     f,
 				})
 			}
 		}
@@ -269,8 +300,10 @@ func (sql *sqlRepository) FindAssetByType(atype oam.AssetType) ([]*types.Asset, 
 	for _, a := range assets {
 		if f, err := a.Parse(); err == nil {
 			results = append(results, &types.Asset{
-				ID:    strconv.FormatInt(a.ID, 10),
-				Asset: f,
+				ID:        strconv.FormatInt(a.ID, 10),
+				CreatedAt: a.CreatedAt,
+				LastSeen:  a.LastSeen,
+				Asset:     f,
 			})
 		}
 	}
