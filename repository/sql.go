@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -71,7 +72,7 @@ func sqliteDatabase(dsn string) (*gorm.DB, error) {
 // Returns the created asset as a types.Asset or an error if the creation fails.
 func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error) {
 	// ensure that duplicate relationships are not entered into the database
-	if assets, err := sql.FindAssetByContent(assetData); err == nil && len(assets) > 0 {
+	if assets, err := sql.FindAssetByContent(assetData, time.Time{}); err == nil && len(assets) > 0 {
 		for _, a := range assets {
 			if assetData.AssetType() == a.Asset.AssetType() {
 				err := sql.assetSeen(a)
@@ -79,7 +80,7 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 					log.Println("[ERROR]: Failed to update last_seen: ", err)
 					return nil, err
 				}
-				return sql.FindAssetById(a.ID)
+				return sql.FindAssetById(a.ID, time.Time{})
 			}
 		}
 	}
@@ -175,11 +176,11 @@ func (sql *sqlRepository) DeleteRelation(id string) error {
 	return nil
 }
 
-// FindAssetByContent finds assets in the database that match the provided asset data.
+// FindAssetByContent finds assets in the database that match the provided asset data and last seen after the since parameter.
 // It takes an oam.Asset as input and searches for assets with matching content in the database.
 // The asset data is serialized to JSON and compared against the Content field of the Asset struct.
 // Returns a slice of matching assets as []*types.Asset or an error if the search fails.
-func (sql *sqlRepository) FindAssetByContent(assetData oam.Asset) ([]*types.Asset, error) {
+func (sql *sqlRepository) FindAssetByContent(assetData oam.Asset, since time.Time) ([]*types.Asset, error) {
 	jsonContent, err := assetData.JSON()
 	if err != nil {
 		return []*types.Asset{}, err
@@ -189,6 +190,9 @@ func (sql *sqlRepository) FindAssetByContent(assetData oam.Asset) ([]*types.Asse
 		Type:    string(assetData.AssetType()),
 		Content: jsonContent,
 	}
+	if !since.IsZero() {
+		asset.LastSeen = since
+	}
 
 	jsonQuery, err := asset.JSONQuery()
 	if err != nil {
@@ -196,7 +200,12 @@ func (sql *sqlRepository) FindAssetByContent(assetData oam.Asset) ([]*types.Asse
 	}
 
 	var assets []Asset
-	result := sql.db.Find(&assets, jsonQuery)
+	var result *gorm.DB
+	if since.IsZero() {
+		result = sql.db.Find(&assets, jsonQuery)
+	} else {
+		result = sql.db.Where("last_seen > ?", since).Find(&assets, jsonQuery)
+	}
 	if result.Error != nil {
 		return []*types.Asset{}, result.Error
 	}
@@ -219,17 +228,23 @@ func (sql *sqlRepository) FindAssetByContent(assetData oam.Asset) ([]*types.Asse
 	return storedAssets, nil
 }
 
-// FindAssetById finds an asset in the database by its ID.
+// FindAssetById finds an asset in the database by its ID and last seen after the since parameter.
 // It takes a string representing the asset ID and retrieves the corresponding asset from the database.
 // Returns the found asset as a types.Asset or an error if the asset is not found.
-func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
+func (sql *sqlRepository) FindAssetById(id string, since time.Time) (*types.Asset, error) {
 	assetId, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return &types.Asset{}, err
 	}
 
+	var result *gorm.DB
 	asset := Asset{ID: assetId}
-	result := sql.db.First(&asset)
+	if since.IsZero() {
+		result = sql.db.First(&asset)
+	} else {
+		result = sql.db.Where("last_seen > ?", since).First(&asset)
+		fmt.Println(result)
+	}
 	if result.Error != nil {
 		return &types.Asset{}, result.Error
 	}
@@ -247,12 +262,12 @@ func (sql *sqlRepository) FindAssetById(id string) (*types.Asset, error) {
 	}, nil
 }
 
-// FindAssetByScope finds assets in the database by applying all the scope constraints provided.
+// FindAssetByScope finds assets in the database by applying all the scope constraints provided and last seen after the since parameter.
 // It takes variadic arguments representing the set of constraints to serve as the scope and
 // retrieves the corresponding assets from the database.
 // Returns a slice of matching assets as []*types.Asset or an error if the search fails.
 // TODO update this signature in a future commit.
-func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.Asset, error) {
+func (sql *sqlRepository) FindAssetByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error) {
 	var names []*types.Asset
 
 	for _, constraint := range constraints {
@@ -262,7 +277,12 @@ func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.A
 		}
 
 		var assets []Asset
-		result := sql.db.Where("type = ? AND content->>'name' LIKE ?", oam.FQDN, "%"+fqdn.Name).Find(&assets)
+		var result *gorm.DB
+		if since.IsZero() {
+			result = sql.db.Where("type = ? AND content->>'name' LIKE ?", oam.FQDN, "%"+fqdn.Name).Find(&assets)
+		} else {
+			result = sql.db.Where("type = ? AND content->>'name' LIKE ? AND last_seen > ?", oam.FQDN, "%"+fqdn.Name, since).Find(&assets)
+		}
 		if result.Error != nil {
 			continue
 		}
@@ -285,15 +305,20 @@ func (sql *sqlRepository) FindAssetByScope(constraints ...oam.Asset) ([]*types.A
 	return names, nil
 }
 
-// FindAssetByType finds all assets in the database of the provided asset type.
+// FindAssetByType finds all assets in the database of the provided asset type and last seen after the since parameter.
 // It takes an asset type and retrieves the corresponding assets from the database.
 // Returns a slice of matching assets as []*types.Asset or an error if the search fails.
-func (sql *sqlRepository) FindAssetByType(atype oam.AssetType) ([]*types.Asset, error) {
+func (sql *sqlRepository) FindAssetByType(atype oam.AssetType, since time.Time) ([]*types.Asset, error) {
 	var assets []Asset
+	var result *gorm.DB
 
-	res := sql.db.Where(&Asset{Type: string(atype)}).Find(&assets)
-	if res.Error != nil {
-		return []*types.Asset{}, res.Error
+	if since.IsZero() {
+		result = sql.db.Where("type = ?", atype).Find(&assets)
+	} else {
+		result = sql.db.Where("type = ? AND last_seen > ?", atype, since).Find(&assets)
+	}
+	if result.Error != nil {
+		return []*types.Asset{}, result.Error
 	}
 
 	var results []*types.Asset

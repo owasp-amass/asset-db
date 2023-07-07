@@ -2,6 +2,8 @@
 package assetdb
 
 import (
+	"time"
+
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -53,28 +55,29 @@ func (as *AssetDB) DeleteRelation(id string) error {
 	return as.repository.DeleteRelation(id)
 }
 
-// FindByContent finds assets in the database based on their content.
+// FindByContent finds assets in the database based on their content and last seen after the since parameter.
 // It returns a list of matching assets and an error, if any.
-func (as *AssetDB) FindByContent(asset oam.Asset) ([]*types.Asset, error) {
-	return as.repository.FindAssetByContent(asset)
+func (as *AssetDB) FindByContent(asset oam.Asset, since time.Time) ([]*types.Asset, error) {
+	return as.repository.FindAssetByContent(asset, since)
 }
 
-// FindById finds an asset in the database by its ID.
+// FindById finds an asset in the database by its ID and last seen after the since parameter.
 // It returns the matching asset and an error, if any.
-func (as *AssetDB) FindById(id string) (*types.Asset, error) {
-	return as.repository.FindAssetById(id)
+func (as *AssetDB) FindById(id string, since time.Time) (*types.Asset, error) {
+	return as.repository.FindAssetById(id, since)
 }
 
-// FindByScope finds assets in the database by applying all the scope constraints provided.
+// FindByScope finds assets in the database by applying all the scope constraints provided
+// and last seen after the since parameter.
 // It returns the matching assets and an error, if any.
-func (as *AssetDB) FindByScope(constraints ...oam.Asset) ([]*types.Asset, error) {
-	return as.repository.FindAssetByScope(constraints...)
+func (as *AssetDB) FindByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error) {
+	return as.repository.FindAssetByScope(constraints, since)
 }
 
-// FindByType finds all assets in the database of the provided asset type.
+// FindByType finds all assets in the database of the provided asset type and last seen after the since parameter.
 // It returns the matching assets and an error, if any.
-func (as *AssetDB) FindByType(atype oam.AssetType) ([]*types.Asset, error) {
-	return as.repository.FindAssetByType(atype)
+func (as *AssetDB) FindByType(atype oam.AssetType, since time.Time) ([]*types.Asset, error) {
+	return as.repository.FindAssetByType(atype, since)
 }
 
 // IncomingRelations finds all relations pointing to `asset“ for the specified `relationTypes`, if any.

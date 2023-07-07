@@ -246,6 +246,7 @@ func TestLastSeenUpdates(t *testing.T) {
 }
 
 func TestRepository(t *testing.T) {
+	start := time.Now()
 	ip, _ := netip.ParseAddr("192.168.1.1")
 	ip2, _ := netip.ParseAddr("192.168.1.2")
 	cidr, _ := netip.ParsePrefix("198.51.100.0/24")
@@ -300,7 +301,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to create asset: asset is nil")
 			}
 
-			foundAsset, err := store.FindAssetById(sourceAsset.ID)
+			foundAsset, err := store.FindAssetById(sourceAsset.ID, start)
 			if err != nil {
 				t.Fatalf("failed to find asset by id: %s", err)
 			}
@@ -317,7 +318,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by id: expected asset %s, got %s", sourceAsset.Asset, foundAsset.Asset)
 			}
 
-			foundAssetByContent, err := store.FindAssetByContent(sourceAsset.Asset)
+			foundAssetByContent, err := store.FindAssetByContent(sourceAsset.Asset, start)
 			if err != nil {
 				t.Fatalf("failed to find asset by content: %s", err)
 			}
@@ -334,7 +335,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by content: expected asset %s, got %s", sourceAsset.Asset, foundAssetByContent[0].Asset)
 			}
 
-			foundAssetByType, err := store.FindAssetByType(sourceAsset.Asset.AssetType())
+			foundAssetByType, err := store.FindAssetByType(sourceAsset.Asset.AssetType(), start)
 			if err != nil {
 				t.Fatalf("failed to find asset by type: %s", err)
 			}
@@ -435,7 +436,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to delete asset: %s", err)
 			}
 
-			if _, err = store.FindAssetById(destinationAsset.ID); err == nil {
+			if _, err = store.FindAssetById(destinationAsset.ID, start); err == nil {
 				t.Fatal("failed to delete asset: the asset was not removed from the database")
 			}
 		})
