@@ -100,8 +100,9 @@ func (a Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 
 // Relation represents a relationship between two assets stored in the database.
 type Relation struct {
-	ID          int64     `gorm:"primaryKey;autoIncrement:true"` // The unique identifier of the relation.
-	CreatedAt   time.Time `gorm:"type:datetime"`                 // The creation timestamp of the relation.
+	ID          int64     `gorm:"primaryKey;autoIncrement:true"`              // The unique identifier of the relation.
+	CreatedAt   time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"` // The creation timestamp of the relation.
+	LastSeen    time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"` // The last seen timestamp of the relation.
 	Type        string    // The type of the relation.
 	FromAssetID int64     // The ID of the asset from which the relation originates.
 	ToAssetID   int64     // The ID of the asset to which the relation points.
