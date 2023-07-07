@@ -99,6 +99,58 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 	}, nil
 }
 
+// DeleteAsset removes an asset in the database by its ID.
+// It takes a string representing the asset ID and removes the corresponding asset from the database.
+// Returns an error if the asset is not found.
+func (sql *sqlRepository) DeleteAsset(id string) error {
+	if rels, err := sql.IncomingRelations(&types.Asset{ID: id}); err == nil {
+		for _, rel := range rels {
+			if err := sql.DeleteRelation(rel.ID); err != nil {
+				return err
+			}
+		}
+	}
+
+	if rels, err := sql.OutgoingRelations(&types.Asset{ID: id}); err == nil {
+		for _, rel := range rels {
+			if err := sql.DeleteRelation(rel.ID); err != nil {
+				return err
+			}
+		}
+	}
+
+	assetId, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	asset := Asset{ID: assetId}
+	result := sql.db.Delete(&asset)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
+}
+
+// DeleteRelation removes a relation in the database by its ID.
+// It takes a string representing the relation ID and removes the corresponding relation from the database.
+// Returns an error if the relation is not found.
+func (sql *sqlRepository) DeleteRelation(id string) error {
+	relId, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	relation := Relation{ID: relId}
+	result := sql.db.Delete(&relation)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
+}
+
 // FindAssetByContent finds assets in the database that match the provided asset data.
 // It takes an oam.Asset as input and searches for assets with matching content in the database.
 // The asset data is serialized to JSON and compared against the Content field of the Asset struct.
