@@ -59,13 +59,13 @@ func (m *mockAssetDB) Link(source *types.Asset, relation string, destination *ty
 	return args.Get(0).(*types.Relation), args.Error(1)
 }
 
-func (m *mockAssetDB) IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
-	args := m.Called(asset, relationTypes)
+func (m *mockAssetDB) IncomingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
+	args := m.Called(asset, since, relationTypes)
 	return args.Get(0).([]*types.Relation), args.Error(1)
 }
 
-func (m *mockAssetDB) OutgoingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error) {
-	args := m.Called(asset, relationTypes)
+func (m *mockAssetDB) OutgoingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
+	args := m.Called(asset, since, relationTypes)
 	return args.Get(0).([]*types.Relation), args.Error(1)
 }
 
@@ -259,6 +259,7 @@ func TestAssetDB(t *testing.T) {
 		testCases := []struct {
 			description   string
 			asset         *types.Asset
+			since         time.Time
 			relationTypes []string
 			expected      []*types.Relation
 			expectedError error
@@ -266,6 +267,7 @@ func TestAssetDB(t *testing.T) {
 			{
 				description:   "successfully find incoming relations",
 				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected: []*types.Relation{
 					{
@@ -286,9 +288,18 @@ func TestAssetDB(t *testing.T) {
 			{
 				description:   "error finding incoming relations",
 				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected:      []*types.Relation{},
 				expectedError: fmt.Errorf("error finding incoming relations"),
+			},
+			{
+				description:   "incoming relations before since parameter",
+				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				since:         time.Now().Add(time.Minute),
+				relationTypes: []string{"ns_record", "cname_record"},
+				expected:      []*types.Relation{},
+				expectedError: nil,
 			},
 		}
 
@@ -299,9 +310,9 @@ func TestAssetDB(t *testing.T) {
 					repository: mockAssetDB,
 				}
 
-				mockAssetDB.On("IncomingRelations", tc.asset, tc.relationTypes).Return(tc.expected, tc.expectedError)
+				mockAssetDB.On("IncomingRelations", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.IncomingRelations(tc.asset, tc.relationTypes...)
+				result, err := adb.IncomingRelations(tc.asset, tc.since, tc.relationTypes...)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)
@@ -315,13 +326,15 @@ func TestAssetDB(t *testing.T) {
 		testCases := []struct {
 			description   string
 			asset         *types.Asset
+			since         time.Time
 			relationTypes []string
 			expected      []*types.Relation
 			expectedError error
 		}{
 			{
-				description:   "successfully find incoming relations",
+				description:   "successfully find outgoing relations",
 				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected: []*types.Relation{
 					{
@@ -342,9 +355,18 @@ func TestAssetDB(t *testing.T) {
 			{
 				description:   "error finding outgoing relations",
 				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected:      []*types.Relation{},
 				expectedError: fmt.Errorf("error finding outgoing relations"),
+			},
+			{
+				description:   "outgoing relations before since parameter",
+				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				since:         time.Now().Add(time.Minute),
+				relationTypes: []string{"ns_record", "cname_record"},
+				expected:      []*types.Relation{},
+				expectedError: nil,
 			},
 		}
 
@@ -355,9 +377,9 @@ func TestAssetDB(t *testing.T) {
 					repository: mockAssetDB,
 				}
 
-				mockAssetDB.On("OutgoingRelations", tc.asset, tc.relationTypes).Return(tc.expected, tc.expectedError)
+				mockAssetDB.On("OutgoingRelations", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.OutgoingRelations(tc.asset, tc.relationTypes...)
+				result, err := adb.OutgoingRelations(tc.asset, tc.since, tc.relationTypes...)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)

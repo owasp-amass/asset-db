@@ -384,7 +384,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to link assets: relation is nil")
 			}
 
-			incoming, err := store.IncomingRelations(destinationAsset, tc.relation)
+			incoming, err := store.IncomingRelations(destinationAsset, start, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query incoming relations: %s", err)
 			}
@@ -405,7 +405,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to query incoming relations: expected destination asset id %s, got %s", destinationAsset.ID, incoming[0].ToAsset.ID)
 			}
 
-			outgoing, err := store.OutgoingRelations(sourceAsset, tc.relation)
+			outgoing, err := store.OutgoingRelations(sourceAsset, start, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query outgoing relations: %s", err)
 			}

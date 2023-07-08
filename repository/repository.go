@@ -20,6 +20,6 @@ type Repository interface {
 	FindAssetByType(atype oam.AssetType, since time.Time) ([]*types.Asset, error)
 	FindAssetByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error)
 	Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error)
-	IncomingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error)
-	OutgoingRelations(asset *types.Asset, relationTypes ...string) ([]*types.Relation, error)
+	IncomingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error)
+	OutgoingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error)
 }
