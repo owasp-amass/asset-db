@@ -176,9 +176,9 @@ func (sql *sqlRepository) DeleteRelation(id string) error {
 	return sql.deleteRelations([]int64{relId})
 }
 
-// deleteRelations removes all rows in the Relations table with primary keys in the provide slice.
+// deleteRelations removes all rows in the Relations table with primary keys in the provided slice.
 func (sql *sqlRepository) deleteRelations(ids []int64) error {
-	return sql.db.Delete(&Relation{}, ids).Error
+	return sql.db.Exec("DELETE FROM relations WHERE id IN ?", ids).Error
 }
 
 // FindAssetByContent finds assets in the database that match the provided asset data and last seen after the since parameter.
