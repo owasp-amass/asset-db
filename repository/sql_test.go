@@ -181,33 +181,33 @@ func TestUnfilteredRelations(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Outgoing relations with no filter returns all outgoing relations.
-	outs, err := store.OutgoingRelations(sourceAsset)
+	outs, err := store.OutgoingRelations(sourceAsset, time.Time{})
 	assert.NoError(t, err)
 	assert.Equal(t, len(outs), 2)
 
 	// Outgoing relations with a filter returns
-	outs, err = store.OutgoingRelations(sourceAsset, rel1)
+	outs, err = store.OutgoingRelations(sourceAsset, time.Time{}, rel1)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
 	assert.Equal(t, rel1, outs[0].Type)
 	assert.Equal(t, dest1Asset.ID, outs[0].ToAsset.ID)
 
 	// Incoming relations with a filter returns
-	ins, err := store.IncomingRelations(dest1Asset, rel1)
+	ins, err := store.IncomingRelations(dest1Asset, time.Time{}, rel1)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
 	assert.Equal(t, rel1, ins[0].Type)
 	assert.Equal(t, dest1Asset.ID, ins[0].ToAsset.ID)
 
 	// Outgoing with source -> a_record -> dest2Asset
-	outs, err = store.OutgoingRelations(sourceAsset, rel2)
+	outs, err = store.OutgoingRelations(sourceAsset, time.Time{}, rel2)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
 	assert.Equal(t, rel2, outs[0].Type)
 	assert.Equal(t, dest2Asset.ID, outs[0].ToAsset.ID)
 
 	// Incoming for source -> a_record -> dest2asset
-	ins, err = store.IncomingRelations(dest2Asset, rel2)
+	ins, err = store.IncomingRelations(dest2Asset, time.Time{}, rel2)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
 	assert.Equal(t, rel2, ins[0].Type)
@@ -246,6 +246,7 @@ func TestLastSeenUpdates(t *testing.T) {
 }
 
 func TestRepository(t *testing.T) {
+	start := time.Now().Truncate(time.Hour)
 	ip, _ := netip.ParseAddr("192.168.1.1")
 	ip2, _ := netip.ParseAddr("192.168.1.2")
 	cidr, _ := netip.ParsePrefix("198.51.100.0/24")
@@ -300,7 +301,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to create asset: asset is nil")
 			}
 
-			foundAsset, err := store.FindAssetById(sourceAsset.ID)
+			foundAsset, err := store.FindAssetById(sourceAsset.ID, start)
 			if err != nil {
 				t.Fatalf("failed to find asset by id: %s", err)
 			}
@@ -317,7 +318,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by id: expected asset %s, got %s", sourceAsset.Asset, foundAsset.Asset)
 			}
 
-			foundAssetByContent, err := store.FindAssetByContent(sourceAsset.Asset)
+			foundAssetByContent, err := store.FindAssetByContent(sourceAsset.Asset, start)
 			if err != nil {
 				t.Fatalf("failed to find asset by content: %s", err)
 			}
@@ -334,7 +335,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by content: expected asset %s, got %s", sourceAsset.Asset, foundAssetByContent[0].Asset)
 			}
 
-			foundAssetByType, err := store.FindAssetByType(sourceAsset.Asset.AssetType())
+			foundAssetByType, err := store.FindAssetByType(sourceAsset.Asset.AssetType(), start)
 			if err != nil {
 				t.Fatalf("failed to find asset by type: %s", err)
 			}
@@ -383,7 +384,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to link assets: relation is nil")
 			}
 
-			incoming, err := store.IncomingRelations(destinationAsset, tc.relation)
+			incoming, err := store.IncomingRelations(destinationAsset, start, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query incoming relations: %s", err)
 			}
@@ -404,7 +405,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to query incoming relations: expected destination asset id %s, got %s", destinationAsset.ID, incoming[0].ToAsset.ID)
 			}
 
-			outgoing, err := store.OutgoingRelations(sourceAsset, tc.relation)
+			outgoing, err := store.OutgoingRelations(sourceAsset, start, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query outgoing relations: %s", err)
 			}
@@ -435,7 +436,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to delete asset: %s", err)
 			}
 
-			if _, err = store.FindAssetById(destinationAsset.ID); err == nil {
+			if _, err = store.FindAssetById(destinationAsset.ID, start); err == nil {
 				t.Fatal("failed to delete asset: the asset was not removed from the database")
 			}
 		})
