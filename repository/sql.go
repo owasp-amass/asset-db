@@ -394,7 +394,7 @@ func (sql *sqlRepository) isDuplicateRelation(source *types.Asset, relation stri
 	if outs, err := sql.OutgoingRelations(source, time.Time{}, relation); err == nil {
 		for _, out := range outs {
 			if dest.ID == out.ToAsset.ID {
-				sql.relationSeen(out)
+				_ = sql.relationSeen(out)
 				rel, err = sql.relationById(out.ID)
 				if err != nil {
 					log.Println("[ERROR] failed to when re-retrieving relation", err)

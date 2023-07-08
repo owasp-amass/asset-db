@@ -181,33 +181,33 @@ func TestUnfilteredRelations(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Outgoing relations with no filter returns all outgoing relations.
-	outs, err := store.OutgoingRelations(sourceAsset)
+	outs, err := store.OutgoingRelations(sourceAsset, time.Time{})
 	assert.NoError(t, err)
 	assert.Equal(t, len(outs), 2)
 
 	// Outgoing relations with a filter returns
-	outs, err = store.OutgoingRelations(sourceAsset, rel1)
+	outs, err = store.OutgoingRelations(sourceAsset, time.Time{}, rel1)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
 	assert.Equal(t, rel1, outs[0].Type)
 	assert.Equal(t, dest1Asset.ID, outs[0].ToAsset.ID)
 
 	// Incoming relations with a filter returns
-	ins, err := store.IncomingRelations(dest1Asset, rel1)
+	ins, err := store.IncomingRelations(dest1Asset, time.Time{}, rel1)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
 	assert.Equal(t, rel1, ins[0].Type)
 	assert.Equal(t, dest1Asset.ID, ins[0].ToAsset.ID)
 
 	// Outgoing with source -> a_record -> dest2Asset
-	outs, err = store.OutgoingRelations(sourceAsset, rel2)
+	outs, err = store.OutgoingRelations(sourceAsset, time.Time{}, rel2)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
 	assert.Equal(t, rel2, outs[0].Type)
 	assert.Equal(t, dest2Asset.ID, outs[0].ToAsset.ID)
 
 	// Incoming for source -> a_record -> dest2asset
-	ins, err = store.IncomingRelations(dest2Asset, rel2)
+	ins, err = store.IncomingRelations(dest2Asset, time.Time{}, rel2)
 	assert.NoError(t, err)
 	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
 	assert.Equal(t, rel2, ins[0].Type)
