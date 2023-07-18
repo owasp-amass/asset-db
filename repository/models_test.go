@@ -10,8 +10,8 @@ import (
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
 
+	"github.com/glebarez/sqlite"
 	"gorm.io/datatypes"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
