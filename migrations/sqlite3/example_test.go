@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/glebarez/sqlite"
 	"github.com/owasp-amass/asset-db/migrations/sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
