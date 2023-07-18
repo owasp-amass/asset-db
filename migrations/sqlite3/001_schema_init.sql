@@ -5,13 +5,13 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS assets(
     id INTEGER PRIMARY KEY,
-    created_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     type TEXT,
     content TEXT);
 
 CREATE TABLE IF NOT EXISTS relations(
     id INTEGER PRIMARY KEY,
-    created_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     type TEXT,
     from_asset_id INTEGER,
     to_asset_id INTEGER,
