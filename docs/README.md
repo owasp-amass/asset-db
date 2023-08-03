@@ -12,3 +12,7 @@ This repository offers services and repositories to interact with an asset datab
 ## Contributing
 
 If you have interest in contributing, please refer to the [contributing doc](CONTRIBUTING.md)
+
+## User Guide
+
+For important information on how to get started with this project, please refer to the [user guide](USER_GUIDE.md).
