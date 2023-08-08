@@ -7,11 +7,12 @@ on:
     branches: develop
 
 jobs:
+
   golangci:
     name: lint
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
       - uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
@@ -20,21 +21,39 @@ jobs:
         with:
           args: --timeout=5m
 
-  unit:
-    name: unit
+  integration:
+    name: integration
     runs-on: ubuntu-20.04
-    env:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-      SQLITE3_DB: test.db
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
+      - name: Add database extensions
+        run: |
+          psql -h localhost -U postgres -tc "CREATE EXTENSION pg_trgm;"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Run Tests
+        uses: actions/setup-go@v4
         with:
           go-version-file: 'go.mod'
-      - name: Setup PostgreSQL
-        uses: ikalnytskyi/action-setup-postgres@v4
-        id: postgres
       - run: |
-          go test -race -timeout 240s ./...
+          go test -v ./...

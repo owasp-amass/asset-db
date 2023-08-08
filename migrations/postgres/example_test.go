@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/owasp-amass/asset-db/migrations/postgres"
@@ -11,9 +12,23 @@ import (
 )
 
 func ExampleMigrations() {
-	user := os.Getenv("POSTGRES_USER")
-	password := os.Getenv("POSTGRES_PASSWORD")
-	dbname := os.Getenv("POSTGRES_DB")
+
+	user := "postgres"
+	if u, ok := os.LookupEnv("POSTGRES_USER"); ok {
+		user = u
+	}
+
+	password := "postgres"
+	if p, ok := os.LookupEnv("POSTGRES_PASSWORD"); ok {
+		password = p
+	}
+
+	dbname := "postgres"
+	if db, ok := os.LookupEnv("POSTGRES_DB"); ok {
+		dbname = db
+	}
+
+	log.Printf("DSN: %s", fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", user, password, dbname))
 
 	dsn := fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", user, password, dbname)
 	db, err := gorm.Open(pg.Open(dsn), &gorm.Config{})

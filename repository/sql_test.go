@@ -20,11 +20,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var user = os.Getenv("POSTGRES_USER")
-var password = os.Getenv("POSTGRES_PASSWORD")
-var pgdbname = os.Getenv("POSTGRES_DB")
-var sqlitedbname = os.Getenv("SQLITE3_DB")
-
 var store *sqlRepository
 
 type testSetup struct {
@@ -112,6 +107,26 @@ func teardownPostgres(dsn string) {
 }
 
 func TestMain(m *testing.M) {
+	user := "postgres"
+	if u, ok := os.LookupEnv("POSTGRES_USER"); ok {
+		user = u
+	}
+
+	password := "postgres"
+	if p, ok := os.LookupEnv("POSTGRES_PASSWORD"); ok {
+		password = p
+	}
+
+	pgdbname := "postgres"
+	if pdb, ok := os.LookupEnv("POSTGRES_DB"); ok {
+		pgdbname = pdb
+	}
+
+	sqlitedbname := "test.db"
+	if sdb, ok := os.LookupEnv("SQLITE3_DB"); ok {
+		sqlitedbname = sdb
+	}
+
 	wrappers := []testSetup{
 		{
 			name:     Postgres,

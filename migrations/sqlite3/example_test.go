@@ -11,7 +11,11 @@ import (
 )
 
 func ExampleMigrations() {
-	dsn := os.Getenv("SQLITE3_DB")
+
+	dsn := "test.db"
+	if v, ok := os.LookupEnv("SQLITE3_DB"); ok {
+		dsn = v
+	}
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
