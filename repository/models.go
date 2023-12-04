@@ -69,25 +69,20 @@ func (a Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	}
 
 	jsonQuery := datatypes.JSONQuery("content")
-	switch a.Type {
-	case string(oam.FQDN):
-		assetData := asset.(domain.FQDN)
-		return jsonQuery.Equals(assetData.Name, "name"), nil
-	case string(oam.IPAddress):
-		assetData := asset.(network.IPAddress)
-		return jsonQuery.Equals(assetData.Address.String(), "address"), nil
-	case string(oam.ASN):
-		assetData := asset.(network.AutonomousSystem)
-		return jsonQuery.Equals(assetData.Number, "number"), nil
-	case string(oam.Netblock):
-		assetData := asset.(network.Netblock)
-		return jsonQuery.Equals(assetData.Cidr.String(), "cidr"), nil
-	case string(oam.RIROrg):
-		assetData := asset.(network.RIROrganization)
-		return jsonQuery.Equals(assetData.Name, "name"), nil
-	default:
-		return nil, fmt.Errorf("unknown asset type: %s", a.Type)
+	switch v := asset.(type) {
+	case *domain.FQDN:
+		return jsonQuery.Equals(v.Name, "name"), nil
+	case *network.IPAddress:
+		return jsonQuery.Equals(v.Address.String(), "address"), nil
+	case *network.AutonomousSystem:
+		return jsonQuery.Equals(v.Number, "number"), nil
+	case *network.Netblock:
+		return jsonQuery.Equals(v.Cidr.String(), "cidr"), nil
+	case *network.RIROrganization:
+		return jsonQuery.Equals(v.Name, "name"), nil
 	}
+
+	return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 }
 
 // Relation represents a relationship between two assets stored in the database.
