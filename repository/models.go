@@ -24,48 +24,40 @@ type Asset struct {
 // Parse parses the content of the asset into the corresponding Open Asset Model (OAM) asset type.
 // It returns the parsed asset and an error, if any.
 func (a Asset) Parse() (oam.Asset, error) {
+	var err error
 	var asset oam.Asset
+
 	switch a.Type {
 	case string(oam.FQDN):
 		var fqdn domain.FQDN
-		err := json.Unmarshal(a.Content, &fqdn)
-		if err != nil {
-			return domain.FQDN{}, err
-		}
-		asset = fqdn
+
+		err = json.Unmarshal(a.Content, &fqdn)
+		asset = &fqdn
 	case string(oam.IPAddress):
 		var ip network.IPAddress
-		err := json.Unmarshal(a.Content, &ip)
-		if err != nil {
-			return network.IPAddress{}, err
-		}
-		asset = ip
+
+		err = json.Unmarshal(a.Content, &ip)
+		asset = &ip
 	case string(oam.ASN):
 		var asn network.AutonomousSystem
-		err := json.Unmarshal(a.Content, &asn)
-		if err != nil {
-			return network.AutonomousSystem{}, err
-		}
-		asset = asn
+
+		err = json.Unmarshal(a.Content, &asn)
+		asset = &asn
 	case string(oam.RIROrg):
 		var rir network.RIROrganization
-		err := json.Unmarshal(a.Content, &rir)
-		if err != nil {
-			return network.RIROrganization{}, err
-		}
-		asset = rir
+
+		err = json.Unmarshal(a.Content, &rir)
+		asset = &rir
 	case string(oam.Netblock):
 		var netblock network.Netblock
-		err := json.Unmarshal(a.Content, &netblock)
-		if err != nil {
-			return network.Netblock{}, err
-		}
-		asset = netblock
+
+		err = json.Unmarshal(a.Content, &netblock)
+		asset = &netblock
 	default:
 		return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 	}
 
-	return asset, nil
+	return asset, err
 }
 
 // JSONQuery generates a JSON query expression based on the asset's content.
