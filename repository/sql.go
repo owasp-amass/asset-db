@@ -29,7 +29,8 @@ const (
 
 // sqlRepository is a repository implementation using GORM as the underlying ORM.
 type sqlRepository struct {
-	db *gorm.DB
+	db     *gorm.DB
+	dbType DBType
 }
 
 // New creates a new instance of the asset database repository.
@@ -40,7 +41,8 @@ func New(dbType DBType, dsn string) *sqlRepository {
 	}
 
 	return &sqlRepository{
-		db: db,
+		db:     db,
+		dbType: dbType,
 	}
 }
 
@@ -64,6 +66,92 @@ func postgresDatabase(dsn string) (*gorm.DB, error) {
 // sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
 func sqliteDatabase(dsn string) (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+}
+
+// GetDBType returns the type of the database.
+func (sql *sqlRepository) GetDBType() string {
+	return string(sql.dbType)
+}
+
+// AssetQuery creates a query and returns the slice of IDs found.
+// The query will start with "SELECT * FROM assets " and then add the provided constraints.
+func (sql *sqlRepository) AssetQuery(constraints string) ([]*types.Asset, error) {
+
+	var gormAssets []Asset
+
+	result := sql.db.Raw("SELECT * FROM assets " + constraints).Scan(&gormAssets)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	var assets []*types.Asset
+	for _, a := range gormAssets {
+		asset, err := sql.gormAssetToAsset(&a)
+		if err != nil {
+			return nil, err
+		}
+		assets = append(assets, asset)
+	}
+
+	return assets, nil
+}
+
+func (sql *sqlRepository) gormAssetToAsset(gormAsset *Asset) (*types.Asset, error) {
+	asset, err := gormAsset.Parse()
+	if err != nil {
+		return &types.Asset{}, err
+	}
+
+	return &types.Asset{
+		ID:        strconv.FormatInt(gormAsset.ID, 10),
+		CreatedAt: gormAsset.CreatedAt,
+		LastSeen:  gormAsset.LastSeen,
+		Asset:     asset,
+	}, nil
+}
+
+// Relation Query creates a query and returns the slice of relations found.
+// The query will start with "SELECT * FROM relations " and then add the provided constraints.
+func (sql *sqlRepository) RelationQuery(constraints string) ([]*types.Relation, error) {
+	var relations []*Relation
+
+	result := sql.db.Raw("SELECT * FROM relations " + constraints).Scan(&relations)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	var res []*types.Relation
+	for _, r := range relations {
+
+		relation, err := sql.gormRelationToRelation(r)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, relation)
+	}
+
+	return res, nil
+}
+
+func (sql *sqlRepository) gormRelationToRelation(gormRelation *Relation) (*types.Relation, error) {
+
+	fromasset, err := sql.FindAssetById(strconv.FormatInt(gormRelation.FromAssetID, 10), time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	toasset, err := sql.FindAssetById(strconv.FormatInt(gormRelation.ToAssetID, 10), time.Time{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.Relation{
+		ID:        strconv.FormatInt(gormRelation.ID, 10),
+		CreatedAt: gormRelation.CreatedAt,
+		LastSeen:  gormRelation.LastSeen,
+		Type:      gormRelation.Type,
+		FromAsset: fromasset,
+		ToAsset:   toasset,
+	}, nil
 }
 
 // CreateAsset creates a new asset in the database.

@@ -1,18 +1,34 @@
 package assetdb
 
 import (
+	"embed"
 	"fmt"
+	"math/rand"
+	"net/netip"
 	"os"
 	"testing"
 	"time"
 
+	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
+	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
+	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
-
+	"github.com/owasp-amass/open-asset-model/org"
+	"github.com/owasp-amass/open-asset-model/people"
+	oamtls "github.com/owasp-amass/open-asset-model/tls_certificates"
+	"github.com/owasp-amass/open-asset-model/url"
+	"github.com/owasp-amass/open-asset-model/whois"
+	migrate "github.com/rubenv/sql-migrate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type mockAssetDB struct {
@@ -66,6 +82,21 @@ func (m *mockAssetDB) IncomingRelations(asset *types.Asset, since time.Time, rel
 
 func (m *mockAssetDB) OutgoingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
 	args := m.Called(asset, since, relationTypes)
+	return args.Get(0).([]*types.Relation), args.Error(1)
+}
+
+func (m *mockAssetDB) GetDBType() string {
+	args := m.Called()
+	return args.String(0)
+}
+
+func (m *mockAssetDB) AssetQuery(query string) ([]*types.Asset, error) {
+	args := m.Called(query)
+	return args.Get(0).([]*types.Asset), args.Error(1)
+}
+
+func (m *mockAssetDB) RelationQuery(constraints string) ([]*types.Relation, error) {
+	args := m.Called(constraints)
 	return args.Get(0).([]*types.Relation), args.Error(1)
 }
 
@@ -444,4 +475,194 @@ func TestAssetDB(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestAssetQuery(t *testing.T) {
+	// Set up the SQLite database for testing
+
+	db := newGraph("local", "test.db")
+
+	defer teardownSqlite("test.db")
+
+	createdAssets := createAssets(db)
+
+	queriedAssets, err := db.AssetQuery("")
+	if err != nil {
+		panic(err)
+	}
+
+	// compare the assets
+	assert.Equal(t, createdAssets, queriedAssets)
+
+}
+
+func TestRelationQuery(t *testing.T) {
+
+	// Set up the SQLite database for testing
+
+	db := newGraph("local", "test.db")
+
+	defer teardownSqlite("test.db")
+
+	createdAssets := createAssets(db)
+
+	createdRelations := createRelations(createdAssets, db)
+
+	queriedRelations, err := db.RelationQuery("")
+	if err != nil {
+		panic(err)
+	}
+
+	// Verify the relations and assets are populated in the relation
+	// Have to do it this way because "CreatedAt" is not populated when creating relations.
+	for k, relation := range queriedRelations {
+		assert.Equal(t, createdRelations[k].ID, relation.ID)
+		assert.Equal(t, createdRelations[k].Type, relation.Type)
+		assert.Equal(t, createdRelations[k].LastSeen, relation.LastSeen)
+		assert.Contains(t, createdAssets, relation.FromAsset)
+		assert.Contains(t, createdAssets, relation.ToAsset)
+	}
+
+}
+
+func createRelations(assets []*types.Asset, db *AssetDB) []*types.Relation {
+	var relations []*types.Relation
+
+	// Create test relations
+	relation, err := db.repository.Link(assets[0], "node", assets[1])
+	if err != nil {
+		panic(err)
+	}
+	relations = append(relations, relation)
+	relation, err = db.repository.Link(assets[0], "a_record", assets[5])
+	if err != nil {
+		panic(err)
+	}
+	relations = append(relations, relation)
+	relation, err = db.repository.Link(assets[0], "aaaa_record", assets[6])
+	if err != nil {
+		panic(err)
+	}
+	relations = append(relations, relation)
+	relation, err = db.repository.Link(assets[3], "contains", assets[6])
+	if err != nil {
+		panic(err)
+	}
+	relations = append(relations, relation)
+	relation, err = db.repository.Link(assets[5], "port", assets[8])
+	if err != nil {
+		panic(err)
+	}
+	relations = append(relations, relation)
+	relation, err = db.repository.Link(assets[11], "port", assets[8])
+	if err != nil {
+		panic(err)
+	}
+	relations = append(relations, relation)
+
+	return relations
+}
+
+func createAssets(db *AssetDB) []*types.Asset {
+
+	// Create test assets
+	assets := []oam.Asset{
+		&domain.FQDN{Name: "example.com"},
+		&domain.FQDN{Name: "www.example.com"},
+		&domain.FQDN{Name: "www.example.org"},
+		&network.Netblock{Cidr: netip.MustParsePrefix("198.51.100.0/24"), Type: "IPv4"},
+		&network.Netblock{Cidr: netip.MustParsePrefix("2001:db8::/32"), Type: "IPv6"},
+		&network.IPAddress{Address: netip.MustParseAddr("192.168.1.2"), Type: "IPv4"},
+		&network.IPAddress{Address: netip.MustParseAddr("2001:db8::1"), Type: "IPv6"},
+		&network.Port{Number: 80, Protocol: "tcp"},
+		&network.Port{Number: 443, Protocol: "tcp"},
+		&network.RIROrganization{Name: "RIPE NCC"},
+		&network.AutonomousSystem{Number: 12345},
+		&url.URL{Scheme: "https", Host: "example.com"},
+		&org.Organization{OrgName: "Example Inc."},
+		&people.Person{FullName: "John Doe"},
+		&whois.WHOIS{Domain: "example.com"},
+		&whois.Registrar{Name: "Registrar Inc."},
+		&contact.EmailAddress{Address: "test@example.com"},
+		&contact.Phone{Raw: "+1-555-555-5555"},
+		&contact.Location{FormattedAddress: "123 Example St., Example, EX 12345"},
+		&oamtls.TLSCertificate{SerialNumber: "1234567890"},
+		&fingerprint.Fingerprint{String: "fingerprint"},
+	}
+
+	var createdAssets []*types.Asset
+	for _, asset := range assets {
+		createdAsset, err := db.Create(nil, "", asset)
+		if err != nil {
+			panic(err)
+		}
+		createdAssets = append(createdAssets, createdAsset)
+	}
+	return createdAssets
+}
+
+func teardownSqlite(dsn string) {
+	err := os.Remove(dsn)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func newGraph(system, path string) *AssetDB {
+	var dsn string
+	var dbtype repository.DBType
+
+	switch system {
+	case "memory":
+		dbtype = repository.SQLite
+		dsn = fmt.Sprintf("file:sqlite%d?mode=memory&cache=shared", rand.Int31n(100))
+	case "local":
+		dbtype = repository.SQLite
+		dsn = path
+	case "postgres":
+		dbtype = repository.Postgres
+		dsn = path
+	default:
+		return nil
+	}
+
+	store := New(dbtype, dsn)
+	if store == nil {
+		return nil
+	}
+
+	var name string
+	var fs embed.FS
+	var database gorm.Dialector
+	switch dbtype {
+	case repository.SQLite:
+		name = "sqlite3"
+		fs = sqlitemigrations.Migrations()
+		database = sqlite.Open(dsn)
+	case repository.Postgres:
+		name = "postgres"
+		fs = pgmigrations.Migrations()
+		database = postgres.Open(dsn)
+	}
+
+	sql, err := gorm.Open(database, &gorm.Config{})
+	if err != nil {
+		return nil
+	}
+
+	migrationsSource := migrate.EmbedFileSystemMigrationSource{
+		FileSystem: fs,
+		Root:       "/",
+	}
+
+	sqlDb, err := sql.DB()
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = migrate.Exec(sqlDb, name, migrationsSource, migrate.Up)
+	if err != nil {
+		panic(err)
+	}
+	return store
 }
