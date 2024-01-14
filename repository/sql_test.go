@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -275,32 +276,32 @@ func TestRepository(t *testing.T) {
 	}{
 		{
 			description:      "create an FQDN and link it with another FQDN",
-			sourceAsset:      domain.FQDN{Name: "www.example.com"},
-			destinationAsset: domain.FQDN{Name: "www.example.subdomain.com"},
+			sourceAsset:      &domain.FQDN{Name: "www.example.com"},
+			destinationAsset: &domain.FQDN{Name: "www.example.subdomain.com"},
 			relation:         "cname_record",
 		},
 		{
 			description:      "create an Autonomous System and link it with an RIR organization",
-			sourceAsset:      network.AutonomousSystem{Number: 1},
-			destinationAsset: network.RIROrganization{Name: "Google LLC", RIRId: "GOGL", RIR: "ARIN"},
+			sourceAsset:      &network.AutonomousSystem{Number: 1},
+			destinationAsset: &network.RIROrganization{Name: "Google LLC", RIRId: "GOGL", RIR: "ARIN"},
 			relation:         "managed_by",
 		},
 		{
 			description:      "create a Netblock and link it with an IP address",
-			sourceAsset:      network.Netblock{Cidr: cidr, Type: "IPv4"},
-			destinationAsset: network.IPAddress{Address: ip, Type: "IPv4"},
+			sourceAsset:      &network.Netblock{Cidr: cidr, Type: "IPv4"},
+			destinationAsset: &network.IPAddress{Address: ip, Type: "IPv4"},
 			relation:         "contains",
 		},
 		{
 			description:      "create an FQDN and link it with an IP address",
-			sourceAsset:      domain.FQDN{Name: "www.domain.com"},
-			destinationAsset: network.IPAddress{Address: ip2, Type: "IPv4"},
+			sourceAsset:      &domain.FQDN{Name: "www.domain.com"},
+			destinationAsset: &network.IPAddress{Address: ip2, Type: "IPv4"},
 			relation:         "a_record",
 		},
 		{
 			description:      "create an Autonomous System and link it with a Netblock",
-			sourceAsset:      network.AutonomousSystem{Number: 2},
-			destinationAsset: network.Netblock{Cidr: cidr2, Type: "IPv4"},
+			sourceAsset:      &network.AutonomousSystem{Number: 2},
+			destinationAsset: &network.Netblock{Cidr: cidr2, Type: "IPv4"},
 			relation:         "announces",
 		},
 	}
@@ -329,7 +330,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by id: expected asset id %s, got %s", sourceAsset.ID, foundAsset.ID)
 			}
 
-			if foundAsset.Asset != sourceAsset.Asset {
+			if !reflect.DeepEqual(foundAsset.Asset, sourceAsset.Asset) {
 				t.Fatalf("failed to find asset by id: expected asset %s, got %s", sourceAsset.Asset, foundAsset.Asset)
 			}
 
@@ -346,7 +347,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find asset by content: expected asset id %s, got %s", sourceAsset.ID, foundAssetByContent[0].ID)
 			}
 
-			if foundAssetByContent[0].Asset != sourceAsset.Asset {
+			if !reflect.DeepEqual(foundAssetByContent[0].Asset, sourceAsset.Asset) {
 				t.Fatalf("failed to find asset by content: expected asset %s, got %s", sourceAsset.Asset, foundAssetByContent[0].Asset)
 			}
 
@@ -372,7 +373,7 @@ func TestRepository(t *testing.T) {
 
 			found = false
 			for _, a := range foundAssetByType {
-				if a.Asset == sourceAsset.Asset {
+				if reflect.DeepEqual(a.Asset, sourceAsset.Asset) {
 					found = true
 					break
 				}

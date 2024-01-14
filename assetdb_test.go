@@ -35,6 +35,11 @@ type mockAssetDB struct {
 	mock.Mock
 }
 
+func (m *mockAssetDB) GetDBType() string {
+	args := m.Called()
+	return args.String(0)
+}
+
 func (m *mockAssetDB) CreateAsset(asset oam.Asset) (*types.Asset, error) {
 	args := m.Called(asset)
 	return args.Get(0).(*types.Asset), args.Error(1)
@@ -85,11 +90,6 @@ func (m *mockAssetDB) OutgoingRelations(asset *types.Asset, since time.Time, rel
 	return args.Get(0).([]*types.Relation), args.Error(1)
 }
 
-func (m *mockAssetDB) GetDBType() string {
-	args := m.Called()
-	return args.String(0)
-}
-
 func (m *mockAssetDB) AssetQuery(query string) ([]*types.Asset, error) {
 	args := m.Called(query)
 	return args.Get(0).([]*types.Asset), args.Error(1)
@@ -101,9 +101,7 @@ func (m *mockAssetDB) RelationQuery(constraints string) ([]*types.Relation, erro
 }
 
 func TestMain(m *testing.M) {
-	exitVal := m.Run()
-
-	os.Exit(exitVal)
+	os.Exit(m.Run())
 }
 
 func TestAssetDB(t *testing.T) {
@@ -122,18 +120,18 @@ func TestAssetDB(t *testing.T) {
 		}{
 			{
 				description:   "successfully create initial asset",
-				discovered:    domain.FQDN{Name: "www.domain.com"},
+				discovered:    &domain.FQDN{Name: "www.domain.com"},
 				source:        nil,
 				relation:      "",
-				expected:      &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				expected:      &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				expectedError: nil,
 			},
 			{
 				description:   "successfully create an asset with relation",
-				discovered:    network.AutonomousSystem{Number: 1},
-				source:        &types.Asset{ID: "2", Asset: network.RIROrganization{Name: "RIPE NCC"}},
+				discovered:    &network.AutonomousSystem{Number: 1},
+				source:        &types.Asset{ID: "2", Asset: &network.RIROrganization{Name: "RIPE NCC"}},
 				relation:      relationType,
-				expected:      &types.Asset{ID: "3", Asset: network.AutonomousSystem{Number: 1}},
+				expected:      &types.Asset{ID: "3", Asset: &network.AutonomousSystem{Number: 1}},
 				expectedError: nil,
 			},
 		}
@@ -170,7 +168,7 @@ func TestAssetDB(t *testing.T) {
 			expected      *types.Asset
 			expectedError error
 		}{
-			{"an asset is found", "1", &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}, nil},
+			{"an asset is found", "1", &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}}, nil},
 			{"an asset is not found", "2", &types.Asset{}, fmt.Errorf("asset not found")},
 		}
 
@@ -201,10 +199,10 @@ func TestAssetDB(t *testing.T) {
 			expected      []*types.Asset
 			expectedError error
 		}{
-			{"an asset is found", domain.FQDN{Name: "www.domain.com"}, start, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"an asset is not found", domain.FQDN{Name: "www.domain.com"}, start, []*types.Asset{}, fmt.Errorf("asset not found")},
-			{"asset last seen after since", domain.FQDN{Name: "www.domain.com"}, start, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"asset last seen before since", domain.FQDN{Name: "www.domain.com"}, time.Now(), []*types.Asset{}, fmt.Errorf("asset last seen before since")},
+			{"an asset is found", &domain.FQDN{Name: "www.domain.com"}, start, []*types.Asset{{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"an asset is not found", &domain.FQDN{Name: "www.domain.com"}, start, []*types.Asset{}, fmt.Errorf("asset not found")},
+			{"asset last seen after since", &domain.FQDN{Name: "www.domain.com"}, start, []*types.Asset{{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"asset last seen before since", &domain.FQDN{Name: "www.domain.com"}, time.Now(), []*types.Asset{}, fmt.Errorf("asset last seen before since")},
 		}
 
 		for _, tc := range testCases {
@@ -233,8 +231,8 @@ func TestAssetDB(t *testing.T) {
 			expected      []*types.Asset
 			expectedError error
 		}{
-			{"an asset is found", []oam.Asset{domain.FQDN{Name: "domain.com"}}, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"an asset is not found", []oam.Asset{domain.FQDN{Name: "domain.com"}}, []*types.Asset{}, fmt.Errorf("asset not found")},
+			{"an asset is found", []oam.Asset{&domain.FQDN{Name: "domain.com"}}, []*types.Asset{{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"an asset is not found", []oam.Asset{&domain.FQDN{Name: "domain.com"}}, []*types.Asset{}, fmt.Errorf("asset not found")},
 		}
 
 		for _, tc := range testCases {
@@ -263,7 +261,7 @@ func TestAssetDB(t *testing.T) {
 			expected      []*types.Asset
 			expectedError error
 		}{
-			{"an asset is found", oam.FQDN, []*types.Asset{{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}}}, nil},
+			{"an asset is found", oam.FQDN, []*types.Asset{{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}}}, nil},
 			{"an asset is not found", oam.FQDN, []*types.Asset{}, fmt.Errorf("asset not found")},
 		}
 
@@ -297,28 +295,28 @@ func TestAssetDB(t *testing.T) {
 		}{
 			{
 				description:   "successfully find incoming relations",
-				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				asset:         &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected: []*types.Relation{
 					{
 						ID:        "1",
 						Type:      "ns_record",
-						FromAsset: &types.Asset{ID: "2", Asset: domain.FQDN{Name: "www.subdomain1.com"}},
-						ToAsset:   &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+						FromAsset: &types.Asset{ID: "2", Asset: &domain.FQDN{Name: "www.subdomain1.com"}},
+						ToAsset:   &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 					},
 					{
 						ID:        "2",
 						Type:      "cname_record",
-						FromAsset: &types.Asset{ID: "3", Asset: domain.FQDN{Name: "www.subdomain2.com"}},
-						ToAsset:   &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+						FromAsset: &types.Asset{ID: "3", Asset: &domain.FQDN{Name: "www.subdomain2.com"}},
+						ToAsset:   &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 					},
 				},
 				expectedError: nil,
 			},
 			{
 				description:   "error finding incoming relations",
-				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				asset:         &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected:      []*types.Relation{},
@@ -326,7 +324,7 @@ func TestAssetDB(t *testing.T) {
 			},
 			{
 				description:   "incoming relations before since parameter",
-				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				asset:         &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         time.Now().Add(time.Minute),
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected:      []*types.Relation{},
@@ -364,28 +362,28 @@ func TestAssetDB(t *testing.T) {
 		}{
 			{
 				description:   "successfully find outgoing relations",
-				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				asset:         &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected: []*types.Relation{
 					{
 						ID:        "1",
 						Type:      "ns_record",
-						FromAsset: &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
-						ToAsset:   &types.Asset{ID: "2", Asset: domain.FQDN{Name: "www.subdomain1.com"}},
+						FromAsset: &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
+						ToAsset:   &types.Asset{ID: "2", Asset: &domain.FQDN{Name: "www.subdomain1.com"}},
 					},
 					{
 						ID:        "2",
 						Type:      "cname_record",
-						FromAsset: &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
-						ToAsset:   &types.Asset{ID: "2", Asset: domain.FQDN{Name: "www.subdomain2.com"}},
+						FromAsset: &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
+						ToAsset:   &types.Asset{ID: "2", Asset: &domain.FQDN{Name: "www.subdomain2.com"}},
 					},
 				},
 				expectedError: nil,
 			},
 			{
 				description:   "error finding outgoing relations",
-				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				asset:         &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected:      []*types.Relation{},
@@ -393,7 +391,7 @@ func TestAssetDB(t *testing.T) {
 			},
 			{
 				description:   "outgoing relations before since parameter",
-				asset:         &types.Asset{ID: "1", Asset: domain.FQDN{Name: "www.domain.com"}},
+				asset:         &types.Asset{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         time.Now().Add(time.Minute),
 				relationTypes: []string{"ns_record", "cname_record"},
 				expected:      []*types.Relation{},
@@ -479,9 +477,7 @@ func TestAssetDB(t *testing.T) {
 
 func TestAssetQuery(t *testing.T) {
 	// Set up the SQLite database for testing
-
 	db := newGraph("local", "test.db")
-
 	defer teardownSqlite("test.db")
 
 	createdAssets := createAssets(db)
@@ -490,29 +486,22 @@ func TestAssetQuery(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-
 	// compare the assets
 	assert.Equal(t, createdAssets, queriedAssets)
-
 }
 
 func TestRelationQuery(t *testing.T) {
-
 	// Set up the SQLite database for testing
-
 	db := newGraph("local", "test.db")
-
 	defer teardownSqlite("test.db")
 
 	createdAssets := createAssets(db)
-
 	createdRelations := createRelations(createdAssets, db)
 
 	queriedRelations, err := db.RelationQuery("")
 	if err != nil {
 		panic(err)
 	}
-
 	// Verify the relations and assets are populated in the relation
 	// Have to do it this way because "CreatedAt" is not populated when creating relations.
 	for k, relation := range queriedRelations {
@@ -522,7 +511,6 @@ func TestRelationQuery(t *testing.T) {
 		assert.Contains(t, createdAssets, relation.FromAsset)
 		assert.Contains(t, createdAssets, relation.ToAsset)
 	}
-
 }
 
 func createRelations(assets []*types.Asset, db *AssetDB) []*types.Relation {
@@ -564,7 +552,6 @@ func createRelations(assets []*types.Asset, db *AssetDB) []*types.Relation {
 }
 
 func createAssets(db *AssetDB) []*types.Asset {
-
 	// Create test assets
 	assets := []oam.Asset{
 		&domain.FQDN{Name: "example.com"},

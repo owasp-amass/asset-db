@@ -30,7 +30,7 @@ type Asset struct {
 
 // Parse parses the content of the asset into the corresponding Open Asset Model (OAM) asset type.
 // It returns the parsed asset and an error, if any.
-func (a Asset) Parse() (oam.Asset, error) {
+func (a *Asset) Parse() (oam.Asset, error) {
 	var err error
 	var asset oam.Asset
 
@@ -124,7 +124,7 @@ func (a Asset) Parse() (oam.Asset, error) {
 
 // JSONQuery generates a JSON query expression based on the asset's content.
 // It returns the generated JSON query expression and an error, if any.
-func (a Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
+func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	asset, err := a.Parse()
 	if err != nil {
 		return nil, err
@@ -165,6 +165,7 @@ func (a Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	case *url.URL:
 		return jsonQuery.Equals(v.Raw, "url"), nil
 	}
+
 	return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 }
 
