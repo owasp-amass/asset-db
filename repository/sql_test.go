@@ -457,3 +457,16 @@ func TestRepository(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDBType(t *testing.T) {
+	sql := &sqlRepository{
+		dbType: "postgres",
+	}
+
+	expected := "postgres"
+	result := sql.GetDBType()
+
+	if result != expected {
+		t.Errorf("Unexpected result. Expected: %s, Got: %s", expected, result)
+	}
+}

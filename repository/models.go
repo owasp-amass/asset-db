@@ -6,8 +6,15 @@ import (
 	"time"
 
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/org"
+	"github.com/owasp-amass/open-asset-model/people"
+	oamtls "github.com/owasp-amass/open-asset-model/tls_certificates"
+	"github.com/owasp-amass/open-asset-model/url"
+	"github.com/owasp-amass/open-asset-model/whois"
 
 	"gorm.io/datatypes"
 )
@@ -53,6 +60,61 @@ func (a Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &netblock)
 		asset = &netblock
+	case string(oam.Port):
+		var port network.Port
+
+		err = json.Unmarshal(a.Content, &port)
+		asset = &port
+	case string(oam.WHOIS):
+		var whois whois.WHOIS
+
+		err = json.Unmarshal(a.Content, &whois)
+		asset = &whois
+	case string(oam.Registrar):
+		var registrar whois.Registrar
+
+		err = json.Unmarshal(a.Content, &registrar)
+		asset = &registrar
+	case string(oam.Fingerprint):
+		var fingerprint fingerprint.Fingerprint
+
+		err = json.Unmarshal(a.Content, &fingerprint)
+		asset = &fingerprint
+	case string(oam.Organization):
+		var organization org.Organization
+
+		err = json.Unmarshal(a.Content, &organization)
+		asset = &organization
+	case string(oam.Person):
+		var person people.Person
+
+		err = json.Unmarshal(a.Content, &person)
+		asset = &person
+	case string(oam.Phone):
+		var phone contact.Phone
+
+		err = json.Unmarshal(a.Content, &phone)
+		asset = &phone
+	case string(oam.Email):
+		var emailAddress contact.EmailAddress
+
+		err = json.Unmarshal(a.Content, &emailAddress)
+		asset = &emailAddress
+	case string(oam.Location):
+		var location contact.Location
+
+		err = json.Unmarshal(a.Content, &location)
+		asset = &location
+	case string(oam.TLSCertificate):
+		var tlsCertificate oamtls.TLSCertificate
+
+		err = json.Unmarshal(a.Content, &tlsCertificate)
+		asset = &tlsCertificate
+	case string(oam.URL):
+		var url url.URL
+
+		err = json.Unmarshal(a.Content, &url)
+		asset = &url
 	default:
 		return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 	}
@@ -72,6 +134,8 @@ func (a Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	switch v := asset.(type) {
 	case *domain.FQDN:
 		return jsonQuery.Equals(v.Name, "name"), nil
+	case *network.Port:
+		return jsonQuery.Equals(v.Number, "number"), nil
 	case *network.IPAddress:
 		return jsonQuery.Equals(v.Address.String(), "address"), nil
 	case *network.AutonomousSystem:
@@ -80,8 +144,27 @@ func (a Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Cidr.String(), "cidr"), nil
 	case *network.RIROrganization:
 		return jsonQuery.Equals(v.Name, "name"), nil
+	case *whois.WHOIS:
+		return jsonQuery.Equals(v.Domain, "domain"), nil
+	case *whois.Registrar:
+		return jsonQuery.Equals(v.Name, "name"), nil
+	case *fingerprint.Fingerprint:
+		return jsonQuery.Equals(v.String, "string"), nil
+	case *org.Organization:
+		return jsonQuery.Equals(v.OrgName, "org_name"), nil
+	case *people.Person:
+		return jsonQuery.Equals(v.FullName, "full_name"), nil
+	case *contact.Phone:
+		return jsonQuery.Equals(v.Raw, "raw"), nil
+	case *contact.EmailAddress:
+		return jsonQuery.Equals(v.Address, "address"), nil
+	case *contact.Location:
+		return jsonQuery.Equals(v.FormattedAddress, "formatted_address"), nil
+	case *oamtls.TLSCertificate:
+		return jsonQuery.Equals(v.SerialNumber, "serial_number"), nil
+	case *url.URL:
+		return jsonQuery.Equals(v.Raw, "url"), nil
 	}
-
 	return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 }
 
