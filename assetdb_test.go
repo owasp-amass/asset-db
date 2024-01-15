@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/netip"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -31,75 +32,6 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
-
-type mockAssetDB struct {
-	mock.Mock
-}
-
-func (m *mockAssetDB) GetDBType() string {
-	args := m.Called()
-	return args.String(0)
-}
-
-func (m *mockAssetDB) CreateAsset(asset oam.Asset) (*types.Asset, error) {
-	args := m.Called(asset)
-	return args.Get(0).(*types.Asset), args.Error(1)
-}
-
-func (m *mockAssetDB) DeleteAsset(id string) error {
-	args := m.Called(id)
-	return args.Error(0)
-}
-
-func (m *mockAssetDB) DeleteRelation(id string) error {
-	args := m.Called(id)
-	return args.Error(0)
-}
-
-func (m *mockAssetDB) FindAssetById(id string, since time.Time) (*types.Asset, error) {
-	args := m.Called(id, since)
-	return args.Get(0).(*types.Asset), args.Error(1)
-}
-
-func (m *mockAssetDB) FindAssetByContent(asset oam.Asset, since time.Time) ([]*types.Asset, error) {
-	args := m.Called(asset, since)
-	return args.Get(0).([]*types.Asset), args.Error(1)
-}
-
-func (m *mockAssetDB) FindAssetByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error) {
-	args := m.Called(constraints, since)
-	return args.Get(0).([]*types.Asset), args.Error(1)
-}
-
-func (m *mockAssetDB) FindAssetByType(atype oam.AssetType, since time.Time) ([]*types.Asset, error) {
-	args := m.Called(atype, since)
-	return args.Get(0).([]*types.Asset), args.Error(1)
-}
-
-func (m *mockAssetDB) Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error) {
-	args := m.Called(source, relation, destination)
-	return args.Get(0).(*types.Relation), args.Error(1)
-}
-
-func (m *mockAssetDB) IncomingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	args := m.Called(asset, since, relationTypes)
-	return args.Get(0).([]*types.Relation), args.Error(1)
-}
-
-func (m *mockAssetDB) OutgoingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	args := m.Called(asset, since, relationTypes)
-	return args.Get(0).([]*types.Relation), args.Error(1)
-}
-
-func (m *mockAssetDB) AssetQuery(query string) ([]*types.Asset, error) {
-	args := m.Called(query)
-	return args.Get(0).([]*types.Asset), args.Error(1)
-}
-
-func (m *mockAssetDB) RelationQuery(constraints string) ([]*types.Relation, error) {
-	args := m.Called(constraints)
-	return args.Get(0).([]*types.Relation), args.Error(1)
-}
 
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
@@ -476,6 +408,38 @@ func TestAssetDB(t *testing.T) {
 	})
 }
 
+func TestRayQuery(t *testing.T) {
+	// Set up the SQLite database for testing
+	db, err := newGraph("local", "test.db")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	defer teardownSqlite("test.db")
+
+	created := createAssets(db)
+
+	var results []repository.Asset
+	if err := db.RawQuery("select * from assets", &results); err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	var queried []*types.Asset
+	for _, r := range results {
+		if asset, err := r.Parse(); err == nil {
+			queried = append(queried, &types.Asset{
+				ID:        strconv.FormatUint(r.ID, 10),
+				CreatedAt: r.CreatedAt,
+				LastSeen:  r.LastSeen,
+				Asset:     asset,
+			})
+		}
+	}
+	// compare the assets
+	assert.Equal(t, created, queried)
+}
+
 func TestAssetQuery(t *testing.T) {
 	// Set up the SQLite database for testing
 	db, err := newGraph("local", "test.db")
@@ -663,4 +627,78 @@ func newGraph(system, path string) (*AssetDB, error) {
 		return nil, err
 	}
 	return store, nil
+}
+
+type mockAssetDB struct {
+	mock.Mock
+}
+
+func (m *mockAssetDB) GetDBType() string {
+	args := m.Called()
+	return args.String(0)
+}
+
+func (m *mockAssetDB) CreateAsset(asset oam.Asset) (*types.Asset, error) {
+	args := m.Called(asset)
+	return args.Get(0).(*types.Asset), args.Error(1)
+}
+
+func (m *mockAssetDB) DeleteAsset(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *mockAssetDB) DeleteRelation(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *mockAssetDB) FindAssetById(id string, since time.Time) (*types.Asset, error) {
+	args := m.Called(id, since)
+	return args.Get(0).(*types.Asset), args.Error(1)
+}
+
+func (m *mockAssetDB) FindAssetByContent(asset oam.Asset, since time.Time) ([]*types.Asset, error) {
+	args := m.Called(asset, since)
+	return args.Get(0).([]*types.Asset), args.Error(1)
+}
+
+func (m *mockAssetDB) FindAssetByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error) {
+	args := m.Called(constraints, since)
+	return args.Get(0).([]*types.Asset), args.Error(1)
+}
+
+func (m *mockAssetDB) FindAssetByType(atype oam.AssetType, since time.Time) ([]*types.Asset, error) {
+	args := m.Called(atype, since)
+	return args.Get(0).([]*types.Asset), args.Error(1)
+}
+
+func (m *mockAssetDB) Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error) {
+	args := m.Called(source, relation, destination)
+	return args.Get(0).(*types.Relation), args.Error(1)
+}
+
+func (m *mockAssetDB) IncomingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
+	args := m.Called(asset, since, relationTypes)
+	return args.Get(0).([]*types.Relation), args.Error(1)
+}
+
+func (m *mockAssetDB) OutgoingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
+	args := m.Called(asset, since, relationTypes)
+	return args.Get(0).([]*types.Relation), args.Error(1)
+}
+
+func (m *mockAssetDB) RawQuery(sqlstr string, results interface{}) error {
+	args := m.Called(sqlstr, results)
+	return args.Error(0)
+}
+
+func (m *mockAssetDB) AssetQuery(query string) ([]*types.Asset, error) {
+	args := m.Called(query)
+	return args.Get(0).([]*types.Asset), args.Error(1)
+}
+
+func (m *mockAssetDB) RelationQuery(constraints string) ([]*types.Relation, error) {
+	args := m.Called(constraints)
+	return args.Get(0).([]*types.Relation), args.Error(1)
 }

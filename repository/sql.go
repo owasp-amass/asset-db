@@ -515,6 +515,14 @@ func toRelations(relations []Relation) []*types.Relation {
 	return res
 }
 
+// RayQuery creates a query and returns the slice of data returned.
+func (sql *sqlRepository) RawQuery(sqlstr string, results interface{}) error {
+	if result := sql.db.Raw(sqlstr).Scan(results); result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
 // AssetQuery creates a query and returns the slice of Assets found.
 // The query will start with "SELECT assets.id, assets.create_at, assets.last_seen, assets.type, assets.content FROM "
 // and then add the provided constraints. The query much include the assets table and remain named assets for parsing.

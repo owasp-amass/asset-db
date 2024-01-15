@@ -103,6 +103,12 @@ func (as *AssetDB) OutgoingRelations(asset *types.Asset, since time.Time, relati
 	return as.repository.OutgoingRelations(asset, since, relationTypes...)
 }
 
+// RawQuery executes a query defined by the provided sqlstr on the asset-db.
+// The results of the executed query are scanned into the provided slice.
+func (as *AssetDB) RawQuery(sqlstr string, results interface{}) error {
+	return as.repository.RawQuery(sqlstr, results)
+}
+
 // AssetQuery executes a query against the asset table of the db.
 // For SQL databases, the query will start with "SELECT * FROM assets " and then add the necessary constraints.
 func (as *AssetDB) AssetQuery(constraints string) ([]*types.Asset, error) {
