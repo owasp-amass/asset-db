@@ -2,6 +2,7 @@ package assetdb
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/netip"
@@ -477,14 +478,19 @@ func TestAssetDB(t *testing.T) {
 
 func TestAssetQuery(t *testing.T) {
 	// Set up the SQLite database for testing
-	db := newGraph("local", "test.db")
+	db, err := newGraph("local", "test.db")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
 	defer teardownSqlite("test.db")
 
 	createdAssets := createAssets(db)
 
 	queriedAssets, err := db.AssetQuery("")
 	if err != nil {
-		panic(err)
+		t.Errorf("%v", err)
+		return
 	}
 	// compare the assets
 	assert.Equal(t, createdAssets, queriedAssets)
@@ -492,7 +498,11 @@ func TestAssetQuery(t *testing.T) {
 
 func TestRelationQuery(t *testing.T) {
 	// Set up the SQLite database for testing
-	db := newGraph("local", "test.db")
+	db, err := newGraph("local", "test.db")
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
 	defer teardownSqlite("test.db")
 
 	createdAssets := createAssets(db)
@@ -500,7 +510,8 @@ func TestRelationQuery(t *testing.T) {
 
 	queriedRelations, err := db.RelationQuery("")
 	if err != nil {
-		panic(err)
+		t.Errorf("%v", err)
+		return
 	}
 	// Verify the relations and assets are populated in the relation
 	// Have to do it this way because "CreatedAt" is not populated when creating relations.
@@ -595,7 +606,7 @@ func teardownSqlite(dsn string) {
 	}
 }
 
-func newGraph(system, path string) *AssetDB {
+func newGraph(system, path string) (*AssetDB, error) {
 	var dsn string
 	var dbtype repository.DBType
 
@@ -610,12 +621,12 @@ func newGraph(system, path string) *AssetDB {
 		dbtype = repository.Postgres
 		dsn = path
 	default:
-		return nil
+		return nil, errors.New("newGraph: no valid database type provided")
 	}
 
 	store := New(dbtype, dsn)
 	if store == nil {
-		return nil
+		return nil, errors.New("newGraph: failed to create the new database")
 	}
 
 	var name string
@@ -634,7 +645,7 @@ func newGraph(system, path string) *AssetDB {
 
 	sql, err := gorm.Open(database, &gorm.Config{})
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	migrationsSource := migrate.EmbedFileSystemMigrationSource{
@@ -644,12 +655,12 @@ func newGraph(system, path string) *AssetDB {
 
 	sqlDb, err := sql.DB()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	_, err = migrate.Exec(sqlDb, name, migrationsSource, migrate.Up)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return store
+	return store, nil
 }
