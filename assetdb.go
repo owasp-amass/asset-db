@@ -110,13 +110,13 @@ func (as *AssetDB) RawQuery(sqlstr string, results interface{}) error {
 }
 
 // AssetQuery executes a query against the asset table of the db.
-// For SQL databases, the query will start with "SELECT * FROM assets " and then add the necessary constraints.
+// For SQL databases, the query will start with "SELECT assets.id, assets.create_at, assets.last_seen, assets.type, assets.content FROM " and then add the necessary constraints.
 func (as *AssetDB) AssetQuery(constraints string) ([]*types.Asset, error) {
 	return as.repository.AssetQuery(constraints)
 }
 
 // RelationQuery executes a query against the relation table of the db.
-// For SQL databases, the query will start with "SELECT * FROM relations " and then add the necessary constraints.
+// For SQL databases, the query will start with "SELECT relations.id, relations.create_at, relations.last_seen, relations.type, relations.from_asset_id, relations.to_asset_id FROM " and then add the necessary constraints.
 func (as *AssetDB) RelationQuery(constraints string) ([]*types.Relation, error) {
 	return as.repository.RelationQuery(constraints)
 }
