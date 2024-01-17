@@ -116,7 +116,8 @@ func (as *AssetDB) AssetQuery(constraints string) ([]*types.Asset, error) {
 }
 
 // RelationQuery executes a query against the relation table of the db.
+// The fillFrom and fillTo parameters determine whether the source and destination assets of the relation should be filled.
 // For SQL databases, the query will start with "SELECT relations.id, relations.create_at, relations.last_seen, relations.type, relations.from_asset_id, relations.to_asset_id FROM " and then add the necessary constraints.
-func (as *AssetDB) RelationQuery(constraints string) ([]*types.Relation, error) {
-	return as.repository.RelationQuery(constraints)
+func (as *AssetDB) RelationQuery(constraints string, fillFrom, fillTo bool) ([]*types.Relation, error) {
+	return as.repository.RelationQuery(constraints, fillFrom, fillTo)
 }
