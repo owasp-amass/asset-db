@@ -472,7 +472,7 @@ func TestRelationQuery(t *testing.T) {
 	createdAssets := createAssets(db)
 	createdRelations := createRelations(createdAssets, db)
 
-	queriedRelations, err := db.RelationQuery("")
+	queriedRelations, err := db.RelationQuery("", true, true)
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -485,6 +485,34 @@ func TestRelationQuery(t *testing.T) {
 		assert.Equal(t, createdRelations[k].LastSeen, relation.LastSeen)
 		assert.Contains(t, createdAssets, relation.FromAsset)
 		assert.Contains(t, createdAssets, relation.ToAsset)
+	}
+
+	// Verify the relations and assets are not populated in the relation
+	queriedRelations, err = db.RelationQuery("", false, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	for k, relation := range queriedRelations {
+		assert.Equal(t, createdRelations[k].ID, relation.ID)
+		assert.Equal(t, createdRelations[k].Type, relation.Type)
+		assert.Equal(t, createdRelations[k].LastSeen, relation.LastSeen)
+		assert.Equal(t, createdRelations[k].FromAsset.ID, relation.FromAsset.ID)
+		assert.Equal(t, createdRelations[k].ToAsset.ID, relation.ToAsset.ID)
+	}
+
+	// Verify the relations and only the from asset is populated in the relation
+	queriedRelations, err = db.RelationQuery("", true, false)
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	for k, relation := range queriedRelations {
+		assert.Equal(t, createdRelations[k].ID, relation.ID)
+		assert.Equal(t, createdRelations[k].Type, relation.Type)
+		assert.Equal(t, createdRelations[k].LastSeen, relation.LastSeen)
+		assert.Contains(t, createdAssets, relation.FromAsset)
+		assert.Equal(t, createdRelations[k].ToAsset.ID, relation.ToAsset.ID)
 	}
 }
 
@@ -698,7 +726,7 @@ func (m *mockAssetDB) AssetQuery(query string) ([]*types.Asset, error) {
 	return args.Get(0).([]*types.Asset), args.Error(1)
 }
 
-func (m *mockAssetDB) RelationQuery(constraints string) ([]*types.Relation, error) {
-	args := m.Called(constraints)
+func (m *mockAssetDB) RelationQuery(constraints string, fillFrom, fillTo bool) ([]*types.Relation, error) {
+	args := m.Called(constraints, fillFrom, fillTo)
 	return args.Get(0).([]*types.Relation), args.Error(1)
 }

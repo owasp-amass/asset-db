@@ -25,5 +25,5 @@ type Repository interface {
 	OutgoingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error)
 	RawQuery(sqlstr string, results interface{}) error
 	AssetQuery(constraints string) ([]*types.Asset, error)
-	RelationQuery(constraints string) ([]*types.Relation, error)
+	RelationQuery(constraints string, fillFrom, fillTo bool) ([]*types.Relation, error)
 }
