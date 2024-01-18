@@ -279,7 +279,7 @@ func (sql *sqlRepository) FindAssetByScope(constraints []oam.Asset, since time.T
 	var names []*types.Asset
 
 	for _, constraint := range constraints {
-		fqdn, ok := constraint.(domain.FQDN)
+		fqdn, ok := constraint.(*domain.FQDN)
 		if !ok {
 			continue
 		}
