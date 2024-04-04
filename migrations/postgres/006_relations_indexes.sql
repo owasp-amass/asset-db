@@ -5,5 +5,5 @@ CREATE INDEX idx_rel_last_seen ON assets (last_seen);
 
 -- +migrate Down
 
-DROP INDEX idx_rel_created_at;
-DROP INDEX idx_rel_last_seen;
+DROP INDEX IF EXISTS idx_rel_created_at;
+DROP INDEX IF EXISTS idx_rel_last_seen;
