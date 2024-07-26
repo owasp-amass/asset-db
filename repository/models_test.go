@@ -1,4 +1,4 @@
-package repository_test
+package repository
 
 import (
 	"net/netip"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	. "github.com/owasp-amass/asset-db/repository"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -84,7 +83,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse fingerprint",
-				asset:       &fingerprint.Fingerprint{String: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
+				asset:       &fingerprint.Fingerprint{Value: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
 			},
 			{
 				description: "parse registrar",
@@ -176,7 +175,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for fingerprint",
-				asset:         &fingerprint.Fingerprint{String: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
+				asset:         &fingerprint.Fingerprint{Value: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p", "string"),
 			},
 			{

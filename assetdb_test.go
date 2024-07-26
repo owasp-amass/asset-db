@@ -549,7 +549,7 @@ func createAssets(db *AssetDB) []*types.Asset {
 		&contact.Phone{Raw: "+1-555-555-5555"},
 		&contact.Location{FormattedAddress: "123 Example St., Example, EX 12345"},
 		&oamtls.TLSCertificate{SerialNumber: "1234567890"},
-		&fingerprint.Fingerprint{String: "fingerprint"},
+		&fingerprint.Fingerprint{Value: "fingerprint"},
 	}
 
 	var createdAssets []*types.Asset

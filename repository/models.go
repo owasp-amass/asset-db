@@ -161,7 +161,7 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	case *whois.Registrar:
 		return jsonQuery.Equals(v.Name, "name"), nil
 	case *fingerprint.Fingerprint:
-		return jsonQuery.Equals(v.String, "string"), nil
+		return jsonQuery.Equals(v.Value, "value"), nil
 	case *org.Organization:
 		return jsonQuery.Equals(v.OrgName, "org_name"), nil
 	case *people.Person:
