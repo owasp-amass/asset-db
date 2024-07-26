@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/glebarez/sqlite v1.11.0
-	github.com/owasp-amass/open-asset-model v0.3.0
+	github.com/owasp-amass/open-asset-model v0.3.1
 	github.com/rubenv/sql-migrate v1.6.0
 	github.com/stretchr/testify v1.8.4
 	gorm.io/datatypes v1.2.1
