@@ -176,7 +176,7 @@ func TestModels(t *testing.T) {
 			{
 				description:   "json query for fingerprint",
 				asset:         &fingerprint.Fingerprint{Value: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p", "string"),
+				expectedQuery: datatypes.JSONQuery("content").Equals("a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p", "value"),
 			},
 			{
 				description:   "json query for url",
