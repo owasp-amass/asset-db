@@ -525,7 +525,8 @@ func (sql *sqlRepository) gormAssetToAsset(ga *Asset) (*types.Asset, error) {
 // RelationQuery creates a query and returns the slice of Relations found. The query will start with:
 // "SELECT relations.id, relations.create_at, relations.last_seen, relations.type, relations.from_asset_id, relations.to_asset_id FROM "
 // and then add the provided constraints. The query much include the relations table and remain named relations for parsing.
-func (sql *sqlRepository) RelationQuery(constraints string) ([]*types.Relation, error) {
+// The fillFrom and fillTo parameters determine whether the source and destination assets of the relation should be filled.
+func (sql *sqlRepository) RelationQuery(constraints string, fillFrom, fillTo bool) ([]*types.Relation, error) {
 	var rs []*Relation
 
 	if constraints == "" {
@@ -539,29 +540,43 @@ func (sql *sqlRepository) RelationQuery(constraints string) ([]*types.Relation, 
 
 	var relations []*types.Relation
 	for _, r := range rs {
-		if relation, err := sql.gormRelationToRelation(r); err == nil {
+		if relation, err := sql.gormRelationToRelation(r, fillFrom, fillTo); err == nil {
 			relations = append(relations, relation)
+		} else {
+			return nil, err
 		}
 	}
 	return relations, nil
 }
 
-func (sql *sqlRepository) gormRelationToRelation(gr *Relation) (*types.Relation, error) {
-	fromasset, err := sql.FindAssetById(strconv.FormatUint(gr.FromAssetID, 10), time.Time{})
-	if err != nil {
-		return nil, err
-	}
-	toasset, err := sql.FindAssetById(strconv.FormatUint(gr.ToAssetID, 10), time.Time{})
-	if err != nil {
-		return nil, err
-	}
+func (sql *sqlRepository) gormRelationToRelation(gr *Relation, fillFrom, fillTo bool) (*types.Relation, error) {
 
-	return &types.Relation{
+	relation := &types.Relation{
 		ID:        strconv.FormatUint(gr.ID, 10),
 		CreatedAt: gr.CreatedAt,
 		LastSeen:  gr.LastSeen,
 		Type:      gr.Type,
-		FromAsset: fromasset,
-		ToAsset:   toasset,
-	}, nil
+	}
+
+	if fillFrom {
+		if fromasset, err := sql.FindAssetById(strconv.FormatUint(gr.FromAssetID, 10), time.Time{}); err == nil {
+			relation.FromAsset = fromasset
+		} else {
+			return nil, err
+		}
+	} else {
+		relation.FromAsset = &types.Asset{ID: strconv.FormatUint(gr.FromAssetID, 10)}
+	}
+
+	if fillTo {
+		if toasset, err := sql.FindAssetById(strconv.FormatUint(gr.ToAssetID, 10), time.Time{}); err == nil {
+			relation.ToAsset = toasset
+		} else {
+			return nil, err
+		}
+	} else {
+		relation.ToAsset = &types.Asset{ID: strconv.FormatUint(gr.ToAssetID, 10)}
+	}
+
+	return relation, nil
 }
