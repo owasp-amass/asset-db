@@ -1,3 +1,7 @@
+// Copyright © by Jeff Foley 2022-2024. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package repository
 
 import (
@@ -10,7 +14,6 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -269,48 +272,6 @@ func (sql *sqlRepository) FindAssetById(id string, since time.Time) (*types.Asse
 		LastSeen:  asset.LastSeen,
 		Asset:     assetData,
 	}, nil
-}
-
-// FindAssetByScope finds assets in the database by applying all the scope constraints provided and last seen after the since parameter.
-// It takes a slice representing the set of constraints to serve as the scope and retrieves the corresponding assets from the database.
-// If since.IsZero(), the parameter will be ignored.
-// Returns a slice of matching assets as []*types.Asset or an error if the search fails.
-func (sql *sqlRepository) FindAssetByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error) {
-	var names []*types.Asset
-
-	for _, constraint := range constraints {
-		fqdn, ok := constraint.(*domain.FQDN)
-		if !ok {
-			continue
-		}
-
-		var assets []Asset
-		var result *gorm.DB
-		if since.IsZero() {
-			result = sql.db.Where("type = ? AND content->>'name' LIKE ?", oam.FQDN, "%"+fqdn.Name).Find(&assets)
-		} else {
-			result = sql.db.Where("type = ? AND content->>'name' LIKE ? AND last_seen > ?", oam.FQDN, "%"+fqdn.Name, since).Find(&assets)
-		}
-		if result.Error != nil {
-			continue
-		}
-
-		for _, a := range assets {
-			if f, err := a.Parse(); err == nil {
-				names = append(names, &types.Asset{
-					ID:        strconv.FormatUint(a.ID, 10),
-					CreatedAt: a.CreatedAt,
-					LastSeen:  a.LastSeen,
-					Asset:     f,
-				})
-			}
-		}
-	}
-
-	if len(names) == 0 {
-		return []*types.Asset{}, errors.New("no assets in scope")
-	}
-	return names, nil
 }
 
 // FindAssetByType finds all assets in the database of the provided asset type and last seen after the since parameter.

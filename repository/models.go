@@ -107,7 +107,7 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &phone)
 		asset = &phone
-	case string(oam.Email):
+	case string(oam.EmailAddress):
 		var emailAddress contact.EmailAddress
 
 		err = json.Unmarshal(a.Content, &emailAddress)
