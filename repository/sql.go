@@ -214,9 +214,9 @@ func (sql *sqlRepository) FindAssetByContent(assetData oam.Asset, since time.Tim
 	var assets []Asset
 	var result *gorm.DB
 	if since.IsZero() {
-		result = sql.db.Find(&assets, jsonQuery)
+		result = sql.db.Where("type = ?", asset.Type).Find(&assets, jsonQuery)
 	} else {
-		result = sql.db.Where("last_seen > ?", since).Find(&assets, jsonQuery)
+		result = sql.db.Where("type = ? AND last_seen > ?", asset.Type, since).Find(&assets, jsonQuery)
 	}
 	if result.Error != nil {
 		return []*types.Asset{}, result.Error
@@ -361,7 +361,7 @@ func (sql *sqlRepository) isDuplicateRelation(source *types.Asset, relation stri
 				_ = sql.relationSeen(out)
 				rel, err = sql.relationById(out.ID)
 				if err != nil {
-					log.Println("[ERROR] failed to when re-retrieving relation", err)
+					log.Println("[ERROR] failed when re-retrieving relation", err)
 					return nil, false
 				}
 				dup = true
