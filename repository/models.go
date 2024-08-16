@@ -12,7 +12,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
-	oamtls "github.com/owasp-amass/open-asset-model/tls_certificates"
+	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
 	"github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/open-asset-model/whois"
 
@@ -72,16 +72,16 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &netblock)
 		asset = &netblock
-	case string(oam.Port):
-		var port network.Port
+	case string(oam.SocketAddress):
+		var sa network.SocketAddress
 
-		err = json.Unmarshal(a.Content, &port)
-		asset = &port
-	case string(oam.WHOIS):
-		var whois whois.WHOIS
+		err = json.Unmarshal(a.Content, &sa)
+		asset = &sa
+	case string(oam.DomainRecord):
+		var dr whois.DomainRecord
 
-		err = json.Unmarshal(a.Content, &whois)
-		asset = &whois
+		err = json.Unmarshal(a.Content, &dr)
+		asset = &dr
 	case string(oam.Registrar):
 		var registrar whois.Registrar
 
@@ -117,6 +117,11 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &location)
 		asset = &location
+	case string(oam.ContactRecord):
+		var cr contact.ContactRecord
+
+		err = json.Unmarshal(a.Content, &cr)
+		asset = &cr
 	case string(oam.TLSCertificate):
 		var tlsCertificate oamtls.TLSCertificate
 
@@ -146,8 +151,8 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	switch v := asset.(type) {
 	case *domain.FQDN:
 		return jsonQuery.Equals(v.Name, "name"), nil
-	case *network.Port:
-		return jsonQuery.Equals(v.Number, "number"), nil
+	case *network.SocketAddress:
+		return jsonQuery.Equals(v.Address.String(), "address"), nil
 	case *network.IPAddress:
 		return jsonQuery.Equals(v.Address.String(), "address"), nil
 	case *network.AutonomousSystem:
@@ -156,7 +161,7 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Cidr.String(), "cidr"), nil
 	case *network.RIROrganization:
 		return jsonQuery.Equals(v.Name, "name"), nil
-	case *whois.WHOIS:
+	case *whois.DomainRecord:
 		return jsonQuery.Equals(v.Domain, "domain"), nil
 	case *whois.Registrar:
 		return jsonQuery.Equals(v.Name, "name"), nil
@@ -172,6 +177,8 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Address, "address"), nil
 	case *contact.Location:
 		return jsonQuery.Equals(v.FormattedAddress, "formatted_address"), nil
+	case *contact.ContactRecord:
+		return jsonQuery.Equals(v.DiscoveredAt, "discovered_at"), nil
 	case *oamtls.TLSCertificate:
 		return jsonQuery.Equals(v.SerialNumber, "serial_number"), nil
 	case *url.URL:

@@ -13,7 +13,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
-	oamtls "github.com/owasp-amass/open-asset-model/tls_certificates"
+	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
 	"github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/open-asset-model/whois"
 	"gorm.io/datatypes"
@@ -21,8 +21,8 @@ import (
 )
 
 func TestModels(t *testing.T) {
-	ip, _ := netip.ParseAddr("192.168.1.1")
-	cidr, _ := netip.ParsePrefix("198.51.100.0/24")
+	ip := netip.MustParseAddr("192.168.1.1")
+	cidr := netip.MustParsePrefix("198.51.100.0/24")
 
 	t.Run("Parse", func(t *testing.T) {
 		testCases := []struct {
@@ -50,8 +50,8 @@ func TestModels(t *testing.T) {
 				asset:       &network.AutonomousSystem{Number: 64496},
 			},
 			{
-				description: "parse whois",
-				asset:       &whois.WHOIS{Domain: "example.com"},
+				description: "parse domain record",
+				asset:       &whois.DomainRecord{Domain: "example.com"},
 			},
 			{
 				description: "parse url",
@@ -59,11 +59,11 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse tls certificate",
-				asset:       &oamtls.TLSCertificate{CommonName: "www.example.com"},
+				asset:       &oamtls.TLSCertificate{SerialNumber: "25:89:5f:3b:96:c8:18:89:09:04:8b:6c:64:88:6f:1b"},
 			},
 			{
-				description: "parse port",
-				asset:       &network.Port{Number: 443},
+				description: "parse socket address",
+				asset:       &network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:443")},
 			},
 			{
 				description: "parse person",
@@ -92,6 +92,10 @@ func TestModels(t *testing.T) {
 			{
 				description: "parse organization",
 				asset:       &org.Organization{OrgName: "Example, Inc."},
+			},
+			{
+				description: "parse contact record",
+				asset:       &contact.ContactRecord{DiscoveredAt: "https://owasp.org"},
 			},
 		}
 
@@ -149,9 +153,9 @@ func TestModels(t *testing.T) {
 				expectedQuery: datatypes.JSONQuery("content").Equals(64496, "number"),
 			},
 			{
-				description:   "json query for port",
-				asset:         &network.Port{Number: 443},
-				expectedQuery: datatypes.JSONQuery("content").Equals(443, "number"),
+				description:   "json query for socket address",
+				asset:         &network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:443")},
+				expectedQuery: datatypes.JSONQuery("content").Equals("192.168.1.1:443", "address"),
 			},
 			{
 				description:   "json query for person",
@@ -190,7 +194,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for whois",
-				asset:         &whois.WHOIS{Domain: "example.com"},
+				asset:         &whois.DomainRecord{Domain: "example.com"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("example.com", "domain"),
 			},
 			{
@@ -202,6 +206,11 @@ func TestModels(t *testing.T) {
 				description:   "json query for organization",
 				asset:         &org.Organization{OrgName: "Example, Inc."},
 				expectedQuery: datatypes.JSONQuery("content").Equals("Example, Inc.", "org_name"),
+			},
+			{
+				description:   "json query for contact record",
+				asset:         &contact.ContactRecord{DiscoveredAt: "https://owasp.org"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("https://owasp.org", "discovered_at"),
 			},
 		}
 

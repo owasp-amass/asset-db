@@ -22,7 +22,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
-	oamtls "github.com/owasp-amass/open-asset-model/tls_certificates"
+	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
 	"github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/open-asset-model/whois"
 	migrate "github.com/rubenv/sql-migrate"
@@ -536,20 +536,21 @@ func createAssets(db *AssetDB) []*types.Asset {
 		&network.Netblock{Cidr: netip.MustParsePrefix("2001:db8::/32"), Type: "IPv6"},
 		&network.IPAddress{Address: netip.MustParseAddr("192.168.1.2"), Type: "IPv4"},
 		&network.IPAddress{Address: netip.MustParseAddr("2001:db8::1"), Type: "IPv6"},
-		&network.Port{Number: 80, Protocol: "tcp"},
-		&network.Port{Number: 443, Protocol: "tcp"},
+		&network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:80"), IPAddress: netip.MustParseAddr("192.168.1.1"), Port: 80, Protocol: "tcp"},
+		&network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:443"), IPAddress: netip.MustParseAddr("192.168.1.1"), Port: 443, Protocol: "tcp"},
 		&network.RIROrganization{Name: "RIPE NCC"},
 		&network.AutonomousSystem{Number: 12345},
 		&url.URL{Scheme: "https", Host: "example.com"},
 		&org.Organization{OrgName: "Example Inc."},
 		&people.Person{FullName: "John Doe"},
-		&whois.WHOIS{Domain: "example.com"},
+		&whois.DomainRecord{Domain: "example.com"},
 		&whois.Registrar{Name: "Registrar Inc."},
 		&contact.EmailAddress{Address: "test@example.com"},
 		&contact.Phone{Raw: "+1-555-555-5555"},
 		&contact.Location{FormattedAddress: "123 Example St., Example, EX 12345"},
 		&oamtls.TLSCertificate{SerialNumber: "1234567890"},
 		&fingerprint.Fingerprint{Value: "fingerprint"},
+		&contact.ContactRecord{DiscoveredAt: "https://owasp.org"},
 	}
 
 	var createdAssets []*types.Asset
