@@ -634,6 +634,10 @@ type mockAssetDB struct {
 	mock.Mock
 }
 
+func (m *mockAssetDB) Close() error {
+	return nil
+}
+
 func (m *mockAssetDB) GetDBType() string {
 	args := m.Called()
 	return args.String(0)

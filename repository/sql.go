@@ -70,6 +70,14 @@ func sqliteDatabase(dsn string) (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 }
 
+// Close implements the Repository interface.
+func (sql *sqlRepository) Close() error {
+	if db, err := sql.db.DB(); err == nil {
+		return db.Close()
+	}
+	return errors.New("failed to obtain access to the database handle")
+}
+
 // GetDBType returns the type of the database.
 func (sql *sqlRepository) GetDBType() string {
 	return string(sql.dbType)

@@ -23,6 +23,11 @@ func New(dbType repository.DBType, dsn string) *AssetDB {
 	}
 }
 
+// Close will close the assetdb and return any errors.
+func (as *AssetDB) Close() error {
+	return as.repository.Close()
+}
+
 // GetDBType returns the type of the underlying database.
 func (as *AssetDB) GetDBType() string {
 	return as.repository.GetDBType()

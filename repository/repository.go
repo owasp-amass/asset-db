@@ -26,4 +26,5 @@ type Repository interface {
 	RawQuery(sqlstr string, results interface{}) error
 	AssetQuery(constraints string) ([]*types.Asset, error)
 	RelationQuery(constraints string) ([]*types.Relation, error)
+	Close() error
 }
