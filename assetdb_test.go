@@ -541,7 +541,7 @@ func createAssets(db *AssetDB) []*types.Asset {
 		&network.RIROrganization{Name: "RIPE NCC"},
 		&network.AutonomousSystem{Number: 12345},
 		&url.URL{Scheme: "https", Host: "example.com"},
-		&org.Organization{OrgName: "Example Inc."},
+		&org.Organization{Name: "Example Inc."},
 		&people.Person{FullName: "John Doe"},
 		&whois.DomainRecord{Domain: "example.com"},
 		&whois.Registrar{Name: "Registrar Inc."},

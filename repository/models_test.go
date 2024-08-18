@@ -91,7 +91,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse organization",
-				asset:       &org.Organization{OrgName: "Example, Inc."},
+				asset:       &org.Organization{Name: "Example, Inc."},
 			},
 			{
 				description: "parse contact record",
@@ -204,8 +204,8 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for organization",
-				asset:         &org.Organization{OrgName: "Example, Inc."},
-				expectedQuery: datatypes.JSONQuery("content").Equals("Example, Inc.", "org_name"),
+				asset:         &org.Organization{Name: "Example, Inc."},
+				expectedQuery: datatypes.JSONQuery("content").Equals("Example, Inc.", "name"),
 			},
 			{
 				description:   "json query for contact record",
