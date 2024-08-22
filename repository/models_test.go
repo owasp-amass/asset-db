@@ -184,7 +184,7 @@ func TestModels(t *testing.T) {
 			{
 				description:   "json query for location",
 				asset:         &contact.Location{Address: "1600 Pennsylvania Ave NW, Washington, DC 20500"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("1600 Pennsylvania Ave NW, Washington, DC 20500", "formatted_address"),
+				expectedQuery: datatypes.JSONQuery("content").Equals("1600 Pennsylvania Ave NW, Washington, DC 20500", "address"),
 			},
 			{
 				description:   "json query for fingerprint",
