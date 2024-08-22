@@ -1,3 +1,7 @@
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package repository
 
 import (
@@ -13,6 +17,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	"github.com/owasp-amass/open-asset-model/source"
 	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
 	"github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/open-asset-model/whois"
@@ -79,7 +84,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse location",
-				asset:       &contact.Location{FormattedAddress: "1600 Pennsylvania Ave NW, Washington, DC 20500"},
+				asset:       &contact.Location{Address: "1600 Pennsylvania Ave NW, Washington, DC 20500"},
 			},
 			{
 				description: "parse fingerprint",
@@ -96,6 +101,10 @@ func TestModels(t *testing.T) {
 			{
 				description: "parse contact record",
 				asset:       &contact.ContactRecord{DiscoveredAt: "https://owasp.org"},
+			},
+			{
+				description: "parse source",
+				asset:       &source.Source{Name: "https://www.owasp.org"},
 			},
 		}
 
@@ -174,7 +183,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for location",
-				asset:         &contact.Location{FormattedAddress: "1600 Pennsylvania Ave NW, Washington, DC 20500"},
+				asset:         &contact.Location{Address: "1600 Pennsylvania Ave NW, Washington, DC 20500"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("1600 Pennsylvania Ave NW, Washington, DC 20500", "formatted_address"),
 			},
 			{
@@ -211,6 +220,11 @@ func TestModels(t *testing.T) {
 				description:   "json query for contact record",
 				asset:         &contact.ContactRecord{DiscoveredAt: "https://owasp.org"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("https://owasp.org", "discovered_at"),
+			},
+			{
+				description:   "json query for source",
+				asset:         &source.Source{Name: "https://www.owasp.org"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("https://www.owasp.org", "name"),
 			},
 		}
 

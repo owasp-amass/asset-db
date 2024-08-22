@@ -1,3 +1,7 @@
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package assetdb
 
 import (
@@ -547,7 +551,7 @@ func createAssets(db *AssetDB) []*types.Asset {
 		&whois.Registrar{Name: "Registrar Inc."},
 		&contact.EmailAddress{Address: "test@example.com"},
 		&contact.Phone{Raw: "+1-555-555-5555"},
-		&contact.Location{FormattedAddress: "123 Example St., Example, EX 12345"},
+		&contact.Location{Address: "123 Example St., Example, EX 12345"},
 		&oamtls.TLSCertificate{SerialNumber: "1234567890"},
 		&fingerprint.Fingerprint{Value: "fingerprint"},
 		&contact.ContactRecord{DiscoveredAt: "https://owasp.org"},

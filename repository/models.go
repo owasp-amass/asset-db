@@ -1,3 +1,7 @@
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package repository
 
 import (
@@ -12,10 +16,10 @@ import (
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	"github.com/owasp-amass/open-asset-model/source"
 	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
 	"github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/open-asset-model/whois"
-
 	"gorm.io/datatypes"
 )
 
@@ -132,6 +136,11 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &url)
 		asset = &url
+	case string(oam.Source):
+		var src source.Source
+
+		err = json.Unmarshal(a.Content, &src)
+		asset = &src
 	default:
 		return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 	}
@@ -176,13 +185,15 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	case *contact.EmailAddress:
 		return jsonQuery.Equals(v.Address, "address"), nil
 	case *contact.Location:
-		return jsonQuery.Equals(v.FormattedAddress, "formatted_address"), nil
+		return jsonQuery.Equals(v.Address, "address"), nil
 	case *contact.ContactRecord:
 		return jsonQuery.Equals(v.DiscoveredAt, "discovered_at"), nil
 	case *oamtls.TLSCertificate:
 		return jsonQuery.Equals(v.SerialNumber, "serial_number"), nil
 	case *url.URL:
 		return jsonQuery.Equals(v.Raw, "url"), nil
+	case *source.Source:
+		return jsonQuery.Equals(v.Name, "name"), nil
 	}
 
 	return nil, fmt.Errorf("unknown asset type: %s", a.Type)
