@@ -256,12 +256,15 @@ func TestLastSeenUpdates(t *testing.T) {
 
 	a2, err := store.CreateAsset(asset)
 	assert.NoError(t, err)
-
 	assert.Equal(t, a1.ID, a2.ID)
-	// assert.NotEqual(t, time.Time{}, a1.CreatedAt)
 	assert.Equal(t, a1.CreatedAt, a2.CreatedAt)
-	if a2.LastSeen.UnixNano() <= a1.LastSeen.UnixNano() {
-		t.Errorf("a2.LastSeen: %s, a1.LastSeen: %s", a2.LastSeen.Format(time.RFC3339Nano), a1.LastSeen.Format(time.RFC3339Nano))
+	assert.Equal(t, a1.LastSeen, a2.LastSeen)
+
+	store.UpdateAssetLastSeen(a1.ID)
+	a3, err := store.CreateAsset(asset)
+	assert.NoError(t, err)
+	if a3.LastSeen.UnixNano() <= a1.LastSeen.UnixNano() {
+		t.Errorf("a3.LastSeen: %s, a1.LastSeen: %s", a2.LastSeen.Format(time.RFC3339Nano), a1.LastSeen.Format(time.RFC3339Nano))
 	}
 }
 
