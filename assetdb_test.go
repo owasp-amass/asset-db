@@ -652,6 +652,11 @@ func (m *mockAssetDB) CreateAsset(asset oam.Asset) (*types.Asset, error) {
 	return args.Get(0).(*types.Asset), args.Error(1)
 }
 
+func (m *mockAssetDB) UpdateAssetLastSeen(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
 func (m *mockAssetDB) DeleteAsset(id string) error {
 	args := m.Called(id)
 	return args.Error(0)

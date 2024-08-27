@@ -16,6 +16,7 @@ import (
 type Repository interface {
 	GetDBType() string
 	CreateAsset(asset oam.Asset) (*types.Asset, error)
+	UpdateAssetLastSeen(id string) error
 	DeleteAsset(id string) error
 	DeleteRelation(id string) error
 	FindAssetById(id string, since time.Time) (*types.Asset, error)

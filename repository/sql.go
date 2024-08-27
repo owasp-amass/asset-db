@@ -88,23 +88,9 @@ func (sql *sqlRepository) GetDBType() string {
 // The asset is serialized to JSON and stored in the Content field of the Asset struct.
 // Returns the created asset as a types.Asset or an error if the creation fails.
 func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error) {
-	// ensure that duplicate relationships are not entered into the database
-	if assets, err := sql.FindAssetByContent(assetData, time.Time{}); err == nil && len(assets) > 0 {
-		for _, a := range assets {
-			if assetData.AssetType() == a.Asset.AssetType() {
-				err := sql.assetSeen(a)
-				if err != nil {
-					log.Println("[ERROR]: Failed to update last_seen: ", err)
-					return nil, err
-				}
-				return sql.FindAssetById(a.ID, time.Time{})
-			}
-		}
-	}
-
 	jsonContent, err := assetData.JSON()
 	if err != nil {
-		return &types.Asset{}, err
+		return nil, err
 	}
 
 	asset := Asset{
@@ -112,9 +98,23 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 		Content: jsonContent,
 	}
 
-	result := sql.db.Create(&asset)
+	// ensure that duplicate assets are not entered into the database
+	if assets, err := sql.FindAssetByContent(assetData, time.Time{}); err == nil && len(assets) > 0 {
+		for _, a := range assets {
+			if assetData.AssetType() == a.Asset.AssetType() {
+				if id, err := strconv.ParseUint(a.ID, 10, 64); err == nil {
+					asset.ID = id
+					asset.CreatedAt = a.CreatedAt
+					asset.LastSeen = a.LastSeen
+					break
+				}
+			}
+		}
+	}
+
+	result := sql.db.Save(&asset)
 	if result.Error != nil {
-		return &types.Asset{}, result.Error
+		return nil, result.Error
 	}
 
 	return &types.Asset{
@@ -125,14 +125,9 @@ func (sql *sqlRepository) CreateAsset(assetData oam.Asset) (*types.Asset, error)
 	}, nil
 }
 
-// updateLastSeen performs an update on the asset.
+// UpdateAssetLastSeen performs an update on the asset.
 // this function delegates to the database so that the Timezone information is preserved.
-func (sql *sqlRepository) assetSeen(asset *types.Asset) error {
-	id, err := strconv.ParseInt(asset.ID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("failed to update last seen for ID %s could not parse id; err: %w", asset.ID, err)
-	}
-
+func (sql *sqlRepository) UpdateAssetLastSeen(id string) error {
 	result := sql.db.Exec("UPDATE assets SET last_seen = current_timestamp WHERE id = ?", id)
 	if result.Error != nil {
 		return result.Error
@@ -386,6 +381,7 @@ func (sql *sqlRepository) relationSeen(rel *types.Relation) error {
 	if err != nil {
 		return fmt.Errorf("failed to update last seen for ID %s could not parse id; err: %w", rel.ID, err)
 	}
+
 	result := sql.db.Exec("UPDATE relations SET last_seen = current_timestamp WHERE id = ?", id)
 	if result.Error != nil {
 		return result.Error

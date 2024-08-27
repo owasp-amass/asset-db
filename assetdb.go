@@ -41,21 +41,21 @@ func (as *AssetDB) GetDBType() string {
 // If source and relation are provided, the asset is created and linked to the source asset using the specified relation.
 // It returns the newly created asset and an error, if any.
 func (as *AssetDB) Create(source *types.Asset, relation string, discovered oam.Asset) (*types.Asset, error) {
-	if source == nil || relation == "" {
-		return as.repository.CreateAsset(discovered)
+	a, err := as.repository.CreateAsset(discovered)
+	if err != nil || source == nil || relation == "" {
+		return a, err
 	}
 
-	newAsset, err := as.repository.CreateAsset(discovered)
+	_, err = as.repository.Link(source, relation, a)
 	if err != nil {
 		return nil, err
 	}
+	return a, nil
+}
 
-	_, err = as.repository.Link(source, relation, newAsset)
-	if err != nil {
-		return nil, err
-	}
-
-	return newAsset, nil
+// UpdateAssetLastSeen updates the asset last seen field to the current time by its ID.
+func (as *AssetDB) UpdateAssetLastSeen(id string) error {
+	return as.repository.UpdateAssetLastSeen(id)
 }
 
 // DeleteAsset removes an asset in the database by its ID.
@@ -95,6 +95,14 @@ func (as *AssetDB) FindByScope(constraints []oam.Asset, since time.Time) ([]*typ
 // It returns the matching assets and an error, if any.
 func (as *AssetDB) FindByType(atype oam.AssetType, since time.Time) ([]*types.Asset, error) {
 	return as.repository.FindAssetByType(atype, since)
+}
+
+// Link creates a relation between two assets in the database.
+// It takes the source asset, relation type, and destination asset as inputs.
+// The relation is established by creating a new Relation in the database, linking the two assets.
+// Returns the created relation as a types.Relation or an error if the link creation fails.
+func (as *AssetDB) Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error) {
+	return as.repository.Link(source, relation, destination)
 }
 
 // IncomingRelations finds all relations pointing to `asset“ for the specified `relationTypes`, if any.
