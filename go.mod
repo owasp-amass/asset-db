@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/caffix/stringset v0.1.2
 	github.com/glebarez/sqlite v1.11.0
-	github.com/owasp-amass/open-asset-model v0.5.0
+	github.com/owasp-amass/open-asset-model v0.5.1
 	github.com/rubenv/sql-migrate v1.6.0
 	github.com/stretchr/testify v1.8.4
 	gorm.io/datatypes v1.2.1
@@ -49,7 +49,7 @@ require (
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
-	modernc.org/libc v1.59.9 // indirect
+	modernc.org/libc v1.60.1 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
 	modernc.org/sqlite v1.32.0 // indirect
