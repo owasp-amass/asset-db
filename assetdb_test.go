@@ -521,11 +521,6 @@ func createRelations(assets []*types.Asset, db *AssetDB) []*types.Relation {
 		panic(err)
 	}
 	relations = append(relations, relation)
-	relation, err = db.repository.Link(assets[11], "port", assets[8])
-	if err != nil {
-		panic(err)
-	}
-	relations = append(relations, relation)
 
 	return relations
 }
