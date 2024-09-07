@@ -47,8 +47,8 @@ func TestModels(t *testing.T) {
 				asset:       &network.Netblock{Cidr: cidr, Type: "IPv4"},
 			},
 			{
-				description: "parse rir oganization",
-				asset:       &network.RIROrganization{Name: "Google LLC", RIRId: "GOGL", RIR: "ARIN"},
+				description: "parse autnum record",
+				asset:       &whois.AutnumRecord{Number: 64496, Handle: "AS64496"},
 			},
 			{
 				description: "parse asn",
@@ -89,10 +89,6 @@ func TestModels(t *testing.T) {
 			{
 				description: "parse fingerprint",
 				asset:       &fingerprint.Fingerprint{Value: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
-			},
-			{
-				description: "parse registrar",
-				asset:       &whois.Registrar{Name: "Registrar, Inc."},
 			},
 			{
 				description: "parse organization",
@@ -152,9 +148,9 @@ func TestModels(t *testing.T) {
 				expectedQuery: datatypes.JSONQuery("content").Equals(cidr, "cidr"),
 			},
 			{
-				description:   "json query for rir oganization",
-				asset:         &network.RIROrganization{Name: "Google LLC", RIRId: "GOGL", RIR: "ARIN"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("Google LLC", "name"),
+				description:   "json query for autnum record",
+				asset:         &whois.AutnumRecord{Number: 26808, Handle: "AS26808"},
+				expectedQuery: datatypes.JSONQuery("content").Equals(26808, "number"),
 			},
 			{
 				description:   "json query for asn",
@@ -205,11 +201,6 @@ func TestModels(t *testing.T) {
 				description:   "json query for whois",
 				asset:         &whois.DomainRecord{Domain: "example.com"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("example.com", "domain"),
-			},
-			{
-				description:   "json query for registrar",
-				asset:         &whois.Registrar{Name: "Registrar, Inc."},
-				expectedQuery: datatypes.JSONQuery("content").Equals("Registrar, Inc.", "name"),
 			},
 			{
 				description:   "json query for organization",

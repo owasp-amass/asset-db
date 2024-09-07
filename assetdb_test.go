@@ -45,7 +45,7 @@ func TestAssetDB(t *testing.T) {
 	start := time.Now()
 
 	t.Run("Create", func(t *testing.T) {
-		relationType := "foo_relation"
+		relationType := "registration"
 
 		testCases := []struct {
 			description   string
@@ -66,7 +66,7 @@ func TestAssetDB(t *testing.T) {
 			{
 				description:   "successfully create an asset with relation",
 				discovered:    &network.AutonomousSystem{Number: 1},
-				source:        &types.Asset{ID: "2", Asset: &network.RIROrganization{Name: "RIPE NCC"}},
+				source:        &types.Asset{ID: "2", Asset: &whois.AutnumRecord{Number: 1, Handle: "AS1"}},
 				relation:      relationType,
 				expected:      &types.Asset{ID: "3", Asset: &network.AutonomousSystem{Number: 1}},
 				expectedError: nil,
@@ -542,13 +542,11 @@ func createAssets(db *AssetDB) []*types.Asset {
 		&network.IPAddress{Address: netip.MustParseAddr("2001:db8::1"), Type: "IPv6"},
 		&network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:80"), IPAddress: netip.MustParseAddr("192.168.1.1"), Port: 80, Protocol: "tcp"},
 		&network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:443"), IPAddress: netip.MustParseAddr("192.168.1.1"), Port: 443, Protocol: "tcp"},
-		&network.RIROrganization{Name: "RIPE NCC"},
 		&network.AutonomousSystem{Number: 12345},
 		&url.URL{Scheme: "https", Host: "example.com"},
 		&org.Organization{Name: "Example Inc."},
 		&people.Person{FullName: "John Doe"},
 		&whois.DomainRecord{Domain: "example.com"},
-		&whois.Registrar{Name: "Registrar Inc."},
 		&contact.EmailAddress{Address: "test@example.com"},
 		&contact.Phone{Raw: "+1-555-555-5555"},
 		&contact.Location{Address: "123 Example St., Example, EX 12345"},

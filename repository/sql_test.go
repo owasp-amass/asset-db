@@ -21,6 +21,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/whois"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -291,8 +292,8 @@ func TestRepository(t *testing.T) {
 		{
 			description:      "create an Autonomous System and link it with an RIR organization",
 			sourceAsset:      &network.AutonomousSystem{Number: 1},
-			destinationAsset: &network.RIROrganization{Name: "Google LLC", RIRId: "GOGL", RIR: "ARIN"},
-			relation:         "managed_by",
+			destinationAsset: &whois.AutnumRecord{Number: 1, Handle: "AS1", Name: "GOGL"},
+			relation:         "registration",
 		},
 		{
 			description:      "create a Netblock and link it with an IP address",

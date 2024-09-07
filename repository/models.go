@@ -61,16 +61,16 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &ip)
 		asset = &ip
-	case string(oam.ASN):
-		var asn network.AutonomousSystem
+	case string(oam.AutonomousSystem):
+		var as network.AutonomousSystem
 
-		err = json.Unmarshal(a.Content, &asn)
-		asset = &asn
-	case string(oam.RIROrg):
-		var rir network.RIROrganization
+		err = json.Unmarshal(a.Content, &as)
+		asset = &as
+	case string(oam.AutnumRecord):
+		var ar whois.AutnumRecord
 
-		err = json.Unmarshal(a.Content, &rir)
-		asset = &rir
+		err = json.Unmarshal(a.Content, &ar)
+		asset = &ar
 	case string(oam.Netblock):
 		var netblock network.Netblock
 
@@ -86,11 +86,6 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &dr)
 		asset = &dr
-	case string(oam.Registrar):
-		var registrar whois.Registrar
-
-		err = json.Unmarshal(a.Content, &registrar)
-		asset = &registrar
 	case string(oam.Fingerprint):
 		var fingerprint fingerprint.Fingerprint
 
@@ -168,12 +163,10 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Number, "number"), nil
 	case *network.Netblock:
 		return jsonQuery.Equals(v.Cidr.String(), "cidr"), nil
-	case *network.RIROrganization:
-		return jsonQuery.Equals(v.Name, "name"), nil
+	case *whois.AutnumRecord:
+		return jsonQuery.Equals(v.Number, "number"), nil
 	case *whois.DomainRecord:
 		return jsonQuery.Equals(v.Domain, "domain"), nil
-	case *whois.Registrar:
-		return jsonQuery.Equals(v.Name, "name"), nil
 	case *fingerprint.Fingerprint:
 		return jsonQuery.Equals(v.Value, "value"), nil
 	case *org.Organization:
