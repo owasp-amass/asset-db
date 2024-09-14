@@ -234,7 +234,7 @@ func TestModels(t *testing.T) {
 			{
 				description:   "json query for service",
 				asset:         &service.Service{Identifier: "12345"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("12345", "identifer"),
+				expectedQuery: datatypes.JSONQuery("content").Equals("12345", "identifier"),
 			},
 		}
 
