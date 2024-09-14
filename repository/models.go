@@ -10,16 +10,17 @@ import (
 	"time"
 
 	oam "github.com/owasp-amass/open-asset-model"
+	oamtls "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/service"
 	"github.com/owasp-amass/open-asset-model/source"
-	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
 	"github.com/owasp-amass/open-asset-model/url"
-	"github.com/owasp-amass/open-asset-model/whois"
 	"gorm.io/datatypes"
 )
 
@@ -56,6 +57,11 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &fqdn)
 		asset = &fqdn
+	case string(oam.NetworkEndpoint):
+		var ne domain.NetworkEndpoint
+
+		err = json.Unmarshal(a.Content, &ne)
+		asset = &ne
 	case string(oam.IPAddress):
 		var ip network.IPAddress
 
@@ -67,7 +73,7 @@ func (a *Asset) Parse() (oam.Asset, error) {
 		err = json.Unmarshal(a.Content, &as)
 		asset = &as
 	case string(oam.AutnumRecord):
-		var ar whois.AutnumRecord
+		var ar oamreg.AutnumRecord
 
 		err = json.Unmarshal(a.Content, &ar)
 		asset = &ar
@@ -82,7 +88,7 @@ func (a *Asset) Parse() (oam.Asset, error) {
 		err = json.Unmarshal(a.Content, &sa)
 		asset = &sa
 	case string(oam.DomainRecord):
-		var dr whois.DomainRecord
+		var dr oamreg.DomainRecord
 
 		err = json.Unmarshal(a.Content, &dr)
 		asset = &dr
@@ -136,6 +142,11 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &src)
 		asset = &src
+	case string(oam.Service):
+		var serv service.Service
+
+		err = json.Unmarshal(a.Content, &serv)
+		asset = &serv
 	default:
 		return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 	}
@@ -155,6 +166,8 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	switch v := asset.(type) {
 	case *domain.FQDN:
 		return jsonQuery.Equals(v.Name, "name"), nil
+	case *domain.NetworkEndpoint:
+		return jsonQuery.Equals(v.Address, "address"), nil
 	case *network.SocketAddress:
 		return jsonQuery.Equals(v.Address.String(), "address"), nil
 	case *network.IPAddress:
@@ -163,9 +176,9 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Number, "number"), nil
 	case *network.Netblock:
 		return jsonQuery.Equals(v.Cidr.String(), "cidr"), nil
-	case *whois.AutnumRecord:
+	case *oamreg.AutnumRecord:
 		return jsonQuery.Equals(v.Number, "number"), nil
-	case *whois.DomainRecord:
+	case *oamreg.DomainRecord:
 		return jsonQuery.Equals(v.Domain, "domain"), nil
 	case *fingerprint.Fingerprint:
 		return jsonQuery.Equals(v.Value, "value"), nil
@@ -187,6 +200,8 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Raw, "url"), nil
 	case *source.Source:
 		return jsonQuery.Equals(v.Name, "name"), nil
+	case *service.Service:
+		return jsonQuery.Equals(v.Identifier, "identifier"), nil
 	}
 
 	return nil, fmt.Errorf("unknown asset type: %s", a.Type)

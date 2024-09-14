@@ -11,16 +11,17 @@ import (
 
 	"github.com/glebarez/sqlite"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/service"
 	"github.com/owasp-amass/open-asset-model/source"
-	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
 	"github.com/owasp-amass/open-asset-model/url"
-	"github.com/owasp-amass/open-asset-model/whois"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -39,6 +40,10 @@ func TestModels(t *testing.T) {
 				asset:       &domain.FQDN{Name: "www.example.com"},
 			},
 			{
+				description: "parse network endpoint",
+				asset:       &domain.NetworkEndpoint{Address: "www.example.com:80"},
+			},
+			{
 				description: "parse ip address",
 				asset:       &network.IPAddress{Address: ip, Type: "IPv4"},
 			},
@@ -48,7 +53,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse autnum record",
-				asset:       &whois.AutnumRecord{Number: 64496, Handle: "AS64496"},
+				asset:       &oamreg.AutnumRecord{Number: 64496, Handle: "AS64496"},
 			},
 			{
 				description: "parse asn",
@@ -56,7 +61,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse domain record",
-				asset:       &whois.DomainRecord{Domain: "example.com"},
+				asset:       &oamreg.DomainRecord{Domain: "example.com"},
 			},
 			{
 				description: "parse url",
@@ -64,7 +69,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse tls certificate",
-				asset:       &oamtls.TLSCertificate{SerialNumber: "25:89:5f:3b:96:c8:18:89:09:04:8b:6c:64:88:6f:1b"},
+				asset:       &oamcert.TLSCertificate{SerialNumber: "25:89:5f:3b:96:c8:18:89:09:04:8b:6c:64:88:6f:1b"},
 			},
 			{
 				description: "parse socket address",
@@ -102,6 +107,10 @@ func TestModels(t *testing.T) {
 				description: "parse source",
 				asset:       &source.Source{Name: "https://www.owasp.org"},
 			},
+			{
+				description: "parse service",
+				asset:       &service.Service{Identifier: "12345"},
+			},
 		}
 
 		for _, tc := range testCases {
@@ -138,6 +147,11 @@ func TestModels(t *testing.T) {
 				expectedQuery: datatypes.JSONQuery("content").Equals("www.example.com", "name"),
 			},
 			{
+				description:   "json query for network endpoint",
+				asset:         &domain.NetworkEndpoint{Address: "www.example.com:80"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("www.example.com:80", "address"),
+			},
+			{
 				description:   "json query for ip address",
 				asset:         &network.IPAddress{Address: ip, Type: "IPv4"},
 				expectedQuery: datatypes.JSONQuery("content").Equals(ip, "address"),
@@ -149,7 +163,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for autnum record",
-				asset:         &whois.AutnumRecord{Number: 26808, Handle: "AS26808"},
+				asset:         &oamreg.AutnumRecord{Number: 26808, Handle: "AS26808"},
 				expectedQuery: datatypes.JSONQuery("content").Equals(26808, "number"),
 			},
 			{
@@ -194,12 +208,12 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for tls certificate",
-				asset:         &oamtls.TLSCertificate{SerialNumber: "25:89:5f:3b:96:c8:18:89:09:04:8b:6c:64:88:6f:1b"},
+				asset:         &oamcert.TLSCertificate{SerialNumber: "25:89:5f:3b:96:c8:18:89:09:04:8b:6c:64:88:6f:1b"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("25:89:5f:3b:96:c8:18:89:09:04:8b:6c:64:88:6f:1b", "serial_number"),
 			},
 			{
-				description:   "json query for whois",
-				asset:         &whois.DomainRecord{Domain: "example.com"},
+				description:   "json query for the domain record",
+				asset:         &oamreg.DomainRecord{Domain: "example.com"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("example.com", "domain"),
 			},
 			{
@@ -216,6 +230,11 @@ func TestModels(t *testing.T) {
 				description:   "json query for source",
 				asset:         &source.Source{Name: "https://www.owasp.org"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("https://www.owasp.org", "name"),
+			},
+			{
+				description:   "json query for service",
+				asset:         &service.Service{Identifier: "12345"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("12345", "identifer"),
 			},
 		}
 

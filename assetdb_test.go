@@ -20,15 +20,15 @@ import (
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamtls "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
-	oamtls "github.com/owasp-amass/open-asset-model/tls_certificate"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/url"
-	"github.com/owasp-amass/open-asset-model/whois"
 	migrate "github.com/rubenv/sql-migrate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -66,7 +66,7 @@ func TestAssetDB(t *testing.T) {
 			{
 				description:   "successfully create an asset with relation",
 				discovered:    &network.AutonomousSystem{Number: 1},
-				source:        &types.Asset{ID: "2", Asset: &whois.AutnumRecord{Number: 1, Handle: "AS1"}},
+				source:        &types.Asset{ID: "2", Asset: &oamreg.AutnumRecord{Number: 1, Handle: "AS1"}},
 				relation:      relationType,
 				expected:      &types.Asset{ID: "3", Asset: &network.AutonomousSystem{Number: 1}},
 				expectedError: nil,
@@ -541,7 +541,7 @@ func createAssets(db *AssetDB) []*types.Asset {
 		&url.URL{Scheme: "https", Host: "example.com"},
 		&org.Organization{Name: "Example Inc."},
 		&people.Person{FullName: "John Doe"},
-		&whois.DomainRecord{Domain: "example.com"},
+		&oamreg.DomainRecord{Domain: "example.com"},
 		&contact.EmailAddress{Address: "test@example.com"},
 		&contact.Phone{Raw: "+1-555-555-5555"},
 		&contact.Location{Address: "123 Example St., Example, EX 12345"},

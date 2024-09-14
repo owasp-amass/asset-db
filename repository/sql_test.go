@@ -12,16 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
-	migrate "github.com/rubenv/sql-migrate"
-	"github.com/stretchr/testify/assert"
-
-	"github.com/glebarez/sqlite"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/whois"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	migrate "github.com/rubenv/sql-migrate"
+	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -292,7 +291,7 @@ func TestRepository(t *testing.T) {
 		{
 			description:      "create an Autonomous System and link it with an RIR organization",
 			sourceAsset:      &network.AutonomousSystem{Number: 1},
-			destinationAsset: &whois.AutnumRecord{Number: 1, Handle: "AS1", Name: "GOGL"},
+			destinationAsset: &oamreg.AutnumRecord{Number: 1, Handle: "AS1", Name: "GOGL"},
 			relation:         "registration",
 		},
 		{
