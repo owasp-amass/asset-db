@@ -1,7 +1,6 @@
 -- +migrate Up
 
 -- Index the `name` field of the `content` jsonb when type is `FQDN`
--- Assumes the pg_trgm extension is created in the database
 CREATE INDEX idx_fqdn_content_name ON assets (content->>'name' COLLATE NOCASE) WHERE type = 'FQDN';
 
 -- Index assets.type

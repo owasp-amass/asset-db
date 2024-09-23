@@ -5,7 +5,7 @@ go 1.23.1
 require (
 	github.com/caffix/stringset v0.1.2
 	github.com/glebarez/sqlite v1.11.0
-	github.com/owasp-amass/open-asset-model v0.7.1
+	github.com/owasp-amass/open-asset-model v0.8.0
 	github.com/rubenv/sql-migrate v1.7.0
 	github.com/stretchr/testify v1.9.0
 	gorm.io/datatypes v1.2.2

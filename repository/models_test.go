@@ -27,6 +27,7 @@ import (
 )
 
 func TestModels(t *testing.T) {
+	nethandle := "NET-198-51-100-0-1"
 	ip := netip.MustParseAddr("192.168.1.1")
 	cidr := netip.MustParsePrefix("198.51.100.0/24")
 
@@ -48,8 +49,12 @@ func TestModels(t *testing.T) {
 				asset:       &network.IPAddress{Address: ip, Type: "IPv4"},
 			},
 			{
+				description: "parse ip network record",
+				asset:       &oamreg.IPNetRecord{CIDR: cidr, Type: "IPv4", Handle: nethandle},
+			},
+			{
 				description: "parse netblock",
-				asset:       &network.Netblock{Cidr: cidr, Type: "IPv4"},
+				asset:       &network.Netblock{CIDR: cidr, Type: "IPv4"},
 			},
 			{
 				description: "parse autnum record",
@@ -157,14 +162,19 @@ func TestModels(t *testing.T) {
 				expectedQuery: datatypes.JSONQuery("content").Equals(ip, "address"),
 			},
 			{
+				description:   "json query for ip network record",
+				asset:         &oamreg.IPNetRecord{CIDR: cidr, Type: "IPv4", Handle: nethandle},
+				expectedQuery: datatypes.JSONQuery("content").Equals(nethandle, "handle"),
+			},
+			{
 				description:   "json query for netblock",
-				asset:         &network.Netblock{Cidr: cidr, Type: "IPv4"},
+				asset:         &network.Netblock{CIDR: cidr, Type: "IPv4"},
 				expectedQuery: datatypes.JSONQuery("content").Equals(cidr, "cidr"),
 			},
 			{
 				description:   "json query for autnum record",
 				asset:         &oamreg.AutnumRecord{Number: 26808, Handle: "AS26808"},
-				expectedQuery: datatypes.JSONQuery("content").Equals(26808, "number"),
+				expectedQuery: datatypes.JSONQuery("content").Equals("AS26808", "handle"),
 			},
 			{
 				description:   "json query for asn",

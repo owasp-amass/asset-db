@@ -82,6 +82,11 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &netblock)
 		asset = &netblock
+	case string(oam.IPNetRecord):
+		var ipnetrec oamreg.IPNetRecord
+
+		err = json.Unmarshal(a.Content, &ipnetrec)
+		asset = &ipnetrec
 	case string(oam.SocketAddress):
 		var sa network.SocketAddress
 
@@ -175,9 +180,11 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	case *network.AutonomousSystem:
 		return jsonQuery.Equals(v.Number, "number"), nil
 	case *network.Netblock:
-		return jsonQuery.Equals(v.Cidr.String(), "cidr"), nil
+		return jsonQuery.Equals(v.CIDR.String(), "cidr"), nil
+	case *oamreg.IPNetRecord:
+		return jsonQuery.Equals(v.Handle, "handle"), nil
 	case *oamreg.AutnumRecord:
-		return jsonQuery.Equals(v.Number, "number"), nil
+		return jsonQuery.Equals(v.Handle, "handle"), nil
 	case *oamreg.DomainRecord:
 		return jsonQuery.Equals(v.Domain, "domain"), nil
 	case *fingerprint.Fingerprint:

@@ -296,7 +296,7 @@ func TestRepository(t *testing.T) {
 		},
 		{
 			description:      "create a Netblock and link it with an IP address",
-			sourceAsset:      &network.Netblock{Cidr: cidr, Type: "IPv4"},
+			sourceAsset:      &network.Netblock{CIDR: cidr, Type: "IPv4"},
 			destinationAsset: &network.IPAddress{Address: ip, Type: "IPv4"},
 			relation:         "contains",
 		},
@@ -309,7 +309,7 @@ func TestRepository(t *testing.T) {
 		{
 			description:      "create an Autonomous System and link it with a Netblock",
 			sourceAsset:      &network.AutonomousSystem{Number: 2},
-			destinationAsset: &network.Netblock{Cidr: cidr2, Type: "IPv4"},
+			destinationAsset: &network.Netblock{CIDR: cidr2, Type: "IPv4"},
 			relation:         "announces",
 		},
 	}
