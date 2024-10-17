@@ -13,6 +13,7 @@ import (
 	oamtls "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
+	oamfile "github.com/owasp-amass/open-asset-model/file"
 	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
@@ -152,6 +153,11 @@ func (a *Asset) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(a.Content, &serv)
 		asset = &serv
+	case string(oam.File):
+		var f oamfile.File
+
+		err = json.Unmarshal(a.Content, &f)
+		asset = &f
 	default:
 		return nil, fmt.Errorf("unknown asset type: %s", a.Type)
 	}
@@ -209,6 +215,8 @@ func (a *Asset) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Name, "name"), nil
 	case *service.Service:
 		return jsonQuery.Equals(v.Identifier, "identifier"), nil
+	case *oamfile.File:
+		return jsonQuery.Equals(v.URL, "url"), nil
 	}
 
 	return nil, fmt.Errorf("unknown asset type: %s", a.Type)
