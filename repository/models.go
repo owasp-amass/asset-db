@@ -40,8 +40,9 @@ type Relation struct {
 	CreatedAt    time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"`
 	LastSeen     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"`
 	Type         string    `gorm:"column:rtype"`
-	FromEntityID uint64    `gorm:"column:from_entity_id"`
-	ToEntityID   uint64    `gorm:"column:to_entity_id"`
+	Content      datatypes.JSON
+	FromEntityID uint64 `gorm:"column:from_entity_id"`
+	ToEntityID   uint64 `gorm:"column:to_entity_id"`
 	FromEntity   Entity
 	ToEntity     Entity
 }

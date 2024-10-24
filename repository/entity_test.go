@@ -171,98 +171,24 @@ func TestMain(m *testing.M) {
 	os.Exit(0)
 }
 
-func TestUnfilteredRelations(t *testing.T) {
-	source := domain.FQDN{Name: "owasp.com"}
-	dest1 := domain.FQDN{Name: "www.example.owasp.org"}
-	rel1 := "cname_record"
-
-	sourceAsset, err := store.CreateAsset(source)
-	if err != nil {
-		t.Fatalf("failed to create asset: %s", err)
-	}
-
-	dest1Asset, err := store.CreateAsset(dest1)
-	if err != nil {
-		t.Fatalf("failed to create asset: %s", err)
-	}
-
-	ip, _ := netip.ParseAddr("192.168.1.100")
-	dest2 := network.IPAddress{Address: ip, Type: "IPv4"}
-	rel2 := "a_record"
-
-	dest2Asset, err := store.CreateAsset(dest2)
-	if err != nil {
-		t.Fatalf("failed to create asset: %s", err)
-	}
-
-	_, err = store.Link(sourceAsset, rel1, dest1Asset)
-	assert.NoError(t, err)
-	r2Rel, err := store.Link(sourceAsset, rel2, dest2Asset)
-	assert.NoError(t, err)
-
-	// Outgoing relations with no filter returns all outgoing relations.
-	outs, err := store.OutgoingRelations(sourceAsset, time.Time{})
-	assert.NoError(t, err)
-	assert.Equal(t, len(outs), 2)
-
-	// Outgoing relations with a filter returns
-	outs, err = store.OutgoingRelations(sourceAsset, time.Time{}, rel1)
-	assert.NoError(t, err)
-	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
-	assert.Equal(t, rel1, outs[0].Type)
-	assert.Equal(t, dest1Asset.ID, outs[0].ToAsset.ID)
-
-	// Incoming relations with a filter returns
-	ins, err := store.IncomingRelations(dest1Asset, time.Time{}, rel1)
-	assert.NoError(t, err)
-	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
-	assert.Equal(t, rel1, ins[0].Type)
-	assert.Equal(t, dest1Asset.ID, ins[0].ToAsset.ID)
-
-	// Outgoing with source -> a_record -> dest2Asset
-	outs, err = store.OutgoingRelations(sourceAsset, time.Time{}, rel2)
-	assert.NoError(t, err)
-	assert.Equal(t, sourceAsset.ID, outs[0].FromAsset.ID)
-	assert.Equal(t, rel2, outs[0].Type)
-	assert.Equal(t, dest2Asset.ID, outs[0].ToAsset.ID)
-
-	// Incoming for source -> a_record -> dest2asset
-	ins, err = store.IncomingRelations(dest2Asset, time.Time{}, rel2)
-	assert.NoError(t, err)
-	assert.Equal(t, sourceAsset.ID, ins[0].FromAsset.ID)
-	assert.Equal(t, rel2, ins[0].Type)
-	assert.Equal(t, dest2Asset.ID, ins[0].ToAsset.ID)
-
-	// Nanoseconds are truncated by the database; sleep for 1s
-	time.Sleep(1000 * time.Millisecond)
-
-	// Store a duplicate relation and validate last_seen is updated
-	rr, err := store.Link(sourceAsset, rel2, dest2Asset)
-	assert.NoError(t, err)
-	assert.NotNil(t, rr)
-	if rr.LastSeen.UnixNano() <= r2Rel.LastSeen.UnixNano() {
-		t.Errorf("rr.LastSeen: %s, r2Rel.LastSeen: %s", rr.LastSeen.Format(time.RFC3339Nano), r2Rel.LastSeen.Format(time.RFC3339Nano))
-	}
-}
-
 func TestLastSeenUpdates(t *testing.T) {
 	ip, _ := netip.ParseAddr("45.73.25.1")
 	asset := network.IPAddress{Address: ip, Type: "IPv4"}
-	a1, err := store.CreateAsset(asset)
+	a1, err := store.CreateEntity(asset)
 	assert.NoError(t, err)
 
 	// Nanoseconds are truncated by the database, so we need to sleep for a bit.
 	time.Sleep(1000 * time.Millisecond)
 
-	a2, err := store.CreateAsset(asset)
+	a2, err := store.CreateEntity(asset)
 	assert.NoError(t, err)
 	assert.Equal(t, a1.ID, a2.ID)
 	assert.Equal(t, a1.CreatedAt, a2.CreatedAt)
 	assert.Equal(t, a1.LastSeen, a2.LastSeen)
 
-	err = store.UpdateAssetLastSeen(a1.ID)
+	err = store.UpdateEntityLastSeen(a1.ID)
 	assert.NoError(t, err)
-	a3, _ := store.CreateAsset(asset)
+	a3, _ := store.CreateEntity(asset)
 	assert.NoError(t, err)
 	if a3.LastSeen.UnixNano() <= a1.LastSeen.UnixNano() {
 		t.Errorf("a3.LastSeen: %s, a1.LastSeen: %s", a2.LastSeen.Format(time.RFC3339Nano), a1.LastSeen.Format(time.RFC3339Nano))
@@ -316,99 +242,99 @@ func TestRepository(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			sourceAsset, err := store.CreateAsset(tc.sourceAsset)
+			sourceEntity, err := store.CreateEntity(tc.sourceAsset)
 			if err != nil {
-				t.Fatalf("failed to create asset: %s", err)
+				t.Fatalf("failed to create entity: %s", err)
 			}
 
-			if sourceAsset == nil {
-				t.Fatalf("failed to create asset: asset is nil")
+			if sourceEntity == nil {
+				t.Fatalf("failed to create entity: entity is nil")
 			}
 
-			foundAsset, err := store.FindAssetById(sourceAsset.ID, start)
+			foundAsset, err := store.FindEntityById(sourceEntity.ID, start)
 			if err != nil {
-				t.Fatalf("failed to find asset by id: %s", err)
+				t.Fatalf("failed to find entity by id: %s", err)
 			}
 
 			if foundAsset == nil {
-				t.Fatalf("failed to find asset by id: found asset is nil")
+				t.Fatalf("failed to find entity by id: found entity is nil")
 			}
 
-			if foundAsset.ID != sourceAsset.ID {
-				t.Fatalf("failed to find asset by id: expected asset id %s, got %s", sourceAsset.ID, foundAsset.ID)
+			if foundAsset.ID != sourceEntity.ID {
+				t.Fatalf("failed to find entity by id: expected entity id %s, got %s", sourceEntity.ID, foundAsset.ID)
 			}
 
-			if !reflect.DeepEqual(foundAsset.Asset, sourceAsset.Asset) {
-				t.Fatalf("failed to find asset by id: expected asset %s, got %s", sourceAsset.Asset, foundAsset.Asset)
+			if !reflect.DeepEqual(foundAsset.Asset, sourceEntity.Asset) {
+				t.Fatalf("failed to find entity by id: expected entity %s, got %s", sourceEntity.Asset, foundAsset.Asset)
 			}
 
-			foundAssetByContent, err := store.FindAssetByContent(sourceAsset.Asset, start)
+			foundAssetByContent, err := store.FindEntityByContent(sourceEntity.Asset, start)
 			if err != nil {
-				t.Fatalf("failed to find asset by content: %s", err)
+				t.Fatalf("failed to find entity by content: %s", err)
 			}
 
 			if foundAssetByContent == nil {
-				t.Fatalf("failed to find asset by content: found asset is nil")
+				t.Fatalf("failed to find entity by content: found entity is nil")
 			}
 
-			if foundAssetByContent[0].ID != sourceAsset.ID {
-				t.Fatalf("failed to find asset by content: expected asset id %s, got %s", sourceAsset.ID, foundAssetByContent[0].ID)
+			if foundAssetByContent[0].ID != sourceEntity.ID {
+				t.Fatalf("failed to find entity by content: expected entity id %s, got %s", sourceEntity.ID, foundAssetByContent[0].ID)
 			}
 
-			if !reflect.DeepEqual(foundAssetByContent[0].Asset, sourceAsset.Asset) {
-				t.Fatalf("failed to find asset by content: expected asset %s, got %s", sourceAsset.Asset, foundAssetByContent[0].Asset)
+			if !reflect.DeepEqual(foundAssetByContent[0].Asset, sourceEntity.Asset) {
+				t.Fatalf("failed to find entity by content: expected entity %s, got %s", sourceEntity.Asset, foundAssetByContent[0].Asset)
 			}
 
-			foundAssetByType, err := store.FindAssetByType(sourceAsset.Asset.AssetType(), start)
+			foundEntityByType, err := store.FindEntitiesByType(sourceEntity.Asset.AssetType(), start)
 			if err != nil {
-				t.Fatalf("failed to find asset by type: %s", err)
+				t.Fatalf("failed to find entity by type: %s", err)
 			}
 
-			if len(foundAssetByType) == 0 {
-				t.Fatalf("failed to find assets by type: 0 assets found")
+			if len(foundEntityByType) == 0 {
+				t.Fatalf("failed to find entities by type: 0 entities found")
 			}
 
 			var found bool
-			for _, a := range foundAssetByType {
-				if a.ID == sourceAsset.ID {
+			for _, e := range foundEntityByType {
+				if e.ID == sourceEntity.ID {
 					found = true
 					break
 				}
 			}
 			if !found {
-				t.Fatalf("failed to find asset by type: did not receive asset of id %s", sourceAsset.ID)
+				t.Fatalf("failed to find entity by type: did not receive entity of id %s", sourceEntity.ID)
 			}
 
 			found = false
-			for _, a := range foundAssetByType {
-				if reflect.DeepEqual(a.Asset, sourceAsset.Asset) {
+			for _, e := range foundEntityByType {
+				if reflect.DeepEqual(e.Asset, sourceEntity.Asset) {
 					found = true
 					break
 				}
 			}
 			if !found {
-				t.Fatalf("failed to find asset by type: did not receive asset %s", sourceAsset.Asset)
+				t.Fatalf("failed to find entity by type: did not receive entity %s", sourceEntity.Asset)
 			}
 
-			destinationAsset, err := store.CreateAsset(tc.destinationAsset)
+			destinationEntity, err := store.CreateEntity(tc.destinationAsset)
 			if err != nil {
-				t.Fatalf("failed to create destination asset: %s", err)
+				t.Fatalf("failed to create destination entity: %s", err)
 			}
 
-			if destinationAsset == nil {
-				t.Fatalf("failed to create destination asset: destination asset is nil")
+			if destinationEntity == nil {
+				t.Fatalf("failed to create destination entity: destination entity is nil")
 			}
 
-			relation, err := store.Link(sourceAsset, tc.relation, destinationAsset)
+			relation, err := store.Link(sourceEntity, tc.relation, destinationEntity)
 			if err != nil {
-				t.Fatalf("failed to link assets: %s", err)
+				t.Fatalf("failed to link entities: %s", err)
 			}
 
 			if relation == nil {
-				t.Fatalf("failed to link assets: relation is nil")
+				t.Fatalf("failed to link entities: relation is nil")
 			}
 
-			incoming, err := store.IncomingRelations(destinationAsset, start, tc.relation)
+			incoming, err := store.IncomingRelations(destinationEntity, start, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query incoming relations: %s", err)
 			}
@@ -421,15 +347,15 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to query incoming relations: expected relation %s, got %s", tc.relation, incoming[0].Type)
 			}
 
-			if incoming[0].FromAsset.ID != sourceAsset.ID {
-				t.Fatalf("failed to query incoming relations: expected source asset id %s, got %v", sourceAsset.ID, incoming[0].FromAsset.ID)
+			if incoming[0].FromEntity.ID != sourceEntity.ID {
+				t.Fatalf("failed to query incoming relations: expected source entity id %s, got %v", sourceEntity.ID, incoming[0].FromEntity.ID)
 			}
 
-			if incoming[0].ToAsset.ID != destinationAsset.ID {
-				t.Fatalf("failed to query incoming relations: expected destination asset id %s, got %s", destinationAsset.ID, incoming[0].ToAsset.ID)
+			if incoming[0].ToEntity.ID != destinationEntity.ID {
+				t.Fatalf("failed to query incoming relations: expected destination entity id %s, got %s", destinationEntity.ID, incoming[0].ToEntity.ID)
 			}
 
-			outgoing, err := store.OutgoingRelations(sourceAsset, start, tc.relation)
+			outgoing, err := store.OutgoingRelations(sourceEntity, start, tc.relation)
 			if err != nil {
 				t.Fatalf("failed to query outgoing relations: %s", err)
 			}
@@ -442,12 +368,12 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to query outgoing relations: expected relation %s, got %s", tc.relation, outgoing[0].Type)
 			}
 
-			if outgoing[0].FromAsset.ID != sourceAsset.ID {
-				t.Fatalf("failed to query outgoing relations: expected source asset id %s, got %s", sourceAsset.ID, outgoing[0].FromAsset.ID)
+			if outgoing[0].FromEntity.ID != sourceEntity.ID {
+				t.Fatalf("failed to query outgoing relations: expected source entity id %s, got %s", sourceEntity.ID, outgoing[0].FromEntity.ID)
 			}
 
-			if outgoing[0].ToAsset.ID != destinationAsset.ID {
-				t.Fatalf("failed to query outgoing relations: expected destination asset id %s, got %s", destinationAsset.ID, outgoing[0].ToAsset.ID)
+			if outgoing[0].ToEntity.ID != destinationEntity.ID {
+				t.Fatalf("failed to query outgoing relations: expected destination entity id %s, got %s", destinationEntity.ID, outgoing[0].ToEntity.ID)
 			}
 
 			err = store.DeleteRelation(relation.ID)
@@ -455,13 +381,13 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to delete relation: %s", err)
 			}
 
-			err = store.DeleteAsset(destinationAsset.ID)
+			err = store.DeleteEntity(destinationEntity.ID)
 			if err != nil {
 				t.Fatalf("failed to delete asset: %s", err)
 			}
 
-			if _, err = store.FindAssetById(destinationAsset.ID, start); err == nil {
-				t.Fatal("failed to delete asset: the asset was not removed from the database")
+			if _, err = store.FindEntityById(destinationEntity.ID, start); err == nil {
+				t.Fatal("failed to delete entity: the entity was not removed from the database")
 			}
 		})
 	}

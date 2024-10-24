@@ -16,40 +16,40 @@ import (
 	"gorm.io/gorm"
 )
 
-// FindAssetByScope finds assets in the database by applying all the scope constraints provided and last seen after the since parameter.
-// It takes a slice representing the set of constraints to serve as the scope and retrieves the corresponding assets from the database.
+// FindEntitiesByScope finds entities in the database by applying all the scope constraints provided and last seen after the since parameter.
+// It takes a slice representing the set of constraints to serve as the scope and retrieves the corresponding entities from the database.
 // If since.IsZero(), the parameter will be ignored.
-// Returns a slice of matching assets as []*types.Asset or an error if the search fails.
-func (sql *sqlRepository) FindAssetByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error) {
-	var findings []*types.Asset
+// Returns a slice of matching entities as []*types.Entity or an error if the search fails.
+func (sql *sqlRepository) FindEntitiesByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error) {
+	var findings []*types.Entity
 
 	for _, constraint := range constraints {
-		if assets, err := sql.constraintEdgeCases(constraint, since); err == nil {
-			for _, a := range assets {
-				if f, err := a.Parse(); err == nil {
-					findings = append(findings, &types.Asset{
-						ID:        strconv.FormatUint(a.ID, 10),
-						CreatedAt: a.CreatedAt,
-						LastSeen:  a.LastSeen,
+		if entities, err := sql.constraintEdgeCases(constraint, since); err == nil {
+			for _, e := range entities {
+				if f, err := e.Parse(); err == nil {
+					findings = append(findings, &types.Entity{
+						ID:        strconv.FormatUint(e.ID, 10),
+						CreatedAt: e.CreatedAt,
+						LastSeen:  e.LastSeen,
 						Asset:     f,
 					})
 				}
 			}
 		}
 
-		if assets, err := sql.inAndOut(constraint, since); err == nil {
-			findings = append(findings, assets...)
+		if entities, err := sql.inAndOut(constraint, since); err == nil {
+			findings = append(findings, entities...)
 		}
 	}
 
 	if len(findings) == 0 {
-		return []*types.Asset{}, errors.New("no assets in scope")
+		return []*types.Entity{}, errors.New("no entities in scope")
 	}
 	return findings, nil
 }
 
-func (sql *sqlRepository) inAndOut(constraint oam.Asset, since time.Time) ([]*types.Asset, error) {
-	constraints, err := sql.FindAssetByContent(constraint, time.Time{})
+func (sql *sqlRepository) inAndOut(constraint oam.Asset, since time.Time) ([]*types.Entity, error) {
+	constraints, err := sql.FindEntityByContent(constraint, time.Time{})
 	if err != nil || len(constraints) == 0 {
 		return constraints, err
 	}
@@ -58,31 +58,31 @@ func (sql *sqlRepository) inAndOut(constraint oam.Asset, since time.Time) ([]*ty
 	for _, constraint := range constraints {
 		if rels, err := sql.IncomingRelations(constraint, since); err == nil {
 			for _, rel := range rels {
-				ids.Insert(rel.FromAsset.ID)
+				ids.Insert(rel.FromEntity.ID)
 			}
 		}
 
 		if rels, err := sql.OutgoingRelations(constraint, since); err == nil {
 			for _, rel := range rels {
-				ids.Insert(rel.ToAsset.ID)
+				ids.Insert(rel.ToEntity.ID)
 			}
 		}
 	}
 
-	var assets []*types.Asset
+	var entities []*types.Entity
 	for _, id := range ids.Slice() {
-		if a, err := sql.FindAssetById(id, since); err == nil {
-			assets = append(assets, a)
+		if e, err := sql.FindEntityById(id, since); err == nil {
+			entities = append(entities, e)
 		}
 	}
 
-	if len(assets) == 0 {
-		return []*types.Asset{}, errors.New("no assets in scope")
+	if len(entities) == 0 {
+		return []*types.Entity{}, errors.New("no entities in scope")
 	}
-	return assets, nil
+	return entities, nil
 }
 
-func (sql *sqlRepository) constraintEdgeCases(constraint oam.Asset, since time.Time) ([]Asset, error) {
+func (sql *sqlRepository) constraintEdgeCases(constraint oam.Asset, since time.Time) ([]Entity, error) {
 	switch v := constraint.(type) {
 	case *domain.FQDN:
 		return sql.fqdnToEmails(v, since)
@@ -90,15 +90,15 @@ func (sql *sqlRepository) constraintEdgeCases(constraint oam.Asset, since time.T
 	return nil, errors.New("no results found")
 }
 
-func (sql *sqlRepository) fqdnToEmails(fqdn *domain.FQDN, since time.Time) ([]Asset, error) {
-	var assets []Asset
+func (sql *sqlRepository) fqdnToEmails(fqdn *domain.FQDN, since time.Time) ([]Entity, error) {
+	var entities []Entity
 	var result *gorm.DB
 
 	if since.IsZero() {
-		result = sql.db.Where("type = ? AND content->>'address' LIKE ?", oam.EmailAddress, "%"+fqdn.Name).Find(&assets)
+		result = sql.db.Where("etype = ? AND content->>'address' LIKE ?", oam.EmailAddress, "%"+fqdn.Name).Find(&entities)
 	} else {
-		result = sql.db.Where("type = ? AND content->>'address' LIKE ? AND last_seen > ?", oam.EmailAddress, "%"+fqdn.Name, since).Find(&assets)
+		result = sql.db.Where("etype = ? AND content->>'address' LIKE ? AND last_seen > ?", oam.EmailAddress, "%"+fqdn.Name, since).Find(&entities)
 	}
 
-	return assets, result.Error
+	return entities, result.Error
 }

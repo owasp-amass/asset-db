@@ -36,31 +36,31 @@ func (as *AssetDB) GetDBType() string {
 	return as.repository.GetDBType()
 }
 
-// Create creates a new asset in the database.
-// If source is nil, the discovered asset will be created and relation will be ignored
-// If source and relation are provided, the asset is created and linked to the source asset using the specified relation.
-// It returns the newly created asset and an error, if any.
-func (as *AssetDB) Create(source *types.Asset, relation string, discovered oam.Asset) (*types.Asset, error) {
-	a, err := as.repository.CreateAsset(discovered)
+// Create creates a new entity in the database.
+// If source is nil, the discovered entity will be created and relation will be ignored
+// If source and relation are provided, the entity is created and linked to the source entity using the specified relation.
+// It returns the newly created entity and an error, if any.
+func (as *AssetDB) Create(source *types.Entity, relation string, discovered oam.Asset) (*types.Entity, error) {
+	e, err := as.repository.CreateEntity(discovered)
 	if err != nil || source == nil || relation == "" {
-		return a, err
+		return e, err
 	}
 
-	_, err = as.repository.Link(source, relation, a)
+	_, err = as.repository.Link(source, relation, e)
 	if err != nil {
 		return nil, err
 	}
-	return a, nil
+	return e, nil
 }
 
-// UpdateAssetLastSeen updates the asset last seen field to the current time by its ID.
-func (as *AssetDB) UpdateAssetLastSeen(id string) error {
-	return as.repository.UpdateAssetLastSeen(id)
+// UpdateEntityLastSeen updates the entity last seen field to the current time by its ID.
+func (as *AssetDB) UpdateEntityLastSeen(id string) error {
+	return as.repository.UpdateEntityLastSeen(id)
 }
 
-// DeleteAsset removes an asset in the database by its ID.
-func (as *AssetDB) DeleteAsset(id string) error {
-	return as.repository.DeleteAsset(id)
+// DeleteEntity removes an entity in the database by its ID.
+func (as *AssetDB) DeleteEntity(id string) error {
+	return as.repository.DeleteEntity(id)
 }
 
 // DeleteRelation removes a relation in the database by its ID.
@@ -68,71 +68,53 @@ func (as *AssetDB) DeleteRelation(id string) error {
 	return as.repository.DeleteRelation(id)
 }
 
-// FindByContent finds assets in the database based on their content and last seen after the since parameter.
+// FindByContent finds entities in the database based on their content and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
-// It returns a list of matching assets and an error, if any.
-func (as *AssetDB) FindByContent(asset oam.Asset, since time.Time) ([]*types.Asset, error) {
-	return as.repository.FindAssetByContent(asset, since)
+// It returns a list of matching entities and an error, if any.
+func (as *AssetDB) FindByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error) {
+	return as.repository.FindEntityByContent(asset, since)
 }
 
-// FindById finds an asset in the database by its ID and last seen after the since parameter.
+// FindById finds an entity in the database by its ID and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
-// It returns the matching asset and an error, if any.
-func (as *AssetDB) FindById(id string, since time.Time) (*types.Asset, error) {
-	return as.repository.FindAssetById(id, since)
+// It returns the matching entity and an error, if any.
+func (as *AssetDB) FindById(id string, since time.Time) (*types.Entity, error) {
+	return as.repository.FindEntityById(id, since)
 }
 
-// FindByScope finds assets in the database by applying all the scope constraints provided
+// FindByScope finds entities in the database by applying all the scope constraints provided
 // and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
-// It returns the matching assets and an error, if any.
-func (as *AssetDB) FindByScope(constraints []oam.Asset, since time.Time) ([]*types.Asset, error) {
-	return as.repository.FindAssetByScope(constraints, since)
+// It returns the matching entities and an error, if any.
+func (as *AssetDB) FindByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error) {
+	return as.repository.FindEntitiesByScope(constraints, since)
 }
 
-// FindByType finds all assets in the database of the provided asset type and last seen after the since parameter.
+// FindByType finds all entities in the database of the provided asset type and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
-// It returns the matching assets and an error, if any.
-func (as *AssetDB) FindByType(atype oam.AssetType, since time.Time) ([]*types.Asset, error) {
-	return as.repository.FindAssetByType(atype, since)
+// It returns the matching entities and an error, if any.
+func (as *AssetDB) FindByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
+	return as.repository.FindEntitiesByType(atype, since)
 }
 
-// Link creates a relation between two assets in the database.
-// It takes the source asset, relation type, and destination asset as inputs.
-// The relation is established by creating a new Relation in the database, linking the two assets.
+// Link creates a relation between two entities in the database.
+// It takes the source entity, relation type, and destination entity as inputs.
+// The relation is established by creating a new Relation in the database, linking the two entities.
 // Returns the created relation as a types.Relation or an error if the link creation fails.
-func (as *AssetDB) Link(source *types.Asset, relation string, destination *types.Asset) (*types.Relation, error) {
+func (as *AssetDB) Link(source *types.Entity, relation string, destination *types.Entity) (*types.Relation, error) {
 	return as.repository.Link(source, relation, destination)
 }
 
-// IncomingRelations finds all relations pointing to `asset“ for the specified `relationTypes`, if any.
+// IncomingRelations finds all relations pointing to the entity for the specified relationTypes, if any.
 // If since.IsZero(), the parameter will be ignored.
-// If no `relationTypes` are specified, all incoming relations are returned.
-func (as *AssetDB) IncomingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	return as.repository.IncomingRelations(asset, since, relationTypes...)
+// If no relationTypes are specified, all incoming relations are returned.
+func (as *AssetDB) IncomingRelations(entity *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
+	return as.repository.IncomingRelations(entity, since, relationTypes...)
 }
 
-// OutgoingRelations finds all relations from `asset“ to another asset for the specified `relationTypes`, if any.
+// OutgoingRelations finds all relations from entity to another entity for the specified relationTypes, if any.
 // If since.IsZero(), the parameter will be ignored.
-// If no `relationTypes` are specified, all outgoing relations are returned.
-func (as *AssetDB) OutgoingRelations(asset *types.Asset, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	return as.repository.OutgoingRelations(asset, since, relationTypes...)
-}
-
-// RawQuery executes a query defined by the provided sqlstr on the asset-db.
-// The results of the executed query are scanned into the provided slice.
-func (as *AssetDB) RawQuery(sqlstr string, results interface{}) error {
-	return as.repository.RawQuery(sqlstr, results)
-}
-
-// AssetQuery executes a query against the asset table of the db.
-// For SQL databases, the query will start with "SELECT * FROM assets " and then add the necessary constraints.
-func (as *AssetDB) AssetQuery(constraints string) ([]*types.Asset, error) {
-	return as.repository.AssetQuery(constraints)
-}
-
-// RelationQuery executes a query against the relation table of the db.
-// For SQL databases, the query will start with "SELECT * FROM relations " and then add the necessary constraints.
-func (as *AssetDB) RelationQuery(constraints string) ([]*types.Relation, error) {
-	return as.repository.RelationQuery(constraints)
+// If no relationTypes are specified, all outgoing relations are returned.
+func (as *AssetDB) OutgoingRelations(entity *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
+	return as.repository.OutgoingRelations(entity, since, relationTypes...)
 }

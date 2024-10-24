@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS entities(
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
     etype TEXT,
-    content TEXT,
+    content TEXT
 );
 
 CREATE INDEX idx_entities_last_seen ON entities (last_seen);

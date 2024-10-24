@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS entity_properties(
     ptype VARCHAR(255),
     content JSONB,
     entity_id INT,
-    PRIMARY KEY(property_id)
+    PRIMARY KEY(property_id),
     CONSTRAINT fk_entity_properties_entities
         FOREIGN KEY(entity_id)
             REFERENCES entities(entity_id)
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS relations(
     content JSONB,
     from_entity_id INT,
     to_entity_id INT,
-    PRIMARY KEY(relation_id)
+    PRIMARY KEY(relation_id),
     CONSTRAINT fk_relations_entities_from
         FOREIGN KEY(from_entity_id)
             REFERENCES entities(entity_id)
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS relation_properties(
     ptype VARCHAR(255),
     content JSONB,
     relation_id INT,
-    PRIMARY KEY(property_id)
+    PRIMARY KEY(property_id),
     CONSTRAINT fk_relation_properties_relations
         FOREIGN KEY(relation_id)
             REFERENCES relations(relation_id)

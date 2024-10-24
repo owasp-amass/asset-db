@@ -124,18 +124,18 @@ func TestModels(t *testing.T) {
 				t.Fatalf("failed to marshal asset: %s", err)
 			}
 
-			asset := &Asset{
+			entity := &Entity{
 				Type:    string(tc.asset.AssetType()),
 				Content: jsonContent,
 			}
 
-			parsedAsset, err := asset.Parse()
+			parsedEntity, err := entity.Parse()
 			if err != nil {
 				t.Fatalf("failed to parse asset: %s", err)
 			}
 
-			if !reflect.DeepEqual(parsedAsset, tc.asset) {
-				t.Fatalf("expected asset %v, got %v", tc.asset, parsedAsset)
+			if !reflect.DeepEqual(parsedEntity, tc.asset) {
+				t.Fatalf("expected asset %v, got %v", tc.asset, parsedEntity)
 			}
 		}
 	})
@@ -254,12 +254,12 @@ func TestModels(t *testing.T) {
 				t.Fatalf("failed to marshal asset: %s", err)
 			}
 
-			asset := &Asset{
+			entity := &Entity{
 				Type:    string(tc.asset.AssetType()),
 				Content: jsonContent,
 			}
 
-			jsonQuery, err := asset.JSONQuery()
+			jsonQuery, err := entity.JSONQuery()
 			if err != nil {
 				t.Fatalf("failed to generate json query: %s", err)
 			}
@@ -270,11 +270,11 @@ func TestModels(t *testing.T) {
 			}
 
 			sqlQuery := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Where(jsonQuery).First(asset)
+				return tx.Where(jsonQuery).First(entity)
 			})
 
 			expectedSqlQuery := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Where(tc.expectedQuery).First(asset)
+				return tx.Where(tc.expectedQuery).First(entity)
 			})
 
 			if sqlQuery != expectedSqlQuery {
