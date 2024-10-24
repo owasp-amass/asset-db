@@ -119,7 +119,7 @@ func (sql *sqlRepository) IncomingRelations(entity *types.Entity, since time.Tim
 
 	relations := []Relation{}
 	if len(relationTypes) > 0 {
-		res := sql.db.Where("to_entity_id = ? AND type IN ?", entityId, relationTypes).Find(&relations)
+		res := sql.db.Where("to_entity_id = ? AND rtype IN ?", entityId, relationTypes).Find(&relations)
 		if res.Error != nil {
 			return nil, res.Error
 		}
@@ -144,7 +144,7 @@ func (sql *sqlRepository) OutgoingRelations(entity *types.Entity, since time.Tim
 
 	relations := []Relation{}
 	if len(relationTypes) > 0 {
-		res := sql.db.Where("from_entity_id = ? AND type IN ?", entityId, relationTypes).Find(&relations)
+		res := sql.db.Where("from_entity_id = ? AND rtype IN ?", entityId, relationTypes).Find(&relations)
 		if res.Error != nil {
 			return nil, res.Error
 		}

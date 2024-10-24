@@ -37,7 +37,7 @@ func ExampleMigrations() {
 		panic(err)
 	}
 
-	tables := []string{"assets", "relations"}
+	tables := []string{"entities", "entity_properties", "relations", "relation_properties"}
 	for _, table := range tables {
 		fmt.Println(db.Migrator().HasTable(table))
 	}

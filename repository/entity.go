@@ -125,7 +125,7 @@ func (sql *sqlRepository) CreateEntity(assetData oam.Asset) (*types.Entity, erro
 
 // UpdateEntityLastSeen performs an update on the entity.
 func (sql *sqlRepository) UpdateEntityLastSeen(id string) error {
-	result := sql.db.Exec("UPDATE entities SET last_seen = current_timestamp WHERE id = ?", id)
+	result := sql.db.Exec("UPDATE entities SET last_seen = current_timestamp WHERE entity_id = ?", id)
 	if result.Error != nil {
 		return result.Error
 	}
