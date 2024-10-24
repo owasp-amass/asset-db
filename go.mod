@@ -3,12 +3,12 @@ module github.com/owasp-amass/asset-db
 go 1.23.1
 
 require (
-	github.com/caffix/stringset v0.1.2
+	github.com/caffix/stringset v0.2.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/owasp-amass/open-asset-model v0.9.1
 	github.com/rubenv/sql-migrate v1.7.0
 	github.com/stretchr/testify v1.9.0
-	gorm.io/datatypes v1.2.3
+	gorm.io/datatypes v1.2.4
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/driver/sqlite v1.5.4
 	gorm.io/gorm v1.25.12
