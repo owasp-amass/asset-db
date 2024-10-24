@@ -50,4 +50,6 @@ func ExampleMigrations() {
 	// Output:
 	// true
 	// true
+	// true
+	// true
 }
