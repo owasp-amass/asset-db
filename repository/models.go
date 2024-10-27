@@ -19,8 +19,8 @@ import (
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/service"
-	"github.com/owasp-amass/open-asset-model/source"
 	"github.com/owasp-amass/open-asset-model/url"
 	"gorm.io/datatypes"
 )
@@ -34,12 +34,12 @@ type Entity struct {
 	Content   datatypes.JSON
 }
 
-// Relation represents a relationship between two entities stored in the database.
-type Relation struct {
-	ID           uint64    `gorm:"primaryKey;column:relation_id"`
+// Edge represents a relationship between two entities stored in the database.
+type Edge struct {
+	ID           uint64    `gorm:"primaryKey;column:edge_id"`
 	CreatedAt    time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"`
 	LastSeen     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"`
-	Type         string    `gorm:"column:rtype"`
+	Type         string    `gorm:"column:etype"`
 	Content      datatypes.JSON
 	FromEntityID uint64 `gorm:"column:from_entity_id"`
 	ToEntityID   uint64 `gorm:"column:to_entity_id"`
@@ -59,11 +59,6 @@ func (e *Entity) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(e.Content, &fqdn)
 		asset = &fqdn
-	case string(oam.NetworkEndpoint):
-		var ne domain.NetworkEndpoint
-
-		err = json.Unmarshal(e.Content, &ne)
-		asset = &ne
 	case string(oam.IPAddress):
 		var ip network.IPAddress
 
@@ -89,11 +84,6 @@ func (e *Entity) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(e.Content, &ipnetrec)
 		asset = &ipnetrec
-	case string(oam.SocketAddress):
-		var sa network.SocketAddress
-
-		err = json.Unmarshal(e.Content, &sa)
-		asset = &sa
 	case string(oam.DomainRecord):
 		var dr oamreg.DomainRecord
 
@@ -144,11 +134,6 @@ func (e *Entity) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(e.Content, &url)
 		asset = &url
-	case string(oam.Source):
-		var src source.Source
-
-		err = json.Unmarshal(e.Content, &src)
-		asset = &src
 	case string(oam.Service):
 		var serv service.Service
 
@@ -178,10 +163,6 @@ func (e *Entity) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	switch v := asset.(type) {
 	case *domain.FQDN:
 		return jsonQuery.Equals(v.Name, "name"), nil
-	case *domain.NetworkEndpoint:
-		return jsonQuery.Equals(v.Address, "address"), nil
-	case *network.SocketAddress:
-		return jsonQuery.Equals(v.Address.String(), "address"), nil
 	case *network.IPAddress:
 		return jsonQuery.Equals(v.Address.String(), "address"), nil
 	case *network.AutonomousSystem:
@@ -212,8 +193,6 @@ func (e *Entity) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.SerialNumber, "serial_number"), nil
 	case *url.URL:
 		return jsonQuery.Equals(v.Raw, "url"), nil
-	case *source.Source:
-		return jsonQuery.Equals(v.Name, "name"), nil
 	case *service.Service:
 		return jsonQuery.Equals(v.Identifier, "identifier"), nil
 	case *oamfile.File:
@@ -221,4 +200,43 @@ func (e *Entity) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	}
 
 	return nil, fmt.Errorf("unknown asset type: %s", e.Type)
+}
+
+// Parse parses the content of the edge into the corresponding Open Asset Model (OAM) relation type.
+// It returns the parsed relation and an error, if any.
+func (e *Edge) Parse() (oam.Relation, error) {
+	var err error
+	var rel oam.Relation
+
+	switch e.Type {
+	case string(oam.BasicDNSRelation):
+		var bdr relation.BasicDNSRelation
+
+		err = json.Unmarshal(e.Content, &bdr)
+		rel = &bdr
+	case string(oam.PortRelation):
+		var pr relation.PortRelation
+
+		err = json.Unmarshal(e.Content, &pr)
+		rel = &pr
+	case string(oam.PrefDNSRelation):
+		var pdr relation.PrefDNSRelation
+
+		err = json.Unmarshal(e.Content, &pdr)
+		rel = &pdr
+	case string(oam.SimpleRelation):
+		var sr relation.SimpleRelation
+
+		err = json.Unmarshal(e.Content, &sr)
+		rel = &sr
+	case string(oam.SRVDNSRelation):
+		var sdr relation.SRVDNSRelation
+
+		err = json.Unmarshal(e.Content, &sdr)
+		rel = &sdr
+	default:
+		return nil, fmt.Errorf("unknown relation type: %s", e.Type)
+	}
+
+	return rel, err
 }

@@ -20,7 +20,6 @@ import (
 	"github.com/owasp-amass/open-asset-model/people"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/service"
-	"github.com/owasp-amass/open-asset-model/source"
 	"github.com/owasp-amass/open-asset-model/url"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -39,10 +38,6 @@ func TestModels(t *testing.T) {
 			{
 				description: "parse fqdn",
 				asset:       &domain.FQDN{Name: "www.example.com"},
-			},
-			{
-				description: "parse network endpoint",
-				asset:       &domain.NetworkEndpoint{Address: "www.example.com:80"},
 			},
 			{
 				description: "parse ip address",
@@ -77,10 +72,6 @@ func TestModels(t *testing.T) {
 				asset:       &oamcert.TLSCertificate{SerialNumber: "25:89:5f:3b:96:c8:18:89:09:04:8b:6c:64:88:6f:1b"},
 			},
 			{
-				description: "parse socket address",
-				asset:       &network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:443")},
-			},
-			{
 				description: "parse person",
 				asset:       &people.Person{FullName: "John Doe"},
 			},
@@ -107,10 +98,6 @@ func TestModels(t *testing.T) {
 			{
 				description: "parse contact record",
 				asset:       &contact.ContactRecord{DiscoveredAt: "https://owasp.org"},
-			},
-			{
-				description: "parse source",
-				asset:       &source.Source{Name: "https://www.owasp.org"},
 			},
 			{
 				description: "parse service",
@@ -152,11 +139,6 @@ func TestModels(t *testing.T) {
 				expectedQuery: datatypes.JSONQuery("content").Equals("www.example.com", "name"),
 			},
 			{
-				description:   "json query for network endpoint",
-				asset:         &domain.NetworkEndpoint{Address: "www.example.com:80"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("www.example.com:80", "address"),
-			},
-			{
 				description:   "json query for ip address",
 				asset:         &network.IPAddress{Address: ip, Type: "IPv4"},
 				expectedQuery: datatypes.JSONQuery("content").Equals(ip, "address"),
@@ -180,11 +162,6 @@ func TestModels(t *testing.T) {
 				description:   "json query for asn",
 				asset:         &network.AutonomousSystem{Number: 64496},
 				expectedQuery: datatypes.JSONQuery("content").Equals(64496, "number"),
-			},
-			{
-				description:   "json query for socket address",
-				asset:         &network.SocketAddress{Address: netip.MustParseAddrPort("192.168.1.1:443")},
-				expectedQuery: datatypes.JSONQuery("content").Equals("192.168.1.1:443", "address"),
 			},
 			{
 				description:   "json query for person",
@@ -235,11 +212,6 @@ func TestModels(t *testing.T) {
 				description:   "json query for contact record",
 				asset:         &contact.ContactRecord{DiscoveredAt: "https://owasp.org"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("https://owasp.org", "discovered_at"),
-			},
-			{
-				description:   "json query for source",
-				asset:         &source.Source{Name: "https://www.owasp.org"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("https://www.owasp.org", "name"),
 			},
 			{
 				description:   "json query for service",

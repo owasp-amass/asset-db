@@ -18,13 +18,13 @@ type Repository interface {
 	CreateEntity(asset oam.Asset) (*types.Entity, error)
 	UpdateEntityLastSeen(id string) error
 	DeleteEntity(id string) error
-	DeleteRelation(id string) error
+	DeleteEdge(id string) error
 	FindEntityById(id string, since time.Time) (*types.Entity, error)
 	FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error)
-	Link(source *types.Entity, relation string, destination *types.Entity) (*types.Relation, error)
-	IncomingRelations(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error)
-	OutgoingRelations(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error)
+	Link(source *types.Entity, edge *types.Edge, destination *types.Entity) (*types.Edge, error)
+	IncomingEdges(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Edge, error)
+	OutgoingEdges(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Edge, error)
 	Close() error
 }

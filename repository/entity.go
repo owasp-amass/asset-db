@@ -103,7 +103,7 @@ func (sql *sqlRepository) CreateEntity(assetData oam.Asset) (*types.Entity, erro
 				if id, err := strconv.ParseUint(e.ID, 10, 64); err == nil {
 					entity.ID = id
 					entity.CreatedAt = e.CreatedAt
-					entity.LastSeen = e.LastSeen
+					entity.LastSeen = time.Now()
 					break
 				}
 			}
@@ -185,16 +185,16 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 	}
 
 	var storedEntities []*types.Entity
-	for _, entity := range entities {
-		assetData, err := entity.Parse()
+	for _, e := range entities {
+		assetData, err := e.Parse()
 		if err != nil {
 			return []*types.Entity{}, err
 		}
 
 		storedEntities = append(storedEntities, &types.Entity{
-			ID:        strconv.FormatUint(entity.ID, 10),
-			CreatedAt: entity.CreatedAt,
-			LastSeen:  entity.LastSeen,
+			ID:        strconv.FormatUint(e.ID, 10),
+			CreatedAt: e.CreatedAt,
+			LastSeen:  e.LastSeen,
 			Asset:     assetData,
 		})
 	}

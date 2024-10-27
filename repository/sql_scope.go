@@ -56,13 +56,13 @@ func (sql *sqlRepository) inAndOut(constraint oam.Asset, since time.Time) ([]*ty
 
 	ids := stringset.New()
 	for _, constraint := range constraints {
-		if rels, err := sql.IncomingRelations(constraint, since); err == nil {
+		if rels, err := sql.IncomingEdges(constraint, since); err == nil {
 			for _, rel := range rels {
 				ids.Insert(rel.FromEntity.ID)
 			}
 		}
 
-		if rels, err := sql.OutgoingRelations(constraint, since); err == nil {
+		if rels, err := sql.OutgoingEdges(constraint, since); err == nil {
 			for _, rel := range rels {
 				ids.Insert(rel.ToEntity.ID)
 			}

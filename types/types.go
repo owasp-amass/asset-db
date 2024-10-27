@@ -11,7 +11,6 @@ import (
 )
 
 // Entity represents an entity in the asset database.
-// It contains an ID and the corresponding oam.Asset.
 type Entity struct {
 	ID        string
 	CreatedAt time.Time
@@ -19,13 +18,26 @@ type Entity struct {
 	Asset     oam.Asset
 }
 
-// Relation represents a relationship between two entities in the asset database.
-// It contains an ID, a type describing the relationship, and references to the source and destination entities.
-type Relation struct {
+// EntityTag represents addition metadata added to an entity in the asset database.
+type EntityTag struct {
+	ID        string
+	CreatedAt time.Time
+	LastSeen  time.Time
+}
+
+// Edge represents a relationship between two entities in the asset database.
+type Edge struct {
 	ID         string
-	Type       string
 	CreatedAt  time.Time
 	LastSeen   time.Time
+	Relation   oam.Relation
 	FromEntity *Entity
 	ToEntity   *Entity
+}
+
+// EdgeTag represents addition metadata added to an entity in the asset database.
+type EdgeTag struct {
+	ID        string
+	CreatedAt time.Time
+	LastSeen  time.Time
 }

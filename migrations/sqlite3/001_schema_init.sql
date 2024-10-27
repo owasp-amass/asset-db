@@ -14,11 +14,11 @@ CREATE TABLE IF NOT EXISTS entities(
 CREATE INDEX idx_entities_last_seen ON entities (last_seen);
 CREATE INDEX idx_entities_etype ON entities (etype);
 
-CREATE TABLE IF NOT EXISTS entity_properties(
-    property_id INTEGER PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS entity_tags(
+    tag_id INTEGER PRIMARY KEY,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ptype TEXT,
+    ttype TEXT,
     content TEXT,
     entity_id INTEGER,
     FOREIGN KEY(entity_id)
@@ -26,15 +26,15 @@ CREATE TABLE IF NOT EXISTS entity_properties(
         ON DELETE CASCADE
 );
 
-CREATE INDEX idx_entprop_last_seen ON entity_properties (last_seen);
-CREATE INDEX idx_entprop_ptype ON entity_properties (ptype);
-CREATE INDEX idx_entprop_entity_id ON entity_properties (entity_id);
+CREATE INDEX idx_enttag_last_seen ON entity_tags (last_seen);
+CREATE INDEX idx_enttag_ttype ON entity_tags (ttype);
+CREATE INDEX idx_enttag_entity_id ON entity_tags (entity_id);
 
-CREATE TABLE IF NOT EXISTS relations(
-    relation_id INTEGER PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS edges(
+    edge_id INTEGER PRIMARY KEY,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-    rtype TEXT,
+    etype TEXT,
     content TEXT,
     from_entity_id INTEGER,
     to_entity_id INTEGER,
@@ -46,44 +46,44 @@ CREATE TABLE IF NOT EXISTS relations(
         ON DELETE CASCADE
 );
 
-CREATE INDEX idx_rel_last_seen ON relations (last_seen);
-CREATE INDEX idx_rel_rtype ON relations (rtype);
-CREATE INDEX idx_rel_from_entity_id ON relations (from_entity_id);
-CREATE INDEX idx_rel_to_entity_id ON relations (to_entity_id);
+CREATE INDEX idx_edge_last_seen ON edges (last_seen);
+CREATE INDEX idx_edge_etype ON edges (etype);
+CREATE INDEX idx_edge_from_entity_id ON edges (from_entity_id);
+CREATE INDEX idx_edge_to_entity_id ON edges (to_entity_id);
 
-CREATE TABLE IF NOT EXISTS relation_properties(
-    property_id INTEGER PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS edge_tags(
+    tag_id INTEGER PRIMARY KEY,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ptype TEXT,
+    ttype TEXT,
     content TEXT,
-    relation_id INTEGER,
-    FOREIGN KEY(relation_id)
-        REFERENCES relations(relation_id)
+    edge_id INTEGER,
+    FOREIGN KEY(edge_id)
+        REFERENCES edges(edge_id)
         ON DELETE CASCADE
 );
 
-CREATE INDEX idx_relprop_last_seen ON relation_properties (last_seen);
-CREATE INDEX idx_relprop_ptype ON relation_properties (ptype);
-CREATE INDEX idx_relprop_relation_id ON relation_properties (relation_id);
+CREATE INDEX idx_edgetag_last_seen ON edge_tags (last_seen);
+CREATE INDEX idx_edgetag_ttype ON edge_tags (ttype);
+CREATE INDEX idx_edgetag_edge_id ON edge_tags (edge_id);
 
 -- +migrate Down
 
-DROP INDEX IF EXISTS idx_relprop_relation_id;
-DROP INDEX IF EXISTS idx_relprop_ptype;
-DROP INDEX IF EXISTS idx_relprop_last_seen;
-DROP TABLE relation_properties;
+DROP INDEX IF EXISTS idx_edgetag_edge_id;
+DROP INDEX IF EXISTS idx_edgetag_ttype;
+DROP INDEX IF EXISTS idx_edgetag_last_seen;
+DROP TABLE edge_tags;
 
-DROP INDEX IF EXISTS idx_rel_to_entity_id;
-DROP INDEX IF EXISTS idx_rel_from_entity_id;
-DROP INDEX IF EXISTS idx_rel_rtype;
-DROP INDEX IF EXISTS idx_rel_last_seen;
-DROP TABLE relations;
+DROP INDEX IF EXISTS idx_edge_to_entity_id;
+DROP INDEX IF EXISTS idx_edge_from_entity_id;
+DROP INDEX IF EXISTS idx_edge_etype;
+DROP INDEX IF EXISTS idx_edge_last_seen;
+DROP TABLE edges;
 
-DROP INDEX IF EXISTS idx_entprop_entity_id;
-DROP INDEX IF EXISTS idx_entprop_ptype;
+DROP INDEX IF EXISTS idx_enttag_last_seen;
+DROP INDEX IF EXISTS idx_enttag_ttype;
 DROP INDEX IF EXISTS idx_entprop_last_seen;
-DROP TABLE entity_properties;
+DROP TABLE entity_tags;
 
 DROP INDEX IF EXISTS idx_entities_etype;
 DROP INDEX IF EXISTS idx_entities_last_seen;

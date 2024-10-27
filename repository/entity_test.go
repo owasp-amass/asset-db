@@ -331,54 +331,54 @@ func TestRepository(t *testing.T) {
 			}
 
 			if relation == nil {
-				t.Fatalf("failed to link entities: relation is nil")
+				t.Fatalf("failed to link entities: edge is nil")
 			}
 
 			incoming, err := store.IncomingRelations(destinationEntity, start, tc.relation)
 			if err != nil {
-				t.Fatalf("failed to query incoming relations: %s", err)
+				t.Fatalf("failed to query incoming edges: %s", err)
 			}
 
 			if incoming == nil {
-				t.Fatalf("failed to query incoming relations: incoming relations is nil %s", err)
+				t.Fatalf("failed to query incoming edges: incoming edge is nil %s", err)
 			}
 
 			if incoming[0].Type != tc.relation {
-				t.Fatalf("failed to query incoming relations: expected relation %s, got %s", tc.relation, incoming[0].Type)
+				t.Fatalf("failed to query incoming edges: expected relation %s, got %s", tc.relation, incoming[0].Type)
 			}
 
 			if incoming[0].FromEntity.ID != sourceEntity.ID {
-				t.Fatalf("failed to query incoming relations: expected source entity id %s, got %v", sourceEntity.ID, incoming[0].FromEntity.ID)
+				t.Fatalf("failed to query incoming edges: expected source entity id %s, got %v", sourceEntity.ID, incoming[0].FromEntity.ID)
 			}
 
 			if incoming[0].ToEntity.ID != destinationEntity.ID {
-				t.Fatalf("failed to query incoming relations: expected destination entity id %s, got %s", destinationEntity.ID, incoming[0].ToEntity.ID)
+				t.Fatalf("failed to query incoming edges: expected destination entity id %s, got %s", destinationEntity.ID, incoming[0].ToEntity.ID)
 			}
 
 			outgoing, err := store.OutgoingRelations(sourceEntity, start, tc.relation)
 			if err != nil {
-				t.Fatalf("failed to query outgoing relations: %s", err)
+				t.Fatalf("failed to query outgoing edges: %s", err)
 			}
 
 			if outgoing == nil {
-				t.Fatalf("failed to query outgoing relations: outgoing relations is nil")
+				t.Fatalf("failed to query outgoing edges: outgoing edge is nil")
 			}
 
 			if outgoing[0].Type != tc.relation {
-				t.Fatalf("failed to query outgoing relations: expected relation %s, got %s", tc.relation, outgoing[0].Type)
+				t.Fatalf("failed to query outgoing edges: expected edge %s, got %s", tc.relation, outgoing[0].Type)
 			}
 
 			if outgoing[0].FromEntity.ID != sourceEntity.ID {
-				t.Fatalf("failed to query outgoing relations: expected source entity id %s, got %s", sourceEntity.ID, outgoing[0].FromEntity.ID)
+				t.Fatalf("failed to query outgoing edges: expected source entity id %s, got %s", sourceEntity.ID, outgoing[0].FromEntity.ID)
 			}
 
 			if outgoing[0].ToEntity.ID != destinationEntity.ID {
-				t.Fatalf("failed to query outgoing relations: expected destination entity id %s, got %s", destinationEntity.ID, outgoing[0].ToEntity.ID)
+				t.Fatalf("failed to query outgoing edges: expected destination entity id %s, got %s", destinationEntity.ID, outgoing[0].ToEntity.ID)
 			}
 
 			err = store.DeleteRelation(relation.ID)
 			if err != nil {
-				t.Fatalf("failed to delete relation: %s", err)
+				t.Fatalf("failed to delete edges: %s", err)
 			}
 
 			err = store.DeleteEntity(destinationEntity.ID)
