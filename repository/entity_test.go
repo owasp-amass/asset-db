@@ -209,7 +209,7 @@ func TestRepository(t *testing.T) {
 			description:      "create an FQDN and link it with another FQDN",
 			sourceAsset:      &domain.FQDN{Name: "www.example.com"},
 			destinationAsset: &domain.FQDN{Name: "www.example.subdomain.com"},
-			relation:         relation.BasicDNSRelation{Name: "cname_record"},
+			relation:         relation.BasicDNSRelation{Name: "dns_record"},
 		},
 		{
 			description:      "create an Autonomous System and link it with an RIR organization",
@@ -227,7 +227,7 @@ func TestRepository(t *testing.T) {
 			description:      "create an FQDN and link it with an IP address",
 			sourceAsset:      &domain.FQDN{Name: "www.domain.com"},
 			destinationAsset: &network.IPAddress{Address: ip2, Type: "IPv4"},
-			relation:         relation.BasicDNSRelation{Name: "a_record"},
+			relation:         relation.BasicDNSRelation{Name: "dns_record"},
 		},
 		{
 			description:      "create an Autonomous System and link it with a Netblock",
