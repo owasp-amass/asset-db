@@ -103,8 +103,13 @@ func (sql *sqlRepository) CreateEntity(assetData oam.Asset) (*types.Entity, erro
 				if id, err := strconv.ParseUint(e.ID, 10, 64); err == nil {
 					entity.ID = id
 					entity.CreatedAt = e.CreatedAt
-					entity.LastSeen = time.Now()
-					break
+
+					if sql.UpdateEntityLastSeen(e.ID) == nil {
+						if f, err := sql.FindEntityById(e.ID, time.Time{}); err == nil && f != nil {
+							entity.LastSeen = f.LastSeen
+							break
+						}
+					}
 				}
 			}
 		}

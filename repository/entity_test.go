@@ -186,14 +186,9 @@ func TestLastSeenUpdates(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, a1.ID, a2.ID)
 	assert.Equal(t, a1.CreatedAt, a2.CreatedAt)
-	assert.Equal(t, a1.LastSeen, a2.LastSeen)
 
-	err = store.UpdateEntityLastSeen(a1.ID)
-	assert.NoError(t, err)
-	a3, _ := store.CreateEntity(asset)
-	assert.NoError(t, err)
-	if a3.LastSeen.UnixNano() <= a1.LastSeen.UnixNano() {
-		t.Errorf("a3.LastSeen: %s, a1.LastSeen: %s", a2.LastSeen.Format(time.RFC3339Nano), a1.LastSeen.Format(time.RFC3339Nano))
+	if a2.LastSeen.UnixNano() <= a1.LastSeen.UnixNano() {
+		t.Errorf("a2.LastSeen: %s, a1.LastSeen: %s", a2.LastSeen.Format(time.RFC3339Nano), a1.LastSeen.Format(time.RFC3339Nano))
 	}
 }
 
@@ -208,37 +203,37 @@ func TestRepository(t *testing.T) {
 		description      string
 		sourceAsset      oam.Asset
 		destinationAsset oam.Asset
-		relation         string
+		relation         oam.Relation
 	}{
 		{
 			description:      "create an FQDN and link it with another FQDN",
 			sourceAsset:      &domain.FQDN{Name: "www.example.com"},
 			destinationAsset: &domain.FQDN{Name: "www.example.subdomain.com"},
-			relation:         "cname_record",
+			relation:         relation.BasicDNSRelation{Name: "cname_record"},
 		},
 		{
 			description:      "create an Autonomous System and link it with an RIR organization",
 			sourceAsset:      &network.AutonomousSystem{Number: 1},
 			destinationAsset: &oamreg.AutnumRecord{Number: 1, Handle: "AS1", Name: "GOGL"},
-			relation:         "registration",
+			relation:         relation.SimpleRelation{Name: "registration"},
 		},
 		{
 			description:      "create a Netblock and link it with an IP address",
 			sourceAsset:      &network.Netblock{CIDR: cidr, Type: "IPv4"},
 			destinationAsset: &network.IPAddress{Address: ip, Type: "IPv4"},
-			relation:         "contains",
+			relation:         relation.SimpleRelation{Name: "contains"},
 		},
 		{
 			description:      "create an FQDN and link it with an IP address",
 			sourceAsset:      &domain.FQDN{Name: "www.domain.com"},
 			destinationAsset: &network.IPAddress{Address: ip2, Type: "IPv4"},
-			relation:         "a_record",
+			relation:         relation.BasicDNSRelation{Name: "a_record"},
 		},
 		{
 			description:      "create an Autonomous System and link it with a Netblock",
 			sourceAsset:      &network.AutonomousSystem{Number: 2},
 			destinationAsset: &network.Netblock{CIDR: cidr2, Type: "IPv4"},
-			relation:         "announces",
+			relation:         relation.SimpleRelation{Name: "announces"},
 		},
 	}
 
@@ -328,7 +323,7 @@ func TestRepository(t *testing.T) {
 			}
 
 			edge := &types.Edge{
-				Relation:   relation.SimpleRelation{Name: tc.relation},
+				Relation:   tc.relation,
 				FromEntity: sourceEntity,
 				ToEntity:   destinationEntity,
 			}
@@ -342,7 +337,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to link entities: edge is nil")
 			}
 
-			incoming, err := store.IncomingEdges(destinationEntity, start, tc.relation)
+			incoming, err := store.IncomingEdges(destinationEntity, start, tc.relation.Label())
 			if err != nil {
 				t.Fatalf("failed to query incoming edges: %s", err)
 			}
@@ -351,7 +346,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to query incoming edges: incoming edge is nil %s", err)
 			}
 
-			if incoming[0].Relation.Label() != tc.relation {
+			if incoming[0].Relation.Label() != tc.relation.Label() {
 				t.Fatalf("failed to query incoming edges: expected relation %s, got %s", tc.relation, incoming[0].Relation.Label())
 			}
 
@@ -363,7 +358,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to query incoming edges: expected destination entity id %s, got %s", destinationEntity.ID, incoming[0].ToEntity.ID)
 			}
 
-			outgoing, err := store.OutgoingEdges(sourceEntity, start, tc.relation)
+			outgoing, err := store.OutgoingEdges(sourceEntity, start, tc.relation.Label())
 			if err != nil {
 				t.Fatalf("failed to query outgoing edges: %s", err)
 			}
@@ -372,7 +367,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to query outgoing edges: outgoing edge is nil")
 			}
 
-			if outgoing[0].Relation.Label() != tc.relation {
+			if outgoing[0].Relation.Label() != tc.relation.Label() {
 				t.Fatalf("failed to query outgoing edges: expected edge %s, got %s", tc.relation, outgoing[0].Relation.Label())
 			}
 
