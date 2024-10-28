@@ -11,10 +11,8 @@ CREATE INDEX idx_ipaddr_content_address ON entities (content->>'address' COLLATE
 CREATE INDEX idx_ipnetrec_content_cidr ON entities (content->>'cidr' COLLATE NOCASE) WHERE etype = 'IPNetRecord';
 CREATE INDEX idx_ipnetrec_content_handle ON entities (content->>'handle' COLLATE NOCASE) WHERE etype = 'IPNetRecord';
 CREATE INDEX idx_netblock_content_cidr ON entities (content->>'cidr' COLLATE NOCASE) WHERE etype = 'Netblock';
-CREATE INDEX idx_netend_content_address ON entities (content->>'address' COLLATE NOCASE) WHERE etype = 'NetworkEndpoint';
 CREATE INDEX idx_org_content_name ON entities (content->>'name' COLLATE NOCASE) WHERE etype = 'Organization';
 CREATE INDEX idx_person_content_full_name ON entities (content->>'full_name' COLLATE NOCASE) WHERE etype = 'Person';
-CREATE INDEX idx_sockaddr_content_address ON entities (content->>'address' COLLATE NOCASE) WHERE etype = 'SocketAddress';
 CREATE INDEX idx_tls_content_serial_number ON entities (content->>'serial_number' COLLATE NOCASE) WHERE etype = 'TLSCertificate';
 CREATE INDEX idx_url_content_url ON entities (content->>'url') WHERE etype = 'URL';
 
@@ -22,10 +20,8 @@ CREATE INDEX idx_url_content_url ON entities (content->>'url') WHERE etype = 'UR
 
 DROP INDEX IF EXISTS idx_url_content_url;
 DROP INDEX IF EXISTS idx_tls_content_serial_number;
-DROP INDEX IF EXISTS idx_sockaddr_content_address;
 DROP INDEX IF EXISTS idx_person_content_full_name;
 DROP INDEX IF EXISTS idx_org_content_name;
-DROP INDEX IF EXISTS idx_netend_content_address;
 DROP INDEX IF EXISTS idx_netblock_content_cidr;
 DROP INDEX IF EXISTS idx_ipnetrec_content_handle;
 DROP INDEX IF EXISTS idx_ipnetrec_content_cidr;

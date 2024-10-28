@@ -12,6 +12,7 @@ import (
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"gorm.io/gorm"
 )
 
 // DeleteEdge removes an edge in the database by its ID.
@@ -31,28 +32,25 @@ func (sql *sqlRepository) deleteEdges(ids []uint64) error {
 }
 
 // Link creates an edge between two entities in the database.
-// It takes the source entity, the edge, and destination entity as inputs.
-// The edge is established by creating a new Edge struct in the database, linking the two entities.
+// The edge is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
-func (sql *sqlRepository) Link(source *types.Entity, edge *types.Edge, destination *types.Entity) (*types.Edge, error) {
-	// check that this link will create a valid relationship within the taxonomy
-	srctype := source.Asset.AssetType()
-	destype := destination.Asset.AssetType()
-	if !oam.ValidRelationship(srctype, edge, destype) {
-		return &types.Edge{}, fmt.Errorf("%s -%s-> %s is not valid in the taxonomy", srctype, edge, destype)
+func (sql *sqlRepository) Link(edge *types.Edge) (*types.Edge, error) {
+	if !oam.ValidRelationship(edge) {
+		return &types.Edge{}, fmt.Errorf("%s -%s-> %s is not valid in the taxonomy",
+			edge.FromEntity.Asset.AssetType(), edge, edge.ToEntity.Asset.AssetType())
 	}
 
 	// ensure that duplicate relationships are not entered into the database
-	if rel, found := sql.isDuplicateEdge(source, edge, destination); found {
-		return rel, nil
+	if e, found := sql.isDuplicateEdge(edge); found {
+		return e, nil
 	}
 
-	fromEntityId, err := strconv.ParseUint(source.ID, 10, 64)
+	fromEntityId, err := strconv.ParseUint(edge.FromEntity.ID, 10, 64)
 	if err != nil {
 		return &types.Edge{}, err
 	}
 
-	toEntityId, err := strconv.ParseUint(destination.ID, 10, 64)
+	toEntityId, err := strconv.ParseUint(edge.ToEntity.ID, 10, 64)
 	if err != nil {
 		return &types.Edge{}, err
 	}
@@ -73,22 +71,21 @@ func (sql *sqlRepository) Link(source *types.Entity, edge *types.Edge, destinati
 	if result.Error != nil {
 		return &types.Edge{}, result.Error
 	}
-
 	return toEdge(r), nil
 }
 
 // isDuplicateEdge checks if the relationship between source and dest already exists.
-func (sql *sqlRepository) isDuplicateEdge(source *types.Entity, edge *types.Edge, dest *types.Entity) (*types.Edge, bool) {
+func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge) (*types.Edge, bool) {
 	var dup bool
-	var rel *types.Edge
+	var e *types.Edge
 
-	if outs, err := sql.OutgoingEdges(source, time.Time{}, edge.Relation.Label()); err == nil {
+	if outs, err := sql.OutgoingEdges(edge.FromEntity, time.Time{}, edge.Relation.Label()); err == nil {
 		for _, out := range outs {
-			if dest.ID == out.ToEntity.ID {
+			if edge.ToEntity.ID == out.ToEntity.ID {
 				_ = sql.edgeSeen(out)
-				rel, err = sql.edgeById(out.ID)
+				e, err = sql.edgeById(out.ID)
 				if err != nil {
-					log.Println("[ERROR] failed when re-retrieving relation", err)
+					log.Println("[ERROR] failed when re-retrieving the edge", err)
 					return nil, false
 				}
 				dup = true
@@ -96,7 +93,7 @@ func (sql *sqlRepository) isDuplicateEdge(source *types.Entity, edge *types.Edge
 			}
 		}
 	}
-	return rel, dup
+	return e, dup
 }
 
 // edgeSeen updates the last seen timestamp for the specified edge.
@@ -114,73 +111,111 @@ func (sql *sqlRepository) edgeSeen(rel *types.Edge) error {
 	return nil
 }
 
-// IncomingEdges finds all edges pointing to the entity of the specified relation types and last seen after the since parameter.
+// IncomingEdges finds all edges pointing to the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
-// If no relationTypes are specified, all outgoing eges are returned.
-func (sql *sqlRepository) IncomingEdges(entity *types.Entity, since time.Time, relationTypes ...string) ([]*types.Edge, error) {
+// If no labels are specified, all incoming eges are returned.
+func (sql *sqlRepository) IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	entityId, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	edges := []Edge{}
-	if len(relationTypes) > 0 {
-		res := sql.db.Where("to_entity_id = ? AND etype IN ?", entityId, relationTypes).Find(&edges)
-		if res.Error != nil {
-			return nil, res.Error
-		}
+	var edges []Edge
+	var result *gorm.DB
+	if since.IsZero() {
+		result = sql.db.Where("to_entity_id = ?", entityId).Find(&edges)
 	} else {
-		res := sql.db.Where("to_entity_id = ?", entityId).Find(&edges)
-		if res.Error != nil {
-			return nil, res.Error
-		}
+		result = sql.db.Where("to_entity_id = ? AND last_seen > ?", entityId, since).Find(&edges)
+	}
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
-	return toEdges(edges), nil
+	var results []Edge
+	if len(labels) > 0 {
+		for _, edge := range edges {
+			e := &edge
+
+			if rel, err := e.Parse(); err == nil {
+				for _, label := range labels {
+					if label == rel.Label() {
+						results = append(results, edge)
+						break
+					}
+				}
+			}
+		}
+	} else {
+		results = edges
+	}
+
+	return toEdges(results), nil
 }
 
-// OutgoingEdges finds all edges from the entity of the specified relation types and last seen after the since parameter.
+// OutgoingEdges finds all edges from the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
-// If no relationTypes are specified, all outgoing edges are returned.
-func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, relationTypes ...string) ([]*types.Edge, error) {
+// If no labels are specified, all outgoing edges are returned.
+func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	entityId, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	edges := []Edge{}
-	if len(relationTypes) > 0 {
-		res := sql.db.Where("from_entity_id = ? AND etype IN ?", entityId, relationTypes).Find(&edges)
-		if res.Error != nil {
-			return nil, res.Error
-		}
+	var edges []Edge
+	var result *gorm.DB
+	if since.IsZero() {
+		result = sql.db.Where("from_entity_id = ?", entityId).Find(&edges)
 	} else {
-		res := sql.db.Where("from_entity_id = ?", entityId).Find(&edges)
-		if res.Error != nil {
-			return nil, res.Error
-		}
+		result = sql.db.Where("from_entity_id = ? AND last_seen > ?", entityId, since).Find(&edges)
+	}
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
-	return toEdges(edges), nil
+	var results []Edge
+	if len(labels) > 0 {
+		for _, edge := range edges {
+			e := &edge
+
+			if rel, err := e.Parse(); err == nil {
+				for _, label := range labels {
+					if label == rel.Label() {
+						results = append(results, edge)
+						break
+					}
+				}
+			}
+		}
+	} else {
+		results = edges
+	}
+
+	return toEdges(results), nil
 }
 
 func (sql *sqlRepository) edgeById(id string) (*types.Edge, error) {
-	rel := Edge{}
+	var rel Edge
 
 	result := sql.db.Where("edge_id = ?", id).First(&rel)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-
 	return toEdge(rel), nil
 }
 
 // toEdge converts a database Edge to a types.Edge.
 func toEdge(r Edge) *types.Edge {
-	rel := &types.Edge{
-		ID:       strconv.FormatUint(r.ID, 10),
-		Type:     r.Type,
-		LastSeen: r.LastSeen,
+	e := &r
+	rel, err := e.Parse()
+	if err != nil {
+		return nil
+	}
+
+	edge := &types.Edge{
+		ID:        strconv.FormatUint(r.ID, 10),
+		CreatedAt: r.CreatedAt,
+		LastSeen:  r.LastSeen,
+		Relation:  rel,
 		FromEntity: &types.Entity{
 			ID: strconv.FormatUint(r.FromEntityID, 10),
 			// Not joining to Asset to get Content
@@ -190,7 +225,7 @@ func toEdge(r Edge) *types.Edge {
 			// Not joining to Asset to get Content
 		},
 	}
-	return rel
+	return edge
 }
 
 // toEdges converts a slice of database Edges to a slice of types.Edge structs.
@@ -198,7 +233,9 @@ func toEdges(edges []Edge) []*types.Edge {
 	var res []*types.Edge
 
 	for _, r := range edges {
-		res = append(res, toEdge(r))
+		if e := toEdge(r); e != nil {
+			res = append(res, e)
+		}
 	}
 	return res
 }

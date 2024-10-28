@@ -15,6 +15,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -46,7 +47,7 @@ func TestAssetDB(t *testing.T) {
 				expectedError: nil,
 			},
 			{
-				description:   "successfully create an asset with relation",
+				description:   "successfully create an asset with edge",
 				discovered:    &network.AutonomousSystem{Number: 1},
 				source:        &types.Entity{ID: "2", Asset: &oamreg.AutnumRecord{Number: 1, Handle: "AS1"}},
 				relation:      relationType,
@@ -66,11 +67,17 @@ func TestAssetDB(t *testing.T) {
 					mockAssetDB.On("CreateEntity", tc.discovered).Return(tc.expected, tc.expectedError)
 				}
 
-				if tc.source != nil && tc.relation != "" {
-					mockAssetDB.On("Link", tc.source, tc.relation, tc.expected).Return(&types.Relation{}, nil)
+				e := &types.Edge{
+					Relation:   relation.SimpleRelation{Name: tc.relation},
+					FromEntity: tc.source,
+					ToEntity:   tc.expected,
 				}
 
-				result, err := adb.Create(tc.source, tc.relation, tc.discovered)
+				if tc.source != nil && tc.relation != "" {
+					mockAssetDB.On("Link", e).Return(&types.Edge{}, nil)
+				}
+
+				result, err := adb.Create(e, tc.discovered)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)
@@ -203,30 +210,30 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
-	t.Run("IncomingRelations", func(t *testing.T) {
+	t.Run("IncomingEdges", func(t *testing.T) {
 		testCases := []struct {
 			description   string
 			asset         *types.Entity
 			since         time.Time
 			relationTypes []string
-			expected      []*types.Relation
+			expected      []*types.Edge
 			expectedError error
 		}{
 			{
-				description:   "successfully find incoming relations",
+				description:   "successfully find incoming edges",
 				asset:         &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
-				expected: []*types.Relation{
+				expected: []*types.Edge{
 					{
 						ID:         "1",
-						Type:       "ns_record",
+						Relation:   relation.BasicDNSRelation{Name: "ns_record"},
 						FromEntity: &types.Entity{ID: "2", Asset: &domain.FQDN{Name: "www.subdomain1.com"}},
 						ToEntity:   &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 					},
 					{
 						ID:         "2",
-						Type:       "cname_record",
+						Relation:   relation.BasicDNSRelation{Name: "cname_record"},
 						FromEntity: &types.Entity{ID: "3", Asset: &domain.FQDN{Name: "www.subdomain2.com"}},
 						ToEntity:   &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 					},
@@ -234,19 +241,19 @@ func TestAssetDB(t *testing.T) {
 				expectedError: nil,
 			},
 			{
-				description:   "error finding incoming relations",
+				description:   "error finding incoming edges",
 				asset:         &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
-				expected:      []*types.Relation{},
-				expectedError: fmt.Errorf("error finding incoming relations"),
+				expected:      []*types.Edge{},
+				expectedError: fmt.Errorf("error finding incoming edges"),
 			},
 			{
-				description:   "incoming relations before since parameter",
+				description:   "incoming edges before since parameter",
 				asset:         &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         time.Now().Add(time.Minute),
 				relationTypes: []string{"ns_record", "cname_record"},
-				expected:      []*types.Relation{},
+				expected:      []*types.Edge{},
 				expectedError: nil,
 			},
 		}
@@ -258,9 +265,9 @@ func TestAssetDB(t *testing.T) {
 					repository: mockAssetDB,
 				}
 
-				mockAssetDB.On("IncomingRelations", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
+				mockAssetDB.On("IncomingEdges", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.IncomingRelations(tc.asset, tc.since, tc.relationTypes...)
+				result, err := adb.IncomingEdges(tc.asset, tc.since, tc.relationTypes...)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)
@@ -270,30 +277,30 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
-	t.Run("OutgoingRelations", func(t *testing.T) {
+	t.Run("OutgoingEdges", func(t *testing.T) {
 		testCases := []struct {
 			description   string
 			asset         *types.Entity
 			since         time.Time
 			relationTypes []string
-			expected      []*types.Relation
+			expected      []*types.Edge
 			expectedError error
 		}{
 			{
-				description:   "successfully find outgoing relations",
+				description:   "successfully find outgoing edges",
 				asset:         &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
-				expected: []*types.Relation{
+				expected: []*types.Edge{
 					{
 						ID:         "1",
-						Type:       "ns_record",
+						Relation:   relation.BasicDNSRelation{Name: "ns_record"},
 						FromEntity: &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 						ToEntity:   &types.Entity{ID: "2", Asset: &domain.FQDN{Name: "www.subdomain1.com"}},
 					},
 					{
 						ID:         "2",
-						Type:       "cname_record",
+						Relation:   relation.BasicDNSRelation{Name: "cname_record"},
 						FromEntity: &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 						ToEntity:   &types.Entity{ID: "2", Asset: &domain.FQDN{Name: "www.subdomain2.com"}},
 					},
@@ -301,19 +308,19 @@ func TestAssetDB(t *testing.T) {
 				expectedError: nil,
 			},
 			{
-				description:   "error finding outgoing relations",
+				description:   "error finding outgoing edges",
 				asset:         &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         start,
 				relationTypes: []string{"ns_record", "cname_record"},
-				expected:      []*types.Relation{},
-				expectedError: fmt.Errorf("error finding outgoing relations"),
+				expected:      []*types.Edge{},
+				expectedError: fmt.Errorf("error finding outgoing edges"),
 			},
 			{
-				description:   "outgoing relations before since parameter",
+				description:   "outgoing edges before since parameter",
 				asset:         &types.Entity{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}},
 				since:         time.Now().Add(time.Minute),
 				relationTypes: []string{"ns_record", "cname_record"},
-				expected:      []*types.Relation{},
+				expected:      []*types.Edge{},
 				expectedError: nil,
 			},
 		}
@@ -325,9 +332,9 @@ func TestAssetDB(t *testing.T) {
 					repository: mockAssetDB,
 				}
 
-				mockAssetDB.On("OutgoingRelations", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
+				mockAssetDB.On("OutgoingEdges", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.OutgoingRelations(tc.asset, tc.since, tc.relationTypes...)
+				result, err := adb.OutgoingEdges(tc.asset, tc.since, tc.relationTypes...)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)
@@ -337,14 +344,14 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
-	t.Run("DeleteRelation", func(t *testing.T) {
+	t.Run("DeleteEdge", func(t *testing.T) {
 		testCases := []struct {
 			description   string
 			id            string
 			expectedError error
 		}{
-			{"relation was deleted", "1", nil},
-			{"relation was not deleted", "2", fmt.Errorf("relation was not found")},
+			{"edge was deleted", "1", nil},
+			{"edge was not deleted", "2", fmt.Errorf("edge was not found")},
 		}
 
 		for _, tc := range testCases {
@@ -354,9 +361,9 @@ func TestAssetDB(t *testing.T) {
 					repository: mockAssetDB,
 				}
 
-				mockAssetDB.On("DeleteRelation", tc.id).Return(tc.expectedError)
+				mockAssetDB.On("DeleteEdge", tc.id).Return(tc.expectedError)
 
-				err := adb.DeleteRelation(tc.id)
+				err := adb.DeleteEdge(tc.id)
 
 				assert.Equal(t, tc.expectedError, err)
 
@@ -422,7 +429,7 @@ func (m *mockAssetDB) DeleteEntity(id string) error {
 	return args.Error(0)
 }
 
-func (m *mockAssetDB) DeleteRelation(id string) error {
+func (m *mockAssetDB) DeleteEdge(id string) error {
 	args := m.Called(id)
 	return args.Error(0)
 }
@@ -447,17 +454,17 @@ func (m *mockAssetDB) FindEntitiesByType(atype oam.AssetType, since time.Time) (
 	return args.Get(0).([]*types.Entity), args.Error(1)
 }
 
-func (m *mockAssetDB) Link(source *types.Entity, relation string, destination *types.Entity) (*types.Relation, error) {
-	args := m.Called(source, relation, destination)
-	return args.Get(0).(*types.Relation), args.Error(1)
+func (m *mockAssetDB) Link(edge *types.Edge) (*types.Edge, error) {
+	args := m.Called(edge)
+	return args.Get(0).(*types.Edge), args.Error(1)
 }
 
-func (m *mockAssetDB) IncomingRelations(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	args := m.Called(asset, since, relationTypes)
-	return args.Get(0).([]*types.Relation), args.Error(1)
+func (m *mockAssetDB) IncomingEdges(asset *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	args := m.Called(asset, since, labels)
+	return args.Get(0).([]*types.Edge), args.Error(1)
 }
 
-func (m *mockAssetDB) OutgoingRelations(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	args := m.Called(asset, since, relationTypes)
-	return args.Get(0).([]*types.Relation), args.Error(1)
+func (m *mockAssetDB) OutgoingEdges(asset *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	args := m.Called(asset, since, labels)
+	return args.Get(0).([]*types.Edge), args.Error(1)
 }

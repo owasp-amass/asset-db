@@ -23,8 +23,8 @@ type Repository interface {
 	FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error)
-	Link(source *types.Entity, edge *types.Edge, destination *types.Entity) (*types.Edge, error)
-	IncomingEdges(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Edge, error)
-	OutgoingEdges(asset *types.Entity, since time.Time, relationTypes ...string) ([]*types.Edge, error)
+	Link(edge *types.Edge) (*types.Edge, error)
+	IncomingEdges(asset *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
+	OutgoingEdges(asset *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
 	Close() error
 }

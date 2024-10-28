@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS entity_tags(
 );
 
 CREATE INDEX idx_enttag_last_seen ON entity_tags (last_seen);
-CREATE INDEX idx_enttag_ttype ON entity_tags (ttype);
 CREATE INDEX idx_enttag_entity_id ON entity_tags (entity_id);
 
 CREATE TABLE IF NOT EXISTS edges(
@@ -50,7 +49,6 @@ CREATE TABLE IF NOT EXISTS edges(
 );
 
 CREATE INDEX idx_edge_last_seen ON edges (last_seen);
-CREATE INDEX idx_edge_etype ON edges (etype);
 CREATE INDEX idx_edge_from_entity_id ON edges (from_entity_id);
 CREATE INDEX idx_edge_to_entity_id ON edges (to_entity_id);
 
@@ -69,24 +67,20 @@ CREATE TABLE IF NOT EXISTS edge_tags(
 );
 
 CREATE INDEX idx_edgetag_last_seen ON edge_tags (last_seen);
-CREATE INDEX idx_edgetag_ttype ON edge_tags (ttype);
 CREATE INDEX idx_edgetag_edge_id ON edge_tags (edge_id);
 
 -- +migrate Down
 
 DROP INDEX IF EXISTS idx_edgetag_edge_id;
-DROP INDEX IF EXISTS idx_edgetag_ttype;
 DROP INDEX IF EXISTS idx_edgetag_last_seen;
 DROP TABLE edge_tags;
 
 DROP INDEX IF EXISTS idx_edge_to_entity_id;
 DROP INDEX IF EXISTS idx_edge_from_entity_id;
-DROP INDEX IF EXISTS idx_edge_etype;
 DROP INDEX IF EXISTS idx_edge_last_seen;
 DROP TABLE edges;
 
 DROP INDEX IF EXISTS idx_enttag_entity_id;
-DROP INDEX IF EXISTS idx_enttag_ttype;
 DROP INDEX IF EXISTS idx_enttag_last_seen;
 DROP TABLE entity_tags;
 

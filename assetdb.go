@@ -37,16 +37,16 @@ func (as *AssetDB) GetDBType() string {
 }
 
 // Create creates a new entity in the database.
-// If source is nil, the discovered entity will be created and relation will be ignored
-// If source and relation are provided, the entity is created and linked to the source entity using the specified relation.
+// If the edge is provided, the entity is created and linked to the source entity using the specified edge.
 // It returns the newly created entity and an error, if any.
-func (as *AssetDB) Create(source *types.Entity, relation string, discovered oam.Asset) (*types.Entity, error) {
-	e, err := as.repository.CreateEntity(discovered)
-	if err != nil || source == nil || relation == "" {
+func (as *AssetDB) Create(edge *types.Edge, asset oam.Asset) (*types.Entity, error) {
+	e, err := as.repository.CreateEntity(asset)
+	if err != nil || edge == nil || edge.FromEntity == nil || edge.Relation == nil {
 		return e, err
 	}
 
-	_, err = as.repository.Link(source, relation, e)
+	edge.ToEntity = e
+	_, err = as.repository.Link(edge)
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +63,9 @@ func (as *AssetDB) DeleteEntity(id string) error {
 	return as.repository.DeleteEntity(id)
 }
 
-// DeleteRelation removes a relation in the database by its ID.
-func (as *AssetDB) DeleteRelation(id string) error {
-	return as.repository.DeleteRelation(id)
+// DeleteEdge removes a relation in the database by its ID.
+func (as *AssetDB) DeleteEdge(id string) error {
+	return as.repository.DeleteEdge(id)
 }
 
 // FindByContent finds entities in the database based on their content and last seen after the since parameter.
@@ -97,24 +97,23 @@ func (as *AssetDB) FindByType(atype oam.AssetType, since time.Time) ([]*types.En
 	return as.repository.FindEntitiesByType(atype, since)
 }
 
-// Link creates a relation between two entities in the database.
-// It takes the source entity, relation type, and destination entity as inputs.
-// The relation is established by creating a new Relation in the database, linking the two entities.
-// Returns the created relation as a types.Relation or an error if the link creation fails.
-func (as *AssetDB) Link(source *types.Entity, relation string, destination *types.Entity) (*types.Relation, error) {
-	return as.repository.Link(source, relation, destination)
+// Link creates an edge between two entities in the database.
+// The link is established by creating a new Edge in the database, linking the two entities.
+// Returns the created edge as a types.Edge or an error if the link creation fails.
+func (as *AssetDB) Link(edge *types.Edge) (*types.Edge, error) {
+	return as.repository.Link(edge)
 }
 
-// IncomingRelations finds all relations pointing to the entity for the specified relationTypes, if any.
+// IncomingEdges finds all edges pointing to the entity for the specified labels, if any.
 // If since.IsZero(), the parameter will be ignored.
-// If no relationTypes are specified, all incoming relations are returned.
-func (as *AssetDB) IncomingRelations(entity *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	return as.repository.IncomingRelations(entity, since, relationTypes...)
+// If no labels are specified, all incoming edges are returned.
+func (as *AssetDB) IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	return as.repository.IncomingEdges(entity, since, labels...)
 }
 
-// OutgoingRelations finds all relations from entity to another entity for the specified relationTypes, if any.
+// OutgoingEdges finds all edges from entity to another entity for the specified labels, if any.
 // If since.IsZero(), the parameter will be ignored.
-// If no relationTypes are specified, all outgoing relations are returned.
-func (as *AssetDB) OutgoingRelations(entity *types.Entity, since time.Time, relationTypes ...string) ([]*types.Relation, error) {
-	return as.repository.OutgoingRelations(entity, since, relationTypes...)
+// If no labels are specified, all outgoing edges are returned.
+func (as *AssetDB) OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	return as.repository.OutgoingEdges(entity, since, labels...)
 }

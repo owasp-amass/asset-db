@@ -12,10 +12,8 @@ CREATE INDEX idx_ipaddr_content_address ON entities USING gin ((content->>'addre
 CREATE INDEX idx_ipnetrec_content_cidr ON entities USING gin ((content->>'cidr') gin_trgm_ops) WHERE etype = 'IPNetRecord';
 CREATE INDEX idx_ipnetrec_content_handle ON entities USING gin ((content->>'handle') gin_trgm_ops) WHERE etype = 'IPNetRecord';
 CREATE INDEX idx_netblock_content_cidr ON entities USING gin ((content->>'cidr') gin_trgm_ops) WHERE etype = 'Netblock';
-CREATE INDEX idx_netend_content_address ON entities USING gin ((content->>'address') gin_trgm_ops) WHERE etype = 'NetworkEndpoint';
 CREATE INDEX idx_org_content_name ON entities USING gin ((content->>'name') gin_trgm_ops) WHERE etype = 'Organization';
 CREATE INDEX idx_person_content_full_name ON entities USING gin ((content->>'full_name') gin_trgm_ops) WHERE etype = 'Person';
-CREATE INDEX idx_sockaddr_content_address ON entities USING gin ((content->>'address') gin_trgm_ops) WHERE etype = 'SocketAddress';
 CREATE INDEX idx_tls_content_serial_number ON entities USING gin ((content->>'serial_number') gin_trgm_ops) WHERE etype = 'TLSCertificate';
 CREATE INDEX idx_url_content_url ON entities USING gin ((content->>'url') gin_trgm_ops) WHERE etype = 'URL';
 
@@ -23,10 +21,8 @@ CREATE INDEX idx_url_content_url ON entities USING gin ((content->>'url') gin_tr
 
 DROP INDEX IF EXISTS idx_url_content_url;
 DROP INDEX IF EXISTS idx_tls_content_serial_number;
-DROP INDEX IF EXISTS idx_sockaddr_content_address;
 DROP INDEX IF EXISTS idx_person_content_full_name;
 DROP INDEX IF EXISTS idx_org_content_name;
-DROP INDEX IF EXISTS idx_netend_content_address;
 DROP INDEX IF EXISTS idx_netblock_content_cidr;
 DROP INDEX IF EXISTS idx_ipnetrec_content_handle;
 DROP INDEX IF EXISTS idx_ipnetrec_content_cidr;
