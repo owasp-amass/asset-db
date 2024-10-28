@@ -5,6 +5,7 @@
 package repository
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -35,9 +36,15 @@ func (sql *sqlRepository) deleteEdges(ids []uint64) error {
 // The edge is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
 func (sql *sqlRepository) Link(edge *types.Edge) (*types.Edge, error) {
-	if !oam.ValidRelationship(edge) {
+	if edge == nil || edge.Relation == nil || edge.FromEntity == nil ||
+		edge.FromEntity.Asset == nil || edge.ToEntity == nil || edge.ToEntity.Asset == nil {
+		return &types.Edge{}, errors.New("failed input validation checks")
+	}
+
+	if !oam.ValidRelationship(edge.FromEntity.Asset.AssetType(),
+		edge.Relation.Label(), edge.Relation.RelationType(), edge.ToEntity.Asset.AssetType()) {
 		return &types.Edge{}, fmt.Errorf("%s -%s-> %s is not valid in the taxonomy",
-			edge.FromEntity.Asset.AssetType(), edge, edge.ToEntity.Asset.AssetType())
+			edge.FromEntity.Asset.AssetType(), edge.Relation.Label(), edge.ToEntity.Asset.AssetType())
 	}
 
 	// ensure that duplicate relationships are not entered into the database
