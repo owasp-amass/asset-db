@@ -72,7 +72,7 @@ func (sql *sqlRepository) UpdateEntityTagLastSeen(id string) error {
 func (sql *sqlRepository) FindEntityTagById(id string, since time.Time) (*types.EntityTag, error) {
 	tagId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
-		return &types.EntityTag{}, err
+		return nil, err
 	}
 
 	var result *gorm.DB
@@ -83,12 +83,12 @@ func (sql *sqlRepository) FindEntityTagById(id string, since time.Time) (*types.
 		result = sql.db.Where("last_seen > ?", since).First(&tag)
 	}
 	if result.Error != nil {
-		return &types.EntityTag{}, result.Error
+		return nil, result.Error
 	}
 
 	data, err := tag.Parse()
 	if err != nil {
-		return &types.EntityTag{}, err
+		return nil, err
 	}
 
 	return &types.EntityTag{
@@ -228,7 +228,7 @@ func (sql *sqlRepository) UpdateEdgeTagLastSeen(id string) error {
 func (sql *sqlRepository) FindEdgeTagById(id string, since time.Time) (*types.EdgeTag, error) {
 	tagId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
-		return &types.EdgeTag{}, err
+		return nil, err
 	}
 
 	var result *gorm.DB
@@ -239,12 +239,12 @@ func (sql *sqlRepository) FindEdgeTagById(id string, since time.Time) (*types.Ed
 		result = sql.db.Where("last_seen > ?", since).First(&tag)
 	}
 	if result.Error != nil {
-		return &types.EdgeTag{}, result.Error
+		return nil, result.Error
 	}
 
 	data, err := tag.Parse()
 	if err != nil {
-		return &types.EdgeTag{}, err
+		return nil, err
 	}
 
 	return &types.EdgeTag{

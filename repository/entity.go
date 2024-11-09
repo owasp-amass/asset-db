@@ -214,7 +214,7 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 func (sql *sqlRepository) FindEntityById(id string, since time.Time) (*types.Entity, error) {
 	entityId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
-		return &types.Entity{}, err
+		return nil, err
 	}
 
 	var result *gorm.DB
@@ -225,12 +225,12 @@ func (sql *sqlRepository) FindEntityById(id string, since time.Time) (*types.Ent
 		result = sql.db.Where("last_seen > ?", since).First(&entity)
 	}
 	if result.Error != nil {
-		return &types.Entity{}, result.Error
+		return nil, result.Error
 	}
 
 	assetData, err := entity.Parse()
 	if err != nil {
-		return &types.Entity{}, err
+		return nil, err
 	}
 
 	return &types.Entity{
