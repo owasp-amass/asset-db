@@ -20,7 +20,7 @@ func TestEntityTag(t *testing.T) {
 	entity, err := store.CreateEntity(&domain.FQDN{Name: "utica.edu"})
 	assert.NoError(t, err)
 
-	now := time.Now().UTC()
+	now := time.Now().Truncate(time.Second).UTC()
 	prop := &property.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foo",
@@ -81,7 +81,7 @@ func TestEntityTag(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCreateEdgeTag(t *testing.T) {
+func TestEdgeTag(t *testing.T) {
 	e1, err := store.CreateEntity(&domain.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
@@ -98,7 +98,7 @@ func TestCreateEdgeTag(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	now := time.Now().UTC()
+	now := time.Now().Truncate(time.Second).UTC()
 	prop := &property.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foo",
