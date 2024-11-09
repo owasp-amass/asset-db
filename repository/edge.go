@@ -132,7 +132,7 @@ func (sql *sqlRepository) IncomingEdges(entity *types.Entity, since time.Time, l
 	if since.IsZero() {
 		result = sql.db.Where("to_entity_id = ?", entityId).Find(&edges)
 	} else {
-		result = sql.db.Where("to_entity_id = ? AND last_seen > ?", entityId, since).Find(&edges)
+		result = sql.db.Where("to_entity_id = ? AND last_seen >= ?", entityId, since).Find(&edges)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 	if since.IsZero() {
 		result = sql.db.Where("from_entity_id = ?", entityId).Find(&edges)
 	} else {
-		result = sql.db.Where("from_entity_id = ? AND last_seen > ?", entityId, since).Find(&edges)
+		result = sql.db.Where("from_entity_id = ? AND last_seen >= ?", entityId, since).Find(&edges)
 	}
 	if err := result.Error; err != nil {
 		return nil, err

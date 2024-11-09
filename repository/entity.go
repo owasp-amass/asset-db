@@ -183,7 +183,7 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 	if since.IsZero() {
 		result = sql.db.Where("etype = ?", entity.Type).Find(&entities, jsonQuery)
 	} else {
-		result = sql.db.Where("etype = ? AND last_seen > ?", entity.Type, since).Find(&entities, jsonQuery)
+		result = sql.db.Where("etype = ? AND last_seen >= ?", entity.Type, since).Find(&entities, jsonQuery)
 	}
 	if result.Error != nil {
 		return []*types.Entity{}, result.Error
@@ -222,7 +222,7 @@ func (sql *sqlRepository) FindEntityById(id string, since time.Time) (*types.Ent
 	if since.IsZero() {
 		result = sql.db.First(&entity)
 	} else {
-		result = sql.db.Where("last_seen > ?", since).First(&entity)
+		result = sql.db.Where("last_seen >= ?", since).First(&entity)
 	}
 	if result.Error != nil {
 		return nil, result.Error
@@ -252,7 +252,7 @@ func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Tim
 	if since.IsZero() {
 		result = sql.db.Where("etype = ?", atype).Find(&entities)
 	} else {
-		result = sql.db.Where("etype = ? AND last_seen > ?", atype, since).Find(&entities)
+		result = sql.db.Where("etype = ? AND last_seen >= ?", atype, since).Find(&entities)
 	}
 	if result.Error != nil {
 		return []*types.Entity{}, result.Error
