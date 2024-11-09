@@ -232,7 +232,7 @@ func (sql *sqlRepository) FindEdgeTagById(id string, since time.Time) (*types.Ed
 	}
 
 	var result *gorm.DB
-	tag := EntityTag{ID: tagId}
+	tag := EdgeTag{ID: tagId}
 	if since.IsZero() {
 		result = sql.db.First(&tag)
 	} else {
