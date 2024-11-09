@@ -105,7 +105,7 @@ func TestAssetDB(t *testing.T) {
 					repository: mockAssetDB,
 				}
 
-				mockAssetDB.On("FindEntityById", tc.id, start).Return(tc.expected, tc.expectedError)
+				mockAssetDB.On("FindEntityById", tc.id).Return(tc.expected, tc.expectedError)
 
 				result, err := adb.FindById(tc.id)
 
