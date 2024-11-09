@@ -75,11 +75,10 @@ func (as *AssetDB) FindByContent(asset oam.Asset, since time.Time) ([]*types.Ent
 	return as.repository.FindEntityByContent(asset, since)
 }
 
-// FindById finds an entity in the database by its ID and last seen after the since parameter.
-// If since.IsZero(), the parameter will be ignored.
+// FindById finds an entity in the database by the ID.
 // It returns the matching entity and an error, if any.
-func (as *AssetDB) FindById(id string, since time.Time) (*types.Entity, error) {
-	return as.repository.FindEntityById(id, since)
+func (as *AssetDB) FindById(id string) (*types.Entity, error) {
+	return as.repository.FindEntityById(id)
 }
 
 // FindByScope finds entities in the database by applying all the scope constraints provided

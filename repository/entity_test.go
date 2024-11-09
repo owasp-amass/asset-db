@@ -243,7 +243,7 @@ func TestRepository(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotEqual(t, sourceEntity, nil)
 
-			foundAsset, err := store.FindEntityById(sourceEntity.ID, start)
+			foundAsset, err := store.FindEntityById(sourceEntity.ID)
 			assert.NoError(t, err)
 			assert.NotEqual(t, foundAsset, nil)
 
@@ -350,7 +350,7 @@ func TestRepository(t *testing.T) {
 			err = store.DeleteEntity(destinationEntity.ID)
 			assert.NoError(t, err)
 
-			if _, err = store.FindEntityById(destinationEntity.ID, start); err == nil {
+			if _, err = store.FindEntityById(destinationEntity.ID); err == nil {
 				t.Fatal("failed to delete entity: the entity was not removed from the database")
 			}
 		})

@@ -71,7 +71,7 @@ func (sql *sqlRepository) inAndOut(constraint oam.Asset, since time.Time) ([]*ty
 
 	var entities []*types.Entity
 	for _, id := range ids.Slice() {
-		if e, err := sql.FindEntityById(id, since); err == nil {
+		if e, err := sql.FindEntityById(id); err == nil {
 			entities = append(entities, e)
 		}
 	}

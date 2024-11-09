@@ -105,7 +105,7 @@ func (sql *sqlRepository) CreateEntity(assetData oam.Asset) (*types.Entity, erro
 					entity.CreatedAt = e.CreatedAt
 
 					if sql.UpdateEntityLastSeen(e.ID) == nil {
-						if f, err := sql.FindEntityById(e.ID, time.Time{}); err == nil && f != nil {
+						if f, err := sql.FindEntityById(e.ID); err == nil && f != nil {
 							entity.LastSeen = f.LastSeen
 							break
 						}
@@ -207,23 +207,17 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 	return storedEntities, nil
 }
 
-// FindEntityById finds an entity in the database by its ID and last seen after the since parameter.
+// FindEntityById finds an entity in the database by the ID.
 // It takes a string representing the entity ID and retrieves the corresponding entity from the database.
-// If since.IsZero(), the parameter will be ignored.
 // Returns the found entity as a types.Entity or an error if the asset is not found.
-func (sql *sqlRepository) FindEntityById(id string, since time.Time) (*types.Entity, error) {
+func (sql *sqlRepository) FindEntityById(id string) (*types.Entity, error) {
 	entityId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	var result *gorm.DB
 	entity := Entity{ID: entityId}
-	if since.IsZero() {
-		result = sql.db.First(&entity)
-	} else {
-		result = sql.db.Where("last_seen >= ?", since.UTC()).First(&entity)
-	}
+	result := sql.db.First(&entity)
 	if result.Error != nil {
 		return nil, result.Error
 	}

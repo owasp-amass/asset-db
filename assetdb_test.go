@@ -107,7 +107,7 @@ func TestAssetDB(t *testing.T) {
 
 				mockAssetDB.On("FindEntityById", tc.id, start).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.FindById(tc.id, start)
+				result, err := adb.FindById(tc.id)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)
@@ -434,8 +434,8 @@ func (m *mockAssetDB) DeleteEdge(id string) error {
 	return args.Error(0)
 }
 
-func (m *mockAssetDB) FindEntityById(id string, since time.Time) (*types.Entity, error) {
-	args := m.Called(id, since)
+func (m *mockAssetDB) FindEntityById(id string) (*types.Entity, error) {
+	args := m.Called(id)
 	return args.Get(0).(*types.Entity), args.Error(1)
 }
 

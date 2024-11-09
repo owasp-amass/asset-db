@@ -33,7 +33,7 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Propert
 					tag.CreatedAt = t.CreatedAt
 
 					if sql.UpdateEntityTagLastSeen(t.ID) == nil {
-						if f, err := sql.FindEntityTagById(t.ID, time.Time{}); err == nil && f != nil {
+						if f, err := sql.FindEntityTagById(t.ID); err == nil && f != nil {
 							tag.LastSeen = f.LastSeen
 							break
 						}
@@ -65,23 +65,17 @@ func (sql *sqlRepository) UpdateEntityTagLastSeen(id string) error {
 	return nil
 }
 
-// FindEntityTagById finds an entity tag in the database by its ID and last seen after the since parameter.
+// FindEntityTagById finds an entity tag in the database by the ID.
 // It takes a string representing the entity tag ID and retrieves the corresponding tag from the database.
-// If since.IsZero(), the parameter will be ignored.
 // Returns the discovered tag as a types.EntityTag or an error if the asset is not found.
-func (sql *sqlRepository) FindEntityTagById(id string, since time.Time) (*types.EntityTag, error) {
+func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error) {
 	tagId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	var result *gorm.DB
 	tag := EntityTag{ID: tagId}
-	if since.IsZero() {
-		result = sql.db.First(&tag)
-	} else {
-		result = sql.db.Where("last_seen >= ?", since.UTC()).First(&tag)
-	}
+	result := sql.db.First(&tag)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -189,7 +183,7 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*t
 					tag.CreatedAt = t.CreatedAt
 
 					if sql.UpdateEdgeTagLastSeen(t.ID) == nil {
-						if f, err := sql.FindEdgeTagById(t.ID, time.Time{}); err == nil && f != nil {
+						if f, err := sql.FindEdgeTagById(t.ID); err == nil && f != nil {
 							tag.LastSeen = f.LastSeen
 							break
 						}
@@ -221,23 +215,17 @@ func (sql *sqlRepository) UpdateEdgeTagLastSeen(id string) error {
 	return nil
 }
 
-// FindEdgeTagById finds an edge tag in the database by its ID and last seen after the since parameter.
+// FindEdgeTagById finds an edge tag in the database by the ID.
 // It takes a string representing the edge tag ID and retrieves the corresponding tag from the database.
-// If since.IsZero(), the parameter will be ignored.
 // Returns the discovered tag as a types.EdgeTag or an error if the asset is not found.
-func (sql *sqlRepository) FindEdgeTagById(id string, since time.Time) (*types.EdgeTag, error) {
+func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 	tagId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	var result *gorm.DB
 	tag := EdgeTag{ID: tagId}
-	if since.IsZero() {
-		result = sql.db.First(&tag)
-	} else {
-		result = sql.db.Where("last_seen >= ?", since.UTC()).First(&tag)
-	}
+	result := sql.db.First(&tag)
 	if result.Error != nil {
 		return nil, result.Error
 	}

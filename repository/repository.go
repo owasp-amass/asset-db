@@ -19,7 +19,7 @@ type Repository interface {
 	UpdateEntityLastSeen(id string) error
 	DeleteEntity(id string) error
 	DeleteEdge(id string) error
-	FindEntityById(id string, since time.Time) (*types.Entity, error)
+	FindEntityById(id string) (*types.Entity, error)
 	FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error)
