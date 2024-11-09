@@ -80,7 +80,7 @@ func (sql *sqlRepository) FindEntityTagById(id string, since time.Time) (*types.
 	if since.IsZero() {
 		result = sql.db.First(&tag)
 	} else {
-		result = sql.db.Where("last_seen >= ?", since).First(&tag)
+		result = sql.db.Where("last_seen >= ?", since.UTC()).First(&tag)
 	}
 	if result.Error != nil {
 		return nil, result.Error
@@ -113,7 +113,7 @@ func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, n
 	if since.IsZero() {
 		result = sql.db.Where("entity_id = ?", entityId).Find(&tags)
 	} else {
-		result = sql.db.Where("entity_id = ? AND last_seen >= ?", entityId, since).Find(&tags)
+		result = sql.db.Where("entity_id = ? AND last_seen >= ?", entityId, since.UTC()).Find(&tags)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -236,7 +236,7 @@ func (sql *sqlRepository) FindEdgeTagById(id string, since time.Time) (*types.Ed
 	if since.IsZero() {
 		result = sql.db.First(&tag)
 	} else {
-		result = sql.db.Where("last_seen >= ?", since).First(&tag)
+		result = sql.db.Where("last_seen >= ?", since.UTC()).First(&tag)
 	}
 	if result.Error != nil {
 		return nil, result.Error
@@ -266,7 +266,7 @@ func (sql *sqlRepository) GetEdgeTags(edge *types.Edge, since time.Time, names .
 	if since.IsZero() {
 		result = sql.db.Where("edge_id = ?", edgeId).Find(&tags)
 	} else {
-		result = sql.db.Where("edge_id = ? AND last_seen >= ?", edgeId, since).Find(&tags)
+		result = sql.db.Where("edge_id = ? AND last_seen >= ?", edgeId, since.UTC()).Find(&tags)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
