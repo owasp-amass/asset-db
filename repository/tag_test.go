@@ -45,20 +45,22 @@ func TestEntityTag(t *testing.T) {
 	assert.Equal(t, ct.Property.Name(), tag.Property.Name())
 	assert.Equal(t, ct.Property.Value(), tag.Property.Value())
 
+	time.Sleep(time.Second)
 	ct2, err := store.CreateEntityTag(entity, prop)
 	assert.NoError(t, err)
-	if ct2.LastSeen.UnixNano() <= ct.LastSeen.UnixNano() {
+	if ct2.LastSeen.UnixNano() < ct.LastSeen.UnixNano() {
 		t.Errorf("ct2.LastSeen: %s, ct.LastSeen: %s", ct2.LastSeen.Format(time.RFC3339Nano), ct.LastSeen.Format(time.RFC3339Nano))
 	}
 
+	time.Sleep(time.Second)
 	prop.PropertyValue = "bar"
 	ct3, err := store.CreateEntityTag(entity, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct3.Property.Value(), prop.PropertyValue)
-	if ct3.CreatedAt.UnixNano() <= ct2.CreatedAt.UnixNano() {
+	if ct3.CreatedAt.UnixNano() < ct2.CreatedAt.UnixNano() {
 		t.Errorf("ct3.CreatedAt: %s, ct2.CreatedAt: %s", ct3.CreatedAt.Format(time.RFC3339Nano), ct2.CreatedAt.Format(time.RFC3339Nano))
 	}
-	if ct3.LastSeen.UnixNano() <= ct2.LastSeen.UnixNano() {
+	if ct3.LastSeen.UnixNano() < ct2.LastSeen.UnixNano() {
 		t.Errorf("ct3.LastSeen: %s, ct2.LastSeen: %s", ct3.LastSeen.Format(time.RFC3339Nano), ct2.LastSeen.Format(time.RFC3339Nano))
 	}
 
@@ -123,20 +125,22 @@ func TestEdgeTag(t *testing.T) {
 	assert.Equal(t, ct.Property.Name(), tag.Property.Name())
 	assert.Equal(t, ct.Property.Value(), tag.Property.Value())
 
+	time.Sleep(time.Second)
 	ct2, err := store.CreateEdgeTag(edge, prop)
 	assert.NoError(t, err)
-	if ct2.LastSeen.UnixNano() <= ct.LastSeen.UnixNano() {
+	if ct2.LastSeen.UnixNano() < ct.LastSeen.UnixNano() {
 		t.Errorf("ct2.LastSeen: %s, ct.LastSeen: %s", ct2.LastSeen.Format(time.RFC3339Nano), ct.LastSeen.Format(time.RFC3339Nano))
 	}
 
+	time.Sleep(time.Second)
 	prop.PropertyValue = "bar"
 	ct3, err := store.CreateEdgeTag(edge, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct3.Property.Value(), prop.PropertyValue)
-	if ct3.CreatedAt.UnixNano() <= ct2.CreatedAt.UnixNano() {
+	if ct3.CreatedAt.UnixNano() < ct2.CreatedAt.UnixNano() {
 		t.Errorf("ct3.CreatedAt: %s, ct2.CreatedAt: %s", ct3.CreatedAt.Format(time.RFC3339Nano), ct2.CreatedAt.Format(time.RFC3339Nano))
 	}
-	if ct3.LastSeen.UnixNano() <= ct2.LastSeen.UnixNano() {
+	if ct3.LastSeen.UnixNano() < ct2.LastSeen.UnixNano() {
 		t.Errorf("ct3.LastSeen: %s, ct2.LastSeen: %s", ct3.LastSeen.Format(time.RFC3339Nano), ct2.LastSeen.Format(time.RFC3339Nano))
 	}
 
