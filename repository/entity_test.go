@@ -175,7 +175,7 @@ func TestMain(m *testing.M) {
 
 func TestLastSeenUpdates(t *testing.T) {
 	ip, _ := netip.ParseAddr("45.73.25.1")
-	asset := network.IPAddress{Address: ip, Type: "IPv4"}
+	asset := &network.IPAddress{Address: ip, Type: "IPv4"}
 	a1, err := store.CreateEntity(asset)
 	assert.NoError(t, err)
 
@@ -240,22 +240,12 @@ func TestRepository(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			sourceEntity, err := store.CreateEntity(tc.sourceAsset)
-			if err != nil {
-				t.Fatalf("failed to create entity: %s", err)
-			}
-
-			if sourceEntity == nil {
-				t.Fatalf("failed to create entity: entity is nil")
-			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, sourceEntity, nil)
 
 			foundAsset, err := store.FindEntityById(sourceEntity.ID, start)
-			if err != nil {
-				t.Fatalf("failed to find entity by id: %s", err)
-			}
-
-			if foundAsset == nil {
-				t.Fatalf("failed to find entity by id: found entity is nil")
-			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, foundAsset, nil)
 
 			if foundAsset.ID != sourceEntity.ID {
 				t.Fatalf("failed to find entity by id: expected entity id %s, got %s", sourceEntity.ID, foundAsset.ID)
@@ -266,13 +256,8 @@ func TestRepository(t *testing.T) {
 			}
 
 			foundAssetByContent, err := store.FindEntityByContent(sourceEntity.Asset, start)
-			if err != nil {
-				t.Fatalf("failed to find entity by content: %s", err)
-			}
-
-			if foundAssetByContent == nil {
-				t.Fatalf("failed to find entity by content: found entity is nil")
-			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, foundAssetByContent, nil)
 
 			if foundAssetByContent[0].ID != sourceEntity.ID {
 				t.Fatalf("failed to find entity by content: expected entity id %s, got %s", sourceEntity.ID, foundAssetByContent[0].ID)
@@ -314,13 +299,8 @@ func TestRepository(t *testing.T) {
 			}
 
 			destinationEntity, err := store.CreateEntity(tc.destinationAsset)
-			if err != nil {
-				t.Fatalf("failed to create destination entity: %s", err)
-			}
-
-			if destinationEntity == nil {
-				t.Fatalf("failed to create destination entity: destination entity is nil")
-			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, destinationEntity, nil)
 
 			edge := &types.Edge{
 				Relation:   tc.relation,
@@ -329,22 +309,12 @@ func TestRepository(t *testing.T) {
 			}
 
 			e, err := store.Link(edge)
-			if err != nil {
-				t.Fatalf("failed to link entities: %s", err)
-			}
-
-			if e == nil {
-				t.Fatalf("failed to link entities: edge is nil")
-			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, e, nil)
 
 			incoming, err := store.IncomingEdges(destinationEntity, start, tc.relation.Label())
-			if err != nil {
-				t.Fatalf("failed to query incoming edges: %s", err)
-			}
-
-			if incoming == nil {
-				t.Fatalf("failed to query incoming edges: incoming edge is nil %s", err)
-			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, incoming, nil)
 
 			if incoming[0].Relation.Label() != tc.relation.Label() {
 				t.Fatalf("failed to query incoming edges: expected relation %s, got %s", tc.relation, incoming[0].Relation.Label())
@@ -359,13 +329,8 @@ func TestRepository(t *testing.T) {
 			}
 
 			outgoing, err := store.OutgoingEdges(sourceEntity, start, tc.relation.Label())
-			if err != nil {
-				t.Fatalf("failed to query outgoing edges: %s", err)
-			}
-
-			if outgoing == nil {
-				t.Fatalf("failed to query outgoing edges: outgoing edge is nil")
-			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, outgoing, nil)
 
 			if outgoing[0].Relation.Label() != tc.relation.Label() {
 				t.Fatalf("failed to query outgoing edges: expected edge %s, got %s", tc.relation, outgoing[0].Relation.Label())
@@ -380,14 +345,10 @@ func TestRepository(t *testing.T) {
 			}
 
 			err = store.DeleteEdge(e.ID)
-			if err != nil {
-				t.Fatalf("failed to delete edges: %s", err)
-			}
+			assert.NoError(t, err)
 
 			err = store.DeleteEntity(destinationEntity.ID)
-			if err != nil {
-				t.Fatalf("failed to delete asset: %s", err)
-			}
+			assert.NoError(t, err)
 
 			if _, err = store.FindEntityById(destinationEntity.ID, start); err == nil {
 				t.Fatal("failed to delete entity: the entity was not removed from the database")

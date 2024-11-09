@@ -18,11 +18,12 @@ type Entity struct {
 	Asset     oam.Asset
 }
 
-// EntityTag represents addition metadata added to an entity in the asset database.
+// EntityTag represents additional metadata added to an entity in the asset database.
 type EntityTag struct {
 	ID        string
 	CreatedAt time.Time
 	LastSeen  time.Time
+	Property  oam.Property
 }
 
 // Edge represents a relationship between two entities in the asset database.
@@ -35,9 +36,10 @@ type Edge struct {
 	ToEntity   *Entity
 }
 
-// EdgeTag represents addition metadata added to an entity in the asset database.
+// EdgeTag represents additional metadata added to an edge in the asset database.
 type EdgeTag struct {
 	ID        string
 	CreatedAt time.Time
 	LastSeen  time.Time
+	Property  oam.Property
 }

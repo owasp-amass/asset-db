@@ -468,3 +468,33 @@ func (m *mockAssetDB) OutgoingEdges(asset *types.Entity, since time.Time, labels
 	args := m.Called(asset, since, labels)
 	return args.Get(0).([]*types.Edge), args.Error(1)
 }
+
+func (m *mockAssetDB) CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
+	args := m.Called(entity, property)
+	return args.Get(0).(*types.EntityTag), args.Error(1)
+}
+
+func (m *mockAssetDB) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+	args := m.Called(entity, since, names)
+	return args.Get(0).([]*types.EntityTag), args.Error(1)
+}
+
+func (m *mockAssetDB) DeleteEntityTag(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *mockAssetDB) CreateEdgeTag(edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
+	args := m.Called(edge, property)
+	return args.Get(0).(*types.EdgeTag), args.Error(1)
+}
+
+func (m *mockAssetDB) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
+	args := m.Called(edge, since, names)
+	return args.Get(0).([]*types.EdgeTag), args.Error(1)
+}
+
+func (m *mockAssetDB) DeleteEdgeTag(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}

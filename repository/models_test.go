@@ -14,7 +14,6 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
@@ -86,10 +85,6 @@ func TestModels(t *testing.T) {
 			{
 				description: "parse location",
 				asset:       &contact.Location{Address: "1600 Pennsylvania Ave NW, Washington, DC 20500"},
-			},
-			{
-				description: "parse fingerprint",
-				asset:       &fingerprint.Fingerprint{Value: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
 			},
 			{
 				description: "parse organization",
@@ -182,11 +177,6 @@ func TestModels(t *testing.T) {
 				description:   "json query for location",
 				asset:         &contact.Location{Address: "1600 Pennsylvania Ave NW, Washington, DC 20500"},
 				expectedQuery: datatypes.JSONQuery("content").Equals("1600 Pennsylvania Ave NW, Washington, DC 20500", "address"),
-			},
-			{
-				description:   "json query for fingerprint",
-				asset:         &fingerprint.Fingerprint{Value: "a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("a1:2b:3c:4d:5e:6f:7g:8h:9i:0j:1k:2l:3m:4n:5o:6p", "value"),
 			},
 			{
 				description:   "json query for url",

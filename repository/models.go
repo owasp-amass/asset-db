@@ -14,10 +14,10 @@ import (
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamfile "github.com/owasp-amass/open-asset-model/file"
-	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/service"
@@ -34,17 +34,35 @@ type Entity struct {
 	Content   datatypes.JSON
 }
 
+// EntityTag represents additional metadata added to an entity in the asset database.
+type EntityTag struct {
+	ID        uint64    `gorm:"primaryKey;column:tag_id"`
+	CreatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:created_at"`
+	LastSeen  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
+	Type      string    `gorm:"column:ttype"`
+	Content   datatypes.JSON
+}
+
 // Edge represents a relationship between two entities stored in the database.
 type Edge struct {
 	ID           uint64    `gorm:"primaryKey;column:edge_id"`
-	CreatedAt    time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"`
-	LastSeen     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();"`
+	CreatedAt    time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:created_at"`
+	LastSeen     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
 	Type         string    `gorm:"column:etype"`
 	Content      datatypes.JSON
 	FromEntityID uint64 `gorm:"column:from_entity_id"`
 	ToEntityID   uint64 `gorm:"column:to_entity_id"`
 	FromEntity   Entity
 	ToEntity     Entity
+}
+
+// EdgeTag represents additional metadata added to an edge in the asset database.
+type EdgeTag struct {
+	ID        uint64    `gorm:"primaryKey;column:tag_id"`
+	CreatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:created_at"`
+	LastSeen  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
+	Type      string    `gorm:"column:ttype"`
+	Content   datatypes.JSON
 }
 
 // Parse parses the content of the entity into the corresponding Open Asset Model (OAM) asset type.
@@ -89,11 +107,6 @@ func (e *Entity) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(e.Content, &dr)
 		asset = &dr
-	case string(oam.Fingerprint):
-		var fingerprint fingerprint.Fingerprint
-
-		err = json.Unmarshal(e.Content, &fingerprint)
-		asset = &fingerprint
 	case string(oam.Organization):
 		var organization org.Organization
 
@@ -175,8 +188,6 @@ func (e *Entity) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 		return jsonQuery.Equals(v.Handle, "handle"), nil
 	case *oamreg.DomainRecord:
 		return jsonQuery.Equals(v.Domain, "domain"), nil
-	case *fingerprint.Fingerprint:
-		return jsonQuery.Equals(v.Value, "value"), nil
 	case *org.Organization:
 		return jsonQuery.Equals(v.Name, "name"), nil
 	case *people.Person:
@@ -239,4 +250,38 @@ func (e *Edge) Parse() (oam.Relation, error) {
 	}
 
 	return rel, err
+}
+
+// Parse parses the content of the entity tag into the corresponding Open Asset Model (OAM) property type.
+// It returns the parsed property and an error, if any.
+func (e *EntityTag) Parse() (oam.Property, error) {
+	return parseProperty(e.Type, e.Content)
+}
+
+// Parse parses the content of the edge tag into the corresponding Open Asset Model (OAM) property type.
+// It returns the parsed property and an error, if any.
+func (e *EdgeTag) Parse() (oam.Property, error) {
+	return parseProperty(e.Type, e.Content)
+}
+
+func parseProperty(ptype string, content datatypes.JSON) (oam.Property, error) {
+	var err error
+	var prop oam.Property
+
+	switch ptype {
+	case string(oam.SimpleProperty):
+		var sp property.SimpleProperty
+
+		err = json.Unmarshal(content, &sp)
+		prop = &sp
+	case string(oam.VulnProperty):
+		var vp property.VulnProperty
+
+		err = json.Unmarshal(content, &vp)
+		prop = &vp
+	default:
+		return nil, fmt.Errorf("unknown property type: %s", ptype)
+	}
+
+	return prop, err
 }

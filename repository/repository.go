@@ -24,7 +24,13 @@ type Repository interface {
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error)
 	Link(edge *types.Edge) (*types.Edge, error)
-	IncomingEdges(asset *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
-	OutgoingEdges(asset *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
+	IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
+	OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
+	CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error)
+	GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error)
+	DeleteEntityTag(id string) error
+	CreateEdgeTag(edge *types.Edge, property oam.Property) (*types.EdgeTag, error)
+	GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error)
+	DeleteEdgeTag(id string) error
 	Close() error
 }
