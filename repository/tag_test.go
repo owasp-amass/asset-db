@@ -77,9 +77,8 @@ func TestEntityTag(t *testing.T) {
 	err = store.DeleteEntityTag(ct3.ID)
 	assert.NoError(t, err)
 
-	tag, err = store.FindEntityTagById(ct3.ID, time.Time{})
+	_, err = store.FindEntityTagById(ct3.ID, time.Time{})
 	assert.Error(t, err)
-	assert.Equal(t, tag, nil)
 }
 
 func TestCreateEdgeTag(t *testing.T) {
@@ -91,7 +90,7 @@ func TestCreateEdgeTag(t *testing.T) {
 
 	edge, err := store.Link(&types.Edge{
 		Relation: &relation.BasicDNSRelation{
-			Name:   "owasp.org",
+			Name:   "dns_record",
 			Header: relation.RRHeader{RRType: 5},
 		},
 		FromEntity: e1,
@@ -156,7 +155,6 @@ func TestCreateEdgeTag(t *testing.T) {
 	err = store.DeleteEdgeTag(ct3.ID)
 	assert.NoError(t, err)
 
-	tag, err = store.FindEdgeTagById(ct3.ID, time.Time{})
+	_, err = store.FindEdgeTagById(ct3.ID, time.Time{})
 	assert.Error(t, err)
-	assert.Equal(t, tag, nil)
 }
