@@ -13,6 +13,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// CreateEntityTag creates a new entity tag in the database.
+// It takes an oam.Property as input and persists it in the database.
+// The entity tag is serialized to JSON and stored in the Content field of the EntityTag struct.
+// Returns the created entity tag as a types.EntityTag or an error if the creation fails.
 func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
 	jsonContent, err := prop.JSON()
 	if err != nil {
@@ -93,7 +97,7 @@ func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error)
 	}, nil
 }
 
-// GetEntityTags finds all tag for the entity with the specified names and last seen after the since parameter.
+// GetEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no names are specified, all tags for the specified entity are returned.
 func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
@@ -163,6 +167,10 @@ func (sql *sqlRepository) DeleteEntityTag(id string) error {
 	return nil
 }
 
+// CreateEdgeTag creates a new edge tag in the database.
+// It takes an oam.Property as input and persists it in the database.
+// The edge tag is serialized to JSON and stored in the Content field of the EdgeTag struct.
+// Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
 func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
 	jsonContent, err := prop.JSON()
 	if err != nil {
@@ -243,6 +251,9 @@ func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 	}, nil
 }
 
+// GetEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.
+// If since.IsZero(), the parameter will be ignored.
+// If no names are specified, all tags for the specified edge are returned.
 func (sql *sqlRepository) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
 	edgeId, err := strconv.ParseInt(edge.ID, 10, 64)
 	if err != nil {
