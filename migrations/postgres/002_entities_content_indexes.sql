@@ -6,7 +6,6 @@ CREATE INDEX idx_autnum_content_number ON entities USING gin ((content->>'number
 CREATE INDEX idx_autsys_content_number ON entities USING gin ((content->>'number') gin_trgm_ops) WHERE etype = 'AutonomousSystem';
 CREATE INDEX idx_domainrec_content_domain ON entities USING gin ((content->>'domain') gin_trgm_ops) WHERE etype = 'DomainRecord';
 CREATE INDEX idx_email_content_address ON entities USING gin ((content->>'address') gin_trgm_ops) WHERE etype = 'EmailAddress';
-CREATE INDEX idx_finger_content_value ON entities USING gin ((content->>'value') gin_trgm_ops) WHERE etype = 'Fingerprint';
 CREATE INDEX idx_fqdn_content_name ON entities USING gin ((content->>'name') gin_trgm_ops) WHERE etype = 'FQDN';
 CREATE INDEX idx_ipaddr_content_address ON entities USING gin ((content->>'address') gin_trgm_ops) WHERE etype = 'IPAddress';
 CREATE INDEX idx_ipnetrec_content_cidr ON entities USING gin ((content->>'cidr') gin_trgm_ops) WHERE etype = 'IPNetRecord';
@@ -28,7 +27,6 @@ DROP INDEX IF EXISTS idx_ipnetrec_content_handle;
 DROP INDEX IF EXISTS idx_ipnetrec_content_cidr;
 DROP INDEX IF EXISTS idx_ipaddr_content_address;
 DROP INDEX IF EXISTS idx_fqdn_content_name;
-DROP INDEX IF EXISTS idx_finger_content_value;
 DROP INDEX IF EXISTS idx_email_content_address;
 DROP INDEX IF EXISTS idx_domainrec_content_domain;
 DROP INDEX IF EXISTS idx_autsys_content_number;

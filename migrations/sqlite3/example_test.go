@@ -14,7 +14,6 @@ import (
 )
 
 func ExampleMigrations() {
-
 	dsn := "test.db"
 	if v, ok := os.LookupEnv("SQLITE3_DB"); ok {
 		dsn = v

@@ -1,18 +1,20 @@
-package postgres_test
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package postgres
 
 import (
 	"fmt"
 	"log"
 	"os"
 
-	"github.com/owasp-amass/asset-db/migrations/postgres"
 	migrate "github.com/rubenv/sql-migrate"
 	pg "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func ExampleMigrations() {
-
 	user := "postgres"
 	if u, ok := os.LookupEnv("POSTGRES_USER"); ok {
 		user = u
@@ -39,7 +41,7 @@ func ExampleMigrations() {
 	sqlDb, _ := db.DB()
 
 	migrationsSource := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: postgres.Migrations(),
+		FileSystem: Migrations(),
 		Root:       "/",
 	}
 
