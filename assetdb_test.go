@@ -87,7 +87,7 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
-	t.Run("FindById", func(t *testing.T) {
+	t.Run("FindEntityById", func(t *testing.T) {
 		testCases := []struct {
 			description   string
 			id            string
@@ -107,7 +107,7 @@ func TestAssetDB(t *testing.T) {
 
 				mockAssetDB.On("FindEntityById", tc.id).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.FindById(tc.id)
+				result, err := adb.FindEntityById(tc.id)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)
@@ -180,7 +180,7 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
-	t.Run("FindByType", func(t *testing.T) {
+	t.Run("FindEntitiesByType", func(t *testing.T) {
 		testCases := []struct {
 			description   string
 			atype         oam.AssetType
@@ -200,7 +200,7 @@ func TestAssetDB(t *testing.T) {
 
 				mockAssetDB.On("FindEntitiesByType", tc.atype, start).Return(tc.expected, tc.expectedError)
 
-				result, err := adb.FindByType(tc.atype, start)
+				result, err := adb.FindEntitiesByType(tc.atype, start)
 
 				assert.Equal(t, tc.expected, result)
 				assert.Equal(t, tc.expectedError, err)

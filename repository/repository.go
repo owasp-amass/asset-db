@@ -5,14 +5,17 @@
 package repository
 
 import (
+	"errors"
+	"strings"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
 // Repository defines the methods for interacting with the asset database.
-// It provides operations for creating, retrieving, and linking assets.
+// It provides operations for creating, retrieving, tagging, and linking assets.
 type Repository interface {
 	GetDBType() string
 	CreateEntity(asset oam.Asset) (*types.Entity, error)
@@ -33,4 +36,12 @@ type Repository interface {
 	GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error)
 	DeleteEdgeTag(id string) error
 	Close() error
+}
+
+// New creates a new instance of the asset database repository.
+func New(dbtype, dsn string) (Repository, error) {
+	if strings.EqualFold(dbtype, sqlrepo.Postgres) || strings.EqualFold(dbtype, sqlrepo.SQLite) {
+		return sqlrepo.New(dbtype, dsn)
+	}
+	return nil, errors.New("unknown DB type")
 }

@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package repository
+package sqlrepo
 
 import (
 	"errors"
@@ -17,45 +17,39 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// DBType represents the type of the database.
-type DBType string
-
 const (
-	// Postgres represents the PostgreSQL database type.
-	Postgres DBType = "postgres"
-	// SQLite represents the SQLite database type.
-	SQLite DBType = "sqlite"
+	Postgres string = "postgres"
+	SQLite   string = "sqlite"
 )
 
 // sqlRepository is a repository implementation using GORM as the underlying ORM.
 type sqlRepository struct {
 	db     *gorm.DB
-	dbType DBType
+	dbtype string
 }
 
 // New creates a new instance of the asset database repository.
-func New(dbType DBType, dsn string) *sqlRepository {
-	db, err := newDatabase(dbType, dsn)
+func New(dbtype, dsn string) (*sqlRepository, error) {
+	db, err := newDatabase(dbtype, dsn)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &sqlRepository{
 		db:     db,
-		dbType: dbType,
-	}
+		dbtype: dbtype,
+	}, nil
 }
 
 // newDatabase creates a new GORM database connection based on the provided database type and data source name (dsn).
-func newDatabase(dbType DBType, dsn string) (*gorm.DB, error) {
-	switch dbType {
+func newDatabase(dbtype, dsn string) (*gorm.DB, error) {
+	switch dbtype {
 	case Postgres:
 		return postgresDatabase(dsn)
 	case SQLite:
 		return sqliteDatabase(dsn)
-	default:
-		panic("Unknown db type")
 	}
+	return nil, errors.New("unknown DB type")
 }
 
 // postgresDatabase creates a new PostgreSQL database connection using the provided data source name (dsn).
@@ -78,7 +72,7 @@ func (sql *sqlRepository) Close() error {
 
 // GetDBType returns the type of the database.
 func (sql *sqlRepository) GetDBType() string {
-	return string(sql.dbType)
+	return string(sql.dbtype)
 }
 
 // CreateEntity creates a new entity in the database.

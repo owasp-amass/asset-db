@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package repository
+package sqlrepo
 
 import (
 	"fmt"
@@ -30,7 +30,7 @@ import (
 var store *sqlRepository
 
 type testSetup struct {
-	name     DBType
+	name     string
 	dsn      string
 	setup    func(string) (*gorm.DB, error)
 	teardown func(string)
@@ -157,7 +157,7 @@ func TestMain(m *testing.M) {
 			panic(err)
 		}
 
-		store = New(w.name, w.dsn)
+		store, _ = New(w.name, w.dsn)
 		exitCodes[i] = m.Run()
 		if w.teardown != nil {
 			w.teardown(w.dsn)
@@ -359,7 +359,7 @@ func TestRepository(t *testing.T) {
 
 func TestGetDBType(t *testing.T) {
 	sql := &sqlRepository{
-		dbType: "postgres",
+		dbtype: "postgres",
 	}
 
 	expected := "postgres"

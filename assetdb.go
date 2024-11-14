@@ -19,11 +19,13 @@ type AssetDB struct {
 
 // New creates a new assetDB instance.
 // It initializes the asset database with the specified database type and DSN.
-func New(dbType repository.DBType, dsn string) *AssetDB {
-	database := repository.New(dbType, dsn)
-	return &AssetDB{
-		repository: database,
+func New(dbtype, dsn string) *AssetDB {
+	if db, err := repository.New(dbtype, dsn); err == nil && db != nil {
+		return &AssetDB{
+			repository: db,
+		}
 	}
+	return nil
 }
 
 // Close will close the assetdb and return any errors.
@@ -75,9 +77,9 @@ func (as *AssetDB) FindByContent(asset oam.Asset, since time.Time) ([]*types.Ent
 	return as.repository.FindEntityByContent(asset, since)
 }
 
-// FindById finds an entity in the database by the ID.
+// FindEntityById finds an entity in the database by the ID.
 // It returns the matching entity and an error, if any.
-func (as *AssetDB) FindById(id string) (*types.Entity, error) {
+func (as *AssetDB) FindEntityById(id string) (*types.Entity, error) {
 	return as.repository.FindEntityById(id)
 }
 
@@ -89,10 +91,10 @@ func (as *AssetDB) FindByScope(constraints []oam.Asset, since time.Time) ([]*typ
 	return as.repository.FindEntitiesByScope(constraints, since)
 }
 
-// FindByType finds all entities in the database of the provided asset type and last seen after the since parameter.
+// FindEntitiesByType finds all entities in the database of the provided asset type and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // It returns the matching entities and an error, if any.
-func (as *AssetDB) FindByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
+func (as *AssetDB) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
 	return as.repository.FindEntitiesByType(atype, since)
 }
 
@@ -115,4 +117,48 @@ func (as *AssetDB) IncomingEdges(entity *types.Entity, since time.Time, labels .
 // If no labels are specified, all outgoing edges are returned.
 func (as *AssetDB) OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	return as.repository.OutgoingEdges(entity, since, labels...)
+}
+
+// CreateEntityTag creates a new entity tag in the database.
+// It takes an oam.Property as input and persists it in the database.
+// The entity tag is serialized to JSON and stored in the Content field of the EntityTag struct.
+// Returns the created entity tag as a types.EntityTag or an error if the creation fails.
+func (as *AssetDB) CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
+	return as.repository.CreateEntityTag(entity, property)
+}
+
+// GetEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
+// If since.IsZero(), the parameter will be ignored.
+// If no names are specified, all tags for the specified entity are returned.
+func (as *AssetDB) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+	return as.repository.GetEntityTags(entity, since, names...)
+}
+
+// DeleteEntityTag removes an entity tag in the database by its ID.
+// It takes a string representing the entity tag ID and removes the corresponding tag from the database.
+// Returns an error if the tag is not found.
+func (as *AssetDB) DeleteEntityTag(id string) error {
+	return as.repository.DeleteEntityTag(id)
+}
+
+// CreateEdgeTag creates a new edge tag in the database.
+// It takes an oam.Property as input and persists it in the database.
+// The edge tag is serialized to JSON and stored in the Content field of the EdgeTag struct.
+// Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
+func (as *AssetDB) CreateEdgeTag(edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
+	return as.repository.CreateEdgeTag(edge, property)
+}
+
+// GetEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.
+// If since.IsZero(), the parameter will be ignored.
+// If no names are specified, all tags for the specified edge are returned.
+func (as *AssetDB) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
+	return as.repository.GetEdgeTags(edge, since, names...)
+}
+
+// DeleteEdgeTag removes an edge tag in the database by its ID.
+// It takes a string representing the edge tag ID and removes the corresponding tag from the database.
+// Returns an error if the tag is not found.
+func (as *AssetDB) DeleteEdgeTag(id string) error {
+	return as.repository.DeleteEdgeTag(id)
 }
