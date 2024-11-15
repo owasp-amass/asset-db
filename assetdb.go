@@ -17,27 +17,6 @@ type AssetDB struct {
 	repository repository.Repository
 }
 
-// New creates a new assetDB instance.
-// It initializes the asset database with the specified database type and DSN.
-func New(dbtype, dsn string) *AssetDB {
-	if db, err := repository.New(dbtype, dsn); err == nil && db != nil {
-		return &AssetDB{
-			repository: db,
-		}
-	}
-	return nil
-}
-
-// Close will close the assetdb and return any errors.
-func (as *AssetDB) Close() error {
-	return as.repository.Close()
-}
-
-// GetDBType returns the type of the underlying database.
-func (as *AssetDB) GetDBType() string {
-	return as.repository.GetDBType()
-}
-
 // Create creates a new entity in the database.
 // If the edge is provided, the entity is created and linked to the source entity using the specified edge.
 // It returns the newly created entity and an error, if any.
