@@ -24,6 +24,7 @@ type EntityTag struct {
 	CreatedAt time.Time
 	LastSeen  time.Time
 	Property  oam.Property
+	Entity    *Entity
 }
 
 // Edge represents a relationship between two entities in the asset database.
@@ -42,4 +43,5 @@ type EdgeTag struct {
 	CreatedAt time.Time
 	LastSeen  time.Time
 	Property  oam.Property
+	Edge      *Edge
 }

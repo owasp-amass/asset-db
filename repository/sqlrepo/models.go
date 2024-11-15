@@ -41,6 +41,7 @@ type EntityTag struct {
 	LastSeen  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
 	Type      string    `gorm:"column:ttype"`
 	Content   datatypes.JSON
+	EntityID  uint64 `gorm:"column:entity_id"`
 }
 
 // Edge represents a relationship between two entities stored in the database.
@@ -63,6 +64,7 @@ type EdgeTag struct {
 	LastSeen  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
 	Type      string    `gorm:"column:ttype"`
 	Content   datatypes.JSON
+	EdgeID    uint64 `gorm:"column:edge_id"`
 }
 
 // Parse parses the content of the entity into the corresponding Open Asset Model (OAM) asset type.

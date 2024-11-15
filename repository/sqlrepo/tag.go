@@ -18,14 +18,20 @@ import (
 // The entity tag is serialized to JSON and stored in the Content field of the EntityTag struct.
 // Returns the created entity tag as a types.EntityTag or an error if the creation fails.
 func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
+	entityid, err := strconv.ParseUint(entity.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
 	jsonContent, err := prop.JSON()
 	if err != nil {
 		return nil, err
 	}
 
 	tag := EntityTag{
-		Type:    string(prop.PropertyType()),
-		Content: jsonContent,
+		Type:     string(prop.PropertyType()),
+		Content:  jsonContent,
+		EntityID: entityid,
 	}
 
 	// ensure that duplicate entity tags are not entered into the database
@@ -57,6 +63,7 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Propert
 		CreatedAt: tag.CreatedAt,
 		LastSeen:  tag.LastSeen,
 		Property:  prop,
+		Entity:    entity,
 	}, nil
 }
 
@@ -94,6 +101,7 @@ func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error)
 		CreatedAt: tag.CreatedAt,
 		LastSeen:  tag.LastSeen,
 		Property:  data,
+		Entity:    &types.Entity{ID: strconv.FormatUint(tag.EntityID, 10)},
 	}, nil
 }
 
@@ -142,6 +150,7 @@ func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, n
 					CreatedAt: t.CreatedAt,
 					LastSeen:  t.LastSeen,
 					Property:  prop,
+					Entity:    entity,
 				})
 			}
 		}
@@ -172,6 +181,11 @@ func (sql *sqlRepository) DeleteEntityTag(id string) error {
 // The edge tag is serialized to JSON and stored in the Content field of the EdgeTag struct.
 // Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
 func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
+	edgeid, err := strconv.ParseUint(edge.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
 	jsonContent, err := prop.JSON()
 	if err != nil {
 		return nil, err
@@ -180,6 +194,7 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*t
 	tag := EdgeTag{
 		Type:    string(prop.PropertyType()),
 		Content: jsonContent,
+		EdgeID:  edgeid,
 	}
 
 	// ensure that duplicate edge tags are not entered into the database
@@ -211,6 +226,7 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*t
 		CreatedAt: tag.CreatedAt,
 		LastSeen:  tag.LastSeen,
 		Property:  prop,
+		Edge:      edge,
 	}, nil
 }
 
@@ -248,6 +264,7 @@ func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 		CreatedAt: tag.CreatedAt,
 		LastSeen:  tag.LastSeen,
 		Property:  data,
+		Edge:      &types.Edge{ID: strconv.FormatUint(tag.EdgeID, 10)},
 	}, nil
 }
 
@@ -296,6 +313,7 @@ func (sql *sqlRepository) GetEdgeTags(edge *types.Edge, since time.Time, names .
 					CreatedAt: t.CreatedAt,
 					LastSeen:  t.LastSeen,
 					Property:  prop,
+					Edge:      edge,
 				})
 			}
 		}
