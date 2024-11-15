@@ -60,7 +60,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				if tc.expectedError == nil {
@@ -102,7 +102,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("FindEntityById", tc.id).Return(tc.expected, tc.expectedError)
@@ -135,7 +135,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("FindEntityByContent", tc.asset, tc.since).Return(tc.expected, tc.expectedError)
@@ -165,7 +165,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("FindEntitiesByScope", tc.assets, start).Return(tc.expected, tc.expectedError)
@@ -195,7 +195,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("FindEntitiesByType", tc.atype, start).Return(tc.expected, tc.expectedError)
@@ -262,7 +262,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("IncomingEdges", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
@@ -329,7 +329,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("OutgoingEdges", tc.asset, tc.since, tc.relationTypes).Return(tc.expected, tc.expectedError)
@@ -358,7 +358,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("DeleteEdge", tc.id).Return(tc.expectedError)
@@ -386,7 +386,7 @@ func TestAssetDB(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				mockAssetDB := new(mockAssetDB)
 				adb := AssetDB{
-					repository: mockAssetDB,
+					Repo: mockAssetDB,
 				}
 
 				mockAssetDB.On("DeleteEntity", tc.id).Return(tc.expectedError)

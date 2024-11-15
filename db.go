@@ -29,7 +29,7 @@ func New(dbtype, dsn string) *AssetDB {
 	if db, err := repository.New(dbtype, dsn); err == nil && db != nil {
 		if err := migrateDatabase(dbtype, dsn); err == nil {
 			return &AssetDB{
-				repository: db,
+				Repo: db,
 			}
 		}
 	}
@@ -38,12 +38,12 @@ func New(dbtype, dsn string) *AssetDB {
 
 // Close will close the assetdb and return any errors.
 func (as *AssetDB) Close() error {
-	return as.repository.Close()
+	return as.Repo.Close()
 }
 
 // GetDBType returns the type of the underlying database.
 func (as *AssetDB) GetDBType() string {
-	return as.repository.GetDBType()
+	return as.Repo.GetDBType()
 }
 
 func migrateDatabase(dbtype, dsn string) error {
