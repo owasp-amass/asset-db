@@ -74,7 +74,7 @@ func TestEntityTag(t *testing.T) {
 			break
 		}
 	}
-	assert.NotEqual(t, found, true)
+	assert.Equal(t, found, true)
 
 	err = store.DeleteEntityTag(ct3.ID)
 	assert.NoError(t, err)
@@ -154,7 +154,7 @@ func TestEdgeTag(t *testing.T) {
 			break
 		}
 	}
-	assert.NotEqual(t, found, true)
+	assert.Equal(t, found, true)
 
 	err = store.DeleteEdgeTag(ct3.ID)
 	assert.NoError(t, err)
