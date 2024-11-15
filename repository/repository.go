@@ -25,14 +25,15 @@ type Repository interface {
 	FindEntityById(id string) (*types.Entity, error)
 	FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
-	FindEntitiesByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error)
 	Link(edge *types.Edge) (*types.Edge, error)
 	IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
 	OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
 	CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error)
+	FindEntityTagById(id string) (*types.EntityTag, error)
 	GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error)
 	DeleteEntityTag(id string) error
 	CreateEdgeTag(edge *types.Edge, property oam.Property) (*types.EdgeTag, error)
+	FindEdgeTagById(id string) (*types.EdgeTag, error)
 	GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error)
 	DeleteEdgeTag(id string) error
 	Close() error
@@ -40,7 +41,12 @@ type Repository interface {
 
 // New creates a new instance of the asset database repository.
 func New(dbtype, dsn string) (Repository, error) {
-	if strings.EqualFold(dbtype, sqlrepo.Postgres) || strings.EqualFold(dbtype, sqlrepo.SQLite) {
+	switch strings.ToLower(dbtype) {
+	case strings.ToLower(sqlrepo.Postgres):
+		fallthrough
+	case strings.ToLower(sqlrepo.SQLite):
+		fallthrough
+	case strings.ToLower(sqlrepo.SQLiteMemory):
 		return sqlrepo.New(dbtype, dsn)
 	}
 	return nil, errors.New("unknown DB type")

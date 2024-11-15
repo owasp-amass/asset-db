@@ -62,14 +62,6 @@ func (as *AssetDB) FindEntityById(id string) (*types.Entity, error) {
 	return as.Repo.FindEntityById(id)
 }
 
-// FindByScope finds entities in the database by applying all the scope constraints provided
-// and last seen after the since parameter.
-// If since.IsZero(), the parameter will be ignored.
-// It returns the matching entities and an error, if any.
-func (as *AssetDB) FindByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error) {
-	return as.Repo.FindEntitiesByScope(constraints, since)
-}
-
 // FindEntitiesByType finds all entities in the database of the provided asset type and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // It returns the matching entities and an error, if any.

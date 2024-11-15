@@ -150,36 +150,6 @@ func TestAssetDB(t *testing.T) {
 		}
 	})
 
-	t.Run("FindByScope", func(t *testing.T) {
-		testCases := []struct {
-			description   string
-			assets        []oam.Asset
-			expected      []*types.Entity
-			expectedError error
-		}{
-			{"an entity is found", []oam.Asset{&domain.FQDN{Name: "domain.com"}}, []*types.Entity{{ID: "1", Asset: &domain.FQDN{Name: "www.domain.com"}}}, nil},
-			{"an entity is not found", []oam.Asset{&domain.FQDN{Name: "domain.com"}}, []*types.Entity{}, fmt.Errorf("entity not found")},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.description, func(t *testing.T) {
-				mockAssetDB := new(mockAssetDB)
-				adb := AssetDB{
-					Repo: mockAssetDB,
-				}
-
-				mockAssetDB.On("FindEntitiesByScope", tc.assets, start).Return(tc.expected, tc.expectedError)
-
-				result, err := adb.FindByScope(tc.assets, start)
-
-				assert.Equal(t, tc.expected, result)
-				assert.Equal(t, tc.expectedError, err)
-
-				mockAssetDB.AssertExpectations(t)
-			})
-		}
-	})
-
 	t.Run("FindEntitiesByType", func(t *testing.T) {
 		testCases := []struct {
 			description   string
@@ -444,11 +414,6 @@ func (m *mockAssetDB) FindEntityByContent(asset oam.Asset, since time.Time) ([]*
 	return args.Get(0).([]*types.Entity), args.Error(1)
 }
 
-func (m *mockAssetDB) FindEntitiesByScope(constraints []oam.Asset, since time.Time) ([]*types.Entity, error) {
-	args := m.Called(constraints, since)
-	return args.Get(0).([]*types.Entity), args.Error(1)
-}
-
 func (m *mockAssetDB) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
 	args := m.Called(atype, since)
 	return args.Get(0).([]*types.Entity), args.Error(1)
@@ -474,6 +439,11 @@ func (m *mockAssetDB) CreateEntityTag(entity *types.Entity, property oam.Propert
 	return args.Get(0).(*types.EntityTag), args.Error(1)
 }
 
+func (m *mockAssetDB) FindEntityTagById(id string) (*types.EntityTag, error) {
+	args := m.Called(id)
+	return args.Get(0).(*types.EntityTag), args.Error(1)
+}
+
 func (m *mockAssetDB) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
 	args := m.Called(entity, since, names)
 	return args.Get(0).([]*types.EntityTag), args.Error(1)
@@ -486,6 +456,11 @@ func (m *mockAssetDB) DeleteEntityTag(id string) error {
 
 func (m *mockAssetDB) CreateEdgeTag(edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
 	args := m.Called(edge, property)
+	return args.Get(0).(*types.EdgeTag), args.Error(1)
+}
+
+func (m *mockAssetDB) FindEdgeTagById(id string) (*types.EdgeTag, error) {
+	args := m.Called(id)
 	return args.Get(0).(*types.EdgeTag), args.Error(1)
 }
 
