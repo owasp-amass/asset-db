@@ -16,29 +16,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// DeleteEdge removes an edge in the database by its ID.
-// It takes a string representing the edge ID and removes the corresponding edge from the database.
-// Returns an error if the edge is not found.
-func (sql *sqlRepository) DeleteEdge(id string) error {
-	relId, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return err
-	}
-	return sql.deleteEdges([]uint64{relId})
-}
-
-// deleteEdges removes all rows in the Edges table with primary keys in the provided slice.
-func (sql *sqlRepository) deleteEdges(ids []uint64) error {
-	return sql.db.Exec("DELETE FROM edges WHERE edge_id IN ?", ids).Error
-}
-
 // Link creates an edge between two entities in the database.
 // The edge is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
 func (sql *sqlRepository) Link(edge *types.Edge) (*types.Edge, error) {
 	if edge == nil || edge.Relation == nil || edge.FromEntity == nil ||
 		edge.FromEntity.Asset == nil || edge.ToEntity == nil || edge.ToEntity.Asset == nil {
-		return &types.Edge{}, errors.New("failed input validation checks")
+		return nil, errors.New("failed input validation checks")
 	}
 
 	if !oam.ValidRelationship(edge.FromEntity.Asset.AssetType(),
@@ -54,17 +38,17 @@ func (sql *sqlRepository) Link(edge *types.Edge) (*types.Edge, error) {
 
 	fromEntityId, err := strconv.ParseUint(edge.FromEntity.ID, 10, 64)
 	if err != nil {
-		return &types.Edge{}, err
+		return nil, err
 	}
 
 	toEntityId, err := strconv.ParseUint(edge.ToEntity.ID, 10, 64)
 	if err != nil {
-		return &types.Edge{}, err
+		return nil, err
 	}
 
 	jsonContent, err := edge.Relation.JSON()
 	if err != nil {
-		return &types.Edge{}, err
+		return nil, err
 	}
 
 	r := Edge{
@@ -75,8 +59,8 @@ func (sql *sqlRepository) Link(edge *types.Edge) (*types.Edge, error) {
 	}
 
 	result := sql.db.Create(&r)
-	if result.Error != nil {
-		return &types.Edge{}, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 	return toEdge(r), nil
 }
@@ -90,10 +74,12 @@ func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge) (*types.Edge, bool) 
 		for _, out := range outs {
 			if edge.ToEntity.ID == out.ToEntity.ID && reflect.DeepEqual(edge.Relation, out.Relation) {
 				_ = sql.edgeSeen(out)
-				e, err = sql.edgeById(out.ID)
+
+				e, err = sql.FindEdgeById(out.ID)
 				if err != nil {
 					return nil, false
 				}
+
 				dup = true
 				break
 			}
@@ -110,11 +96,22 @@ func (sql *sqlRepository) edgeSeen(rel *types.Edge) error {
 	}
 
 	result := sql.db.Exec("UPDATE edges SET last_seen = current_timestamp WHERE edge_id = ?", id)
-	if result.Error != nil {
-		return result.Error
+	if err := result.Error; err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (sql *sqlRepository) FindEdgeById(id string) (*types.Edge, error) {
+	var rel Edge
+
+	result := sql.db.Where("edge_id = ?", id).First(&rel)
+	if err := result.Error; err != nil {
+		return nil, err
+	}
+
+	return toEdge(rel), nil
 }
 
 // IncomingEdges finds all edges pointing to the entity of the specified labels and last seen after the since parameter.
@@ -199,14 +196,20 @@ func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 	return toEdges(results), nil
 }
 
-func (sql *sqlRepository) edgeById(id string) (*types.Edge, error) {
-	var rel Edge
-
-	result := sql.db.Where("edge_id = ?", id).First(&rel)
-	if result.Error != nil {
-		return nil, result.Error
+// DeleteEdge removes an edge in the database by its ID.
+// It takes a string representing the edge ID and removes the corresponding edge from the database.
+// Returns an error if the edge is not found.
+func (sql *sqlRepository) DeleteEdge(id string) error {
+	relId, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return err
 	}
-	return toEdge(rel), nil
+	return sql.deleteEdges([]uint64{relId})
+}
+
+// deleteEdges removes all rows in the Edges table with primary keys in the provided slice.
+func (sql *sqlRepository) deleteEdges(ids []uint64) error {
+	return sql.db.Exec("DELETE FROM edges WHERE edge_id IN ?", ids).Error
 }
 
 // toEdge converts a database Edge to a types.Edge.
@@ -217,7 +220,7 @@ func toEdge(r Edge) *types.Edge {
 		return nil
 	}
 
-	edge := &types.Edge{
+	return &types.Edge{
 		ID:        strconv.FormatUint(r.ID, 10),
 		CreatedAt: r.CreatedAt,
 		LastSeen:  r.LastSeen,
@@ -231,7 +234,6 @@ func toEdge(r Edge) *types.Edge {
 			// Not joining to Asset to get Content
 		},
 	}
-	return edge
 }
 
 // toEdges converts a slice of database Edges to a slice of types.Edge structs.

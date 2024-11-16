@@ -394,16 +394,6 @@ func (m *mockAssetDB) UpdateEntityLastSeen(id string) error {
 	return args.Error(0)
 }
 
-func (m *mockAssetDB) DeleteEntity(id string) error {
-	args := m.Called(id)
-	return args.Error(0)
-}
-
-func (m *mockAssetDB) DeleteEdge(id string) error {
-	args := m.Called(id)
-	return args.Error(0)
-}
-
 func (m *mockAssetDB) FindEntityById(id string) (*types.Entity, error) {
 	args := m.Called(id)
 	return args.Get(0).(*types.Entity), args.Error(1)
@@ -419,8 +409,18 @@ func (m *mockAssetDB) FindEntitiesByType(atype oam.AssetType, since time.Time) (
 	return args.Get(0).([]*types.Entity), args.Error(1)
 }
 
+func (m *mockAssetDB) DeleteEntity(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
 func (m *mockAssetDB) Link(edge *types.Edge) (*types.Edge, error) {
 	args := m.Called(edge)
+	return args.Get(0).(*types.Edge), args.Error(1)
+}
+
+func (m *mockAssetDB) FindEdgeById(id string) (*types.Edge, error) {
+	args := m.Called(id)
 	return args.Get(0).(*types.Edge), args.Error(1)
 }
 
@@ -432,6 +432,11 @@ func (m *mockAssetDB) IncomingEdges(asset *types.Entity, since time.Time, labels
 func (m *mockAssetDB) OutgoingEdges(asset *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	args := m.Called(asset, since, labels)
 	return args.Get(0).([]*types.Edge), args.Error(1)
+}
+
+func (m *mockAssetDB) DeleteEdge(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
 }
 
 func (m *mockAssetDB) CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error) {

@@ -54,8 +54,8 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Propert
 	}
 
 	result := sql.db.Save(&tag)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	return &types.EntityTag{
@@ -70,8 +70,8 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Propert
 // UpdateEntityTagLastSeen performs an update on the entity tag.
 func (sql *sqlRepository) UpdateEntityTagLastSeen(id string) error {
 	result := sql.db.Exec("UPDATE entity_tags SET last_seen = current_timestamp WHERE tag_id = ?", id)
-	if result.Error != nil {
-		return result.Error
+	if err := result.Error; err != nil {
+		return err
 	}
 	return nil
 }
@@ -87,8 +87,8 @@ func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error)
 
 	tag := EntityTag{ID: tagId}
 	result := sql.db.First(&tag)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	data, err := tag.Parse()
@@ -170,8 +170,8 @@ func (sql *sqlRepository) DeleteEntityTag(id string) error {
 
 	tag := EntityTag{ID: tagId}
 	result := sql.db.Delete(&tag)
-	if result.Error != nil {
-		return result.Error
+	if err := result.Error; err != nil {
+		return err
 	}
 	return nil
 }
@@ -217,8 +217,8 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*t
 	}
 
 	result := sql.db.Save(&tag)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	return &types.EdgeTag{
@@ -233,8 +233,8 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*t
 // UpdateEdgeTagLastSeen performs an update on the edge tag.
 func (sql *sqlRepository) UpdateEdgeTagLastSeen(id string) error {
 	result := sql.db.Exec("UPDATE edge_tags SET last_seen = current_timestamp WHERE tag_id = ?", id)
-	if result.Error != nil {
-		return result.Error
+	if err := result.Error; err != nil {
+		return err
 	}
 	return nil
 }
@@ -250,8 +250,8 @@ func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 
 	tag := EdgeTag{ID: tagId}
 	result := sql.db.First(&tag)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	data, err := tag.Parse()
@@ -259,7 +259,7 @@ func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 		return nil, err
 	}
 
-	edge, err := sql.edgeById(strconv.FormatUint(tag.EdgeID, 10))
+	edge, err := sql.FindEdgeById(strconv.FormatUint(tag.EdgeID, 10))
 	if err != nil {
 		return nil, err
 	}
@@ -338,8 +338,8 @@ func (sql *sqlRepository) DeleteEdgeTag(id string) error {
 
 	tag := EdgeTag{ID: tagId}
 	result := sql.db.Delete(&tag)
-	if result.Error != nil {
-		return result.Error
+	if err := result.Error; err != nil {
+		return err
 	}
 	return nil
 }

@@ -21,13 +21,14 @@ type Repository interface {
 	CreateEntity(asset oam.Asset) (*types.Entity, error)
 	UpdateEntityLastSeen(id string) error
 	DeleteEntity(id string) error
-	DeleteEdge(id string) error
 	FindEntityById(id string) (*types.Entity, error)
 	FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	Link(edge *types.Edge) (*types.Edge, error)
+	FindEdgeById(id string) (*types.Edge, error)
 	IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
 	OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
+	DeleteEdge(id string) error
 	CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error)
 	FindEntityTagById(id string) (*types.EntityTag, error)
 	GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error)
