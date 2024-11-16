@@ -259,12 +259,17 @@ func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 		return nil, err
 	}
 
+	edge, err := sql.edgeById(strconv.FormatUint(tag.EdgeID, 10))
+	if err != nil {
+		return nil, err
+	}
+
 	return &types.EdgeTag{
 		ID:        strconv.FormatUint(tag.ID, 10),
 		CreatedAt: tag.CreatedAt,
 		LastSeen:  tag.LastSeen,
 		Property:  data,
-		Edge:      &types.Edge{ID: strconv.FormatUint(tag.EdgeID, 10)},
+		Edge:      edge,
 	}, nil
 }
 
