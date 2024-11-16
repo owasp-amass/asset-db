@@ -7,7 +7,7 @@ package sqlrepo
 import (
 	"errors"
 	"fmt"
-	"log"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -88,11 +88,10 @@ func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge) (*types.Edge, bool) 
 
 	if outs, err := sql.OutgoingEdges(edge.FromEntity, time.Time{}, edge.Relation.Label()); err == nil {
 		for _, out := range outs {
-			if edge.ToEntity.ID == out.ToEntity.ID {
+			if edge.ToEntity.ID == out.ToEntity.ID && reflect.DeepEqual(edge.Relation, out.Relation) {
 				_ = sql.edgeSeen(out)
 				e, err = sql.edgeById(out.ID)
 				if err != nil {
-					log.Println("[ERROR] failed when re-retrieving the edge", err)
 					return nil, false
 				}
 				dup = true
