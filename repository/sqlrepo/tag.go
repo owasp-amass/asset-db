@@ -14,30 +14,32 @@ import (
 )
 
 // CreateEntityTag creates a new entity tag in the database.
-// It takes an oam.Property as input and persists it in the database.
-// The entity tag is serialized to JSON and stored in the Content field of the EntityTag struct.
+// It takes an EntityTag as input and persists it in the database.
+// The property is serialized to JSON and stored in the Content field of the EntityTag struct.
 // Returns the created entity tag as a types.EntityTag or an error if the creation fails.
-func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
+func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*types.EntityTag, error) {
 	entityid, err := strconv.ParseUint(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	jsonContent, err := prop.JSON()
+	jsonContent, err := input.Property.JSON()
 	if err != nil {
 		return nil, err
 	}
 
 	tag := EntityTag{
-		Type:     string(prop.PropertyType()),
-		Content:  jsonContent,
-		EntityID: entityid,
+		CreatedAt: input.CreatedAt,
+		LastSeen:  input.LastSeen,
+		Type:      string(input.Property.PropertyType()),
+		Content:   jsonContent,
+		EntityID:  entityid,
 	}
 
 	// ensure that duplicate entity tags are not entered into the database
-	if tags, err := sql.GetEntityTags(entity, time.Time{}, prop.Name()); err == nil && len(tags) > 0 {
+	if tags, err := sql.GetEntityTags(entity, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
 		for _, t := range tags {
-			if prop.PropertyType() == t.Property.PropertyType() && prop.Value() == t.Property.Value() {
+			if input.Property.PropertyType() == t.Property.PropertyType() && input.Property.Value() == t.Property.Value() {
 				if id, err := strconv.ParseUint(t.ID, 10, 64); err == nil {
 					tag.ID = id
 					tag.CreatedAt = t.CreatedAt
@@ -62,9 +64,17 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, prop oam.Propert
 		ID:        strconv.FormatUint(tag.ID, 10),
 		CreatedAt: tag.CreatedAt,
 		LastSeen:  tag.LastSeen,
-		Property:  prop,
+		Property:  input.Property,
 		Entity:    entity,
 	}, nil
+}
+
+// CreateEntityProperty creates a new entity tag in the database.
+// It takes an oam.Property as input and persists it in the database.
+// The property is serialized to JSON and stored in the Content field of the EntityTag struct.
+// Returns the created entity tag as a types.EntityTag or an error if the creation fails.
+func (sql *sqlRepository) CreateEntityProperty(entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
+	return sql.CreateEntityTag(entity, &types.EntityTag{Property: prop})
 }
 
 // UpdateEntityTagLastSeen performs an update on the entity tag.
@@ -177,30 +187,32 @@ func (sql *sqlRepository) DeleteEntityTag(id string) error {
 }
 
 // CreateEdgeTag creates a new edge tag in the database.
-// It takes an oam.Property as input and persists it in the database.
-// The edge tag is serialized to JSON and stored in the Content field of the EdgeTag struct.
+// It takes an EdgeTag as input and persists it in the database.
+// The property is serialized to JSON and stored in the Content field of the EdgeTag struct.
 // Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
-func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
+func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.EdgeTag, error) {
 	edgeid, err := strconv.ParseUint(edge.ID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	jsonContent, err := prop.JSON()
+	jsonContent, err := input.Property.JSON()
 	if err != nil {
 		return nil, err
 	}
 
 	tag := EdgeTag{
-		Type:    string(prop.PropertyType()),
-		Content: jsonContent,
-		EdgeID:  edgeid,
+		CreatedAt: input.CreatedAt,
+		LastSeen:  input.LastSeen,
+		Type:      string(input.Property.PropertyType()),
+		Content:   jsonContent,
+		EdgeID:    edgeid,
 	}
 
 	// ensure that duplicate edge tags are not entered into the database
-	if tags, err := sql.GetEdgeTags(edge, time.Time{}, prop.Name()); err == nil && len(tags) > 0 {
+	if tags, err := sql.GetEdgeTags(edge, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
 		for _, t := range tags {
-			if prop.PropertyType() == t.Property.PropertyType() && prop.Value() == t.Property.Value() {
+			if input.Property.PropertyType() == t.Property.PropertyType() && input.Property.Value() == t.Property.Value() {
 				if id, err := strconv.ParseUint(t.ID, 10, 64); err == nil {
 					tag.ID = id
 					tag.CreatedAt = t.CreatedAt
@@ -225,9 +237,17 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, prop oam.Property) (*t
 		ID:        strconv.FormatUint(tag.ID, 10),
 		CreatedAt: tag.CreatedAt,
 		LastSeen:  tag.LastSeen,
-		Property:  prop,
+		Property:  input.Property,
 		Edge:      edge,
 	}, nil
+}
+
+// CreateEdgeProperty creates a new edge tag in the database.
+// It takes an oam.Property as input and persists it in the database.
+// The property is serialized to JSON and stored in the Content field of the EdgeTag struct.
+// Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
+func (sql *sqlRepository) CreateEdgeProperty(edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
+	return sql.CreateEdgeTag(edge, &types.EdgeTag{Property: prop})
 }
 
 // UpdateEdgeTagLastSeen performs an update on the edge tag.

@@ -16,10 +16,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// Link creates an edge between two entities in the database.
+// CreateEdge creates an edge between two entities in the database.
 // The edge is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
-func (sql *sqlRepository) Link(edge *types.Edge) (*types.Edge, error) {
+func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	if edge == nil || edge.Relation == nil || edge.FromEntity == nil ||
 		edge.FromEntity.Asset == nil || edge.ToEntity == nil || edge.ToEntity.Asset == nil {
 		return nil, errors.New("failed input validation checks")
@@ -52,6 +52,8 @@ func (sql *sqlRepository) Link(edge *types.Edge) (*types.Edge, error) {
 	}
 
 	r := Edge{
+		CreatedAt:    edge.CreatedAt,
+		LastSeen:     edge.LastSeen,
 		Type:         string(edge.Relation.RelationType()),
 		Content:      jsonContent,
 		FromEntityID: fromEntityId,

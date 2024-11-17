@@ -276,6 +276,11 @@ func parseProperty(ptype string, content datatypes.JSON) (oam.Property, error) {
 
 		err = json.Unmarshal(content, &sp)
 		prop = &sp
+	case string(oam.SourceProperty):
+		var sp property.SourceProperty
+
+		err = json.Unmarshal(content, &sp)
+		prop = &sp
 	case string(oam.VulnProperty):
 		var vp property.VulnProperty
 

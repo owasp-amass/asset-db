@@ -15,24 +15,26 @@ import (
 )
 
 // CreateEntity creates a new entity in the database.
-// It takes an oam.Asset as input and persists it in the database.
-// The entity is serialized to JSON and stored in the Content field of the Entity struct.
+// It takes an Entity as input and persists it in the database.
+// The asset is serialized to JSON and stored in the Content field of the Entity struct.
 // Returns the created entity as a types.Entity or an error if the creation fails.
-func (sql *sqlRepository) CreateEntity(assetData oam.Asset) (*types.Entity, error) {
-	jsonContent, err := assetData.JSON()
+func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, error) {
+	jsonContent, err := input.Asset.JSON()
 	if err != nil {
 		return nil, err
 	}
 
 	entity := Entity{
-		Type:    string(assetData.AssetType()),
-		Content: jsonContent,
+		CreatedAt: input.CreatedAt,
+		LastSeen:  input.LastSeen,
+		Type:      string(input.Asset.AssetType()),
+		Content:   jsonContent,
 	}
 
 	// ensure that duplicate entities are not entered into the database
-	if entities, err := sql.FindEntityByContent(assetData, time.Time{}); err == nil && len(entities) > 0 {
+	if entities, err := sql.FindEntityByContent(input.Asset, time.Time{}); err == nil && len(entities) > 0 {
 		for _, e := range entities {
-			if assetData.AssetType() == e.Asset.AssetType() {
+			if input.Asset.AssetType() == e.Asset.AssetType() {
 				if id, err := strconv.ParseUint(e.ID, 10, 64); err == nil {
 					entity.ID = id
 					entity.CreatedAt = e.CreatedAt
@@ -49,23 +51,31 @@ func (sql *sqlRepository) CreateEntity(assetData oam.Asset) (*types.Entity, erro
 	}
 
 	result := sql.db.Save(&entity)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	return &types.Entity{
 		ID:        strconv.FormatUint(entity.ID, 10),
 		CreatedAt: entity.CreatedAt,
 		LastSeen:  entity.LastSeen,
-		Asset:     assetData,
+		Asset:     input.Asset,
 	}, nil
+}
+
+// CreateAsset creates a new entity in the database.
+// It takes an oam.Asset as input and persists it in the database.
+// The asset is serialized to JSON and stored in the Content field of the Entity struct.
+// Returns the created entity as a types.Entity or an error if the creation fails.
+func (sql *sqlRepository) CreateAsset(asset oam.Asset) (*types.Entity, error) {
+	return sql.CreateEntity(&types.Entity{Asset: asset})
 }
 
 // UpdateEntityLastSeen performs an update on the entity.
 func (sql *sqlRepository) UpdateEntityLastSeen(id string) error {
 	result := sql.db.Exec("UPDATE entities SET last_seen = current_timestamp WHERE entity_id = ?", id)
-	if result.Error != nil {
-		return result.Error
+	if err := result.Error; err != nil {
+		return err
 	}
 	return nil
 }
@@ -81,8 +91,8 @@ func (sql *sqlRepository) DeleteEntity(id string) error {
 
 	entity := Entity{ID: entityId}
 	result := sql.db.Delete(&entity)
-	if result.Error != nil {
-		return result.Error
+	if err := result.Error; err != nil {
+		return err
 	}
 	return nil
 }
@@ -95,20 +105,21 @@ func (sql *sqlRepository) DeleteEntity(id string) error {
 func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Time) ([]*types.Entity, error) {
 	jsonContent, err := assetData.JSON()
 	if err != nil {
-		return []*types.Entity{}, err
+		return nil, err
 	}
 
 	entity := Entity{
 		Type:    string(assetData.AssetType()),
 		Content: jsonContent,
 	}
+
 	if !since.IsZero() {
 		entity.LastSeen = since
 	}
 
 	jsonQuery, err := entity.JSONQuery()
 	if err != nil {
-		return []*types.Entity{}, err
+		return nil, err
 	}
 
 	var entities []Entity
@@ -118,15 +129,15 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 	} else {
 		result = sql.db.Where("etype = ? AND last_seen >= ?", entity.Type, since.UTC()).Find(&entities, jsonQuery)
 	}
-	if result.Error != nil {
-		return []*types.Entity{}, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	var storedEntities []*types.Entity
 	for _, e := range entities {
 		assetData, err := e.Parse()
 		if err != nil {
-			return []*types.Entity{}, err
+			return nil, err
 		}
 
 		storedEntities = append(storedEntities, &types.Entity{
@@ -151,8 +162,8 @@ func (sql *sqlRepository) FindEntityById(id string) (*types.Entity, error) {
 
 	entity := Entity{ID: entityId}
 	result := sql.db.First(&entity)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	assetData, err := entity.Parse()
@@ -181,8 +192,8 @@ func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Tim
 	} else {
 		result = sql.db.Where("etype = ? AND last_seen >= ?", atype, since.UTC()).Find(&entities)
 	}
-	if result.Error != nil {
-		return []*types.Entity{}, result.Error
+	if err := result.Error; err != nil {
+		return nil, err
 	}
 
 	var results []*types.Entity
@@ -198,7 +209,7 @@ func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Tim
 	}
 
 	if len(results) == 0 {
-		return []*types.Entity{}, errors.New("no entities of the specified type")
+		return nil, errors.New("no entities of the specified type")
 	}
 	return results, nil
 }
