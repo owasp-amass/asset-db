@@ -21,22 +21,17 @@ type AssetDB struct {
 // If the edge is provided, the entity is created and linked to the source entity using the specified edge.
 // It returns the newly created entity and an error, if any.
 func (as *AssetDB) Create(edge *types.Edge, asset oam.Asset) (*types.Entity, error) {
-	e, err := as.Repo.CreateEntity(asset)
+	e, err := as.Repo.CreateAsset(asset)
 	if err != nil || edge == nil || edge.FromEntity == nil || edge.Relation == nil {
 		return e, err
 	}
 
 	edge.ToEntity = e
-	_, err = as.Repo.Link(edge)
+	_, err = as.Repo.CreateEdge(edge)
 	if err != nil {
 		return nil, err
 	}
 	return e, nil
-}
-
-// UpdateEntityLastSeen updates the entity last seen field to the current time by its ID.
-func (as *AssetDB) UpdateEntityLastSeen(id string) error {
-	return as.Repo.UpdateEntityLastSeen(id)
 }
 
 // DeleteEntity removes an entity in the database by its ID.
@@ -69,11 +64,11 @@ func (as *AssetDB) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*
 	return as.Repo.FindEntitiesByType(atype, since)
 }
 
-// Link creates an edge between two entities in the database.
+// CreateEdge creates an edge between two entities in the database.
 // The link is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
-func (as *AssetDB) Link(edge *types.Edge) (*types.Edge, error) {
-	return as.Repo.Link(edge)
+func (as *AssetDB) CreateEdge(edge *types.Edge) (*types.Edge, error) {
+	return as.Repo.CreateEdge(edge)
 }
 
 // IncomingEdges finds all edges pointing to the entity for the specified labels, if any.
@@ -90,12 +85,12 @@ func (as *AssetDB) OutgoingEdges(entity *types.Entity, since time.Time, labels .
 	return as.Repo.OutgoingEdges(entity, since, labels...)
 }
 
-// CreateEntityTag creates a new entity tag in the database.
+// CreateEntityProperty creates a new entity tag in the database.
 // It takes an oam.Property as input and persists it in the database.
 // The entity tag is serialized to JSON and stored in the Content field of the EntityTag struct.
 // Returns the created entity tag as a types.EntityTag or an error if the creation fails.
-func (as *AssetDB) CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
-	return as.Repo.CreateEntityTag(entity, property)
+func (as *AssetDB) CreateEntityProperty(entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
+	return as.Repo.CreateEntityProperty(entity, property)
 }
 
 // GetEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
@@ -112,12 +107,12 @@ func (as *AssetDB) DeleteEntityTag(id string) error {
 	return as.Repo.DeleteEntityTag(id)
 }
 
-// CreateEdgeTag creates a new edge tag in the database.
+// CreateEdgeProperty creates a new edge tag in the database.
 // It takes an oam.Property as input and persists it in the database.
 // The edge tag is serialized to JSON and stored in the Content field of the EdgeTag struct.
 // Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
-func (as *AssetDB) CreateEdgeTag(edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
-	return as.Repo.CreateEdgeTag(edge, property)
+func (as *AssetDB) CreateEdgeProperty(edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
+	return as.Repo.CreateEdgeProperty(edge, property)
 }
 
 // GetEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.

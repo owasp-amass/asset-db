@@ -3,14 +3,14 @@ module github.com/owasp-amass/asset-db
 go 1.23.1
 
 require (
-	github.com/caffix/stringset v0.2.0
+	github.com/caffix/queue v0.3.1
 	github.com/glebarez/sqlite v1.11.0
 	github.com/owasp-amass/open-asset-model v0.12.0
 	github.com/rubenv/sql-migrate v1.7.0
 	github.com/stretchr/testify v1.9.0
 	gorm.io/datatypes v1.2.4
 	gorm.io/driver/postgres v1.5.9
-	gorm.io/driver/sqlite v1.5.4
+	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.12
 )
 
@@ -29,7 +29,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-sqlite3 v1.14.19 // indirect
+	github.com/mattn/go-sqlite3 v1.14.24 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -41,8 +41,8 @@ require (
 	golang.org/x/text v0.20.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
-	modernc.org/libc v1.61.0 // indirect
+	modernc.org/libc v1.61.1 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
-	modernc.org/sqlite v1.33.1 // indirect
+	modernc.org/sqlite v1.34.1 // indirect
 )

@@ -52,12 +52,16 @@ func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	}
 
 	r := Edge{
-		CreatedAt:    edge.CreatedAt,
-		LastSeen:     edge.LastSeen,
 		Type:         string(edge.Relation.RelationType()),
 		Content:      jsonContent,
 		FromEntityID: fromEntityId,
 		ToEntityID:   toEntityId,
+	}
+	if !edge.CreatedAt.IsZero() {
+		r.CreatedAt = edge.CreatedAt.UTC()
+	}
+	if !edge.LastSeen.IsZero() {
+		r.UpdatedAt = edge.LastSeen.UTC()
 	}
 
 	result := sql.db.Create(&r)
@@ -94,10 +98,10 @@ func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge) (*types.Edge, bool) 
 func (sql *sqlRepository) edgeSeen(rel *types.Edge) error {
 	id, err := strconv.ParseInt(rel.ID, 10, 64)
 	if err != nil {
-		return fmt.Errorf("failed to update last seen for ID %s could not parse id; err: %w", rel.ID, err)
+		return fmt.Errorf("failed to update updated_at for ID %s could not parse id; err: %w", rel.ID, err)
 	}
 
-	result := sql.db.Exec("UPDATE edges SET last_seen = current_timestamp WHERE edge_id = ?", id)
+	result := sql.db.Exec("UPDATE edges SET updated_at = current_timestamp WHERE edge_id = ?", id)
 	if err := result.Error; err != nil {
 		return err
 	}
@@ -130,7 +134,7 @@ func (sql *sqlRepository) IncomingEdges(entity *types.Entity, since time.Time, l
 	if since.IsZero() {
 		result = sql.db.Where("to_entity_id = ?", entityId).Find(&edges)
 	} else {
-		result = sql.db.Where("to_entity_id = ? AND last_seen >= ?", entityId, since.UTC()).Find(&edges)
+		result = sql.db.Where("to_entity_id = ? AND updated_at >= ?", entityId, since.UTC()).Find(&edges)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -171,7 +175,7 @@ func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 	if since.IsZero() {
 		result = sql.db.Where("from_entity_id = ?", entityId).Find(&edges)
 	} else {
-		result = sql.db.Where("from_entity_id = ? AND last_seen >= ?", entityId, since.UTC()).Find(&edges)
+		result = sql.db.Where("from_entity_id = ? AND updated_at >= ?", entityId, since.UTC()).Find(&edges)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -224,8 +228,8 @@ func toEdge(r Edge) *types.Edge {
 
 	return &types.Edge{
 		ID:        strconv.FormatUint(r.ID, 10),
-		CreatedAt: r.CreatedAt,
-		LastSeen:  r.LastSeen,
+		CreatedAt: r.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  r.UpdatedAt.In(time.UTC).Local(),
 		Relation:  rel,
 		FromEntity: &types.Entity{
 			ID: strconv.FormatUint(r.FromEntityID, 10),

@@ -176,13 +176,13 @@ func TestMain(m *testing.M) {
 func TestLastSeenUpdates(t *testing.T) {
 	ip, _ := netip.ParseAddr("45.73.25.1")
 	asset := &network.IPAddress{Address: ip, Type: "IPv4"}
-	a1, err := store.CreateEntity(asset)
+	a1, err := store.CreateAsset(asset)
 	assert.NoError(t, err)
 
 	// Nanoseconds are truncated by the database, so we need to sleep for a bit.
 	time.Sleep(1000 * time.Millisecond)
 
-	a2, err := store.CreateEntity(asset)
+	a2, err := store.CreateAsset(asset)
 	assert.NoError(t, err)
 	assert.Equal(t, a1.ID, a2.ID)
 	assert.Equal(t, a1.CreatedAt, a2.CreatedAt)
@@ -239,7 +239,7 @@ func TestRepository(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			sourceEntity, err := store.CreateEntity(tc.sourceAsset)
+			sourceEntity, err := store.CreateAsset(tc.sourceAsset)
 			assert.NoError(t, err)
 			assert.NotEqual(t, sourceEntity, nil)
 
@@ -298,7 +298,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find entity by type: did not receive entity %s", sourceEntity.Asset)
 			}
 
-			destinationEntity, err := store.CreateEntity(tc.destinationAsset)
+			destinationEntity, err := store.CreateAsset(tc.destinationAsset)
 			assert.NoError(t, err)
 			assert.NotEqual(t, destinationEntity, nil)
 
@@ -308,7 +308,7 @@ func TestRepository(t *testing.T) {
 				ToEntity:   destinationEntity,
 			}
 
-			e, err := store.Link(edge)
+			e, err := store.CreateEdge(edge)
 			assert.NoError(t, err)
 			assert.NotEqual(t, e, nil)
 

@@ -29,7 +29,7 @@ import (
 type Entity struct {
 	ID        uint64    `gorm:"primaryKey;column:entity_id"`
 	CreatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:created_at"`
-	LastSeen  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
+	UpdatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:updated_at"`
 	Type      string    `gorm:"column:etype"`
 	Content   datatypes.JSON
 }
@@ -38,7 +38,7 @@ type Entity struct {
 type EntityTag struct {
 	ID        uint64    `gorm:"primaryKey;column:tag_id"`
 	CreatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:created_at"`
-	LastSeen  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
+	UpdatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:updated_at"`
 	Type      string    `gorm:"column:ttype"`
 	Content   datatypes.JSON
 	EntityID  uint64 `gorm:"column:entity_id"`
@@ -48,7 +48,7 @@ type EntityTag struct {
 type Edge struct {
 	ID           uint64    `gorm:"primaryKey;column:edge_id"`
 	CreatedAt    time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:created_at"`
-	LastSeen     time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
+	UpdatedAt    time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:updated_at"`
 	Type         string    `gorm:"column:etype"`
 	Content      datatypes.JSON
 	FromEntityID uint64 `gorm:"column:from_entity_id"`
@@ -61,7 +61,7 @@ type Edge struct {
 type EdgeTag struct {
 	ID        uint64    `gorm:"primaryKey;column:tag_id"`
 	CreatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:created_at"`
-	LastSeen  time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:last_seen"`
+	UpdatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP();column:updated_at"`
 	Type      string    `gorm:"column:ttype"`
 	Content   datatypes.JSON
 	EdgeID    uint64 `gorm:"column:edge_id"`

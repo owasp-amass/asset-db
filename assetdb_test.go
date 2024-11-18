@@ -64,7 +64,7 @@ func TestAssetDB(t *testing.T) {
 				}
 
 				if tc.expectedError == nil {
-					mockAssetDB.On("CreateEntity", tc.discovered).Return(tc.expected, tc.expectedError)
+					mockAssetDB.On("CreateAsset", tc.discovered).Return(tc.expected, tc.expectedError)
 				}
 
 				e := &types.Edge{
@@ -74,7 +74,7 @@ func TestAssetDB(t *testing.T) {
 				}
 
 				if tc.source != nil && tc.relation != "" {
-					mockAssetDB.On("Link", e).Return(&types.Edge{}, nil)
+					mockAssetDB.On("CreateEdge", e).Return(&types.Edge{}, nil)
 				}
 
 				result, err := adb.Create(e, tc.discovered)
@@ -384,14 +384,14 @@ func (m *mockAssetDB) GetDBType() string {
 	return args.String(0)
 }
 
-func (m *mockAssetDB) CreateEntity(asset oam.Asset) (*types.Entity, error) {
-	args := m.Called(asset)
+func (m *mockAssetDB) CreateEntity(entity *types.Entity) (*types.Entity, error) {
+	args := m.Called(entity)
 	return args.Get(0).(*types.Entity), args.Error(1)
 }
 
-func (m *mockAssetDB) UpdateEntityLastSeen(id string) error {
-	args := m.Called(id)
-	return args.Error(0)
+func (m *mockAssetDB) CreateAsset(asset oam.Asset) (*types.Entity, error) {
+	args := m.Called(asset)
+	return args.Get(0).(*types.Entity), args.Error(1)
 }
 
 func (m *mockAssetDB) FindEntityById(id string) (*types.Entity, error) {
@@ -414,7 +414,7 @@ func (m *mockAssetDB) DeleteEntity(id string) error {
 	return args.Error(0)
 }
 
-func (m *mockAssetDB) Link(edge *types.Edge) (*types.Edge, error) {
+func (m *mockAssetDB) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	args := m.Called(edge)
 	return args.Get(0).(*types.Edge), args.Error(1)
 }
@@ -439,7 +439,12 @@ func (m *mockAssetDB) DeleteEdge(id string) error {
 	return args.Error(0)
 }
 
-func (m *mockAssetDB) CreateEntityTag(entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
+func (m *mockAssetDB) CreateEntityTag(entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error) {
+	args := m.Called(entity, tag)
+	return args.Get(0).(*types.EntityTag), args.Error(1)
+}
+
+func (m *mockAssetDB) CreateEntityProperty(entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
 	args := m.Called(entity, property)
 	return args.Get(0).(*types.EntityTag), args.Error(1)
 }
@@ -459,7 +464,12 @@ func (m *mockAssetDB) DeleteEntityTag(id string) error {
 	return args.Error(0)
 }
 
-func (m *mockAssetDB) CreateEdgeTag(edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
+func (m *mockAssetDB) CreateEdgeTag(edge *types.Edge, tag *types.EdgeTag) (*types.EdgeTag, error) {
+	args := m.Called(edge, tag)
+	return args.Get(0).(*types.EdgeTag), args.Error(1)
+}
+
+func (m *mockAssetDB) CreateEdgeProperty(edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
 	args := m.Called(edge, property)
 	return args.Get(0).(*types.EdgeTag), args.Error(1)
 }

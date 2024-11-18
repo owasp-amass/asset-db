@@ -25,28 +25,25 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 	}
 
 	entity := Entity{
-		CreatedAt: input.CreatedAt,
-		LastSeen:  input.LastSeen,
-		Type:      string(input.Asset.AssetType()),
-		Content:   jsonContent,
+		Type:    string(input.Asset.AssetType()),
+		Content: jsonContent,
 	}
 
 	// ensure that duplicate entities are not entered into the database
-	if entities, err := sql.FindEntityByContent(input.Asset, time.Time{}); err == nil && len(entities) > 0 {
-		for _, e := range entities {
-			if input.Asset.AssetType() == e.Asset.AssetType() {
-				if id, err := strconv.ParseUint(e.ID, 10, 64); err == nil {
-					entity.ID = id
-					entity.CreatedAt = e.CreatedAt
+	if entities, err := sql.FindEntityByContent(input.Asset, time.Time{}); err == nil && len(entities) == 1 {
+		e := entities[0]
 
-					if sql.UpdateEntityLastSeen(e.ID) == nil {
-						if f, err := sql.FindEntityById(e.ID); err == nil && f != nil {
-							entity.LastSeen = f.LastSeen
-							break
-						}
-					}
-				}
+		if input.Asset.AssetType() == e.Asset.AssetType() {
+			if id, err := strconv.ParseUint(e.ID, 10, 64); err == nil {
+				entity.ID = id
 			}
+		}
+	} else {
+		if !input.CreatedAt.IsZero() {
+			entity.CreatedAt = input.CreatedAt.UTC()
+		}
+		if !input.LastSeen.IsZero() {
+			entity.UpdatedAt = input.LastSeen.UTC()
 		}
 	}
 
@@ -57,8 +54,8 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 
 	return &types.Entity{
 		ID:        strconv.FormatUint(entity.ID, 10),
-		CreatedAt: entity.CreatedAt,
-		LastSeen:  entity.LastSeen,
+		CreatedAt: entity.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  entity.UpdatedAt.In(time.UTC).Local(),
 		Asset:     input.Asset,
 	}, nil
 }
@@ -73,7 +70,7 @@ func (sql *sqlRepository) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 
 // UpdateEntityLastSeen performs an update on the entity.
 func (sql *sqlRepository) UpdateEntityLastSeen(id string) error {
-	result := sql.db.Exec("UPDATE entities SET last_seen = current_timestamp WHERE entity_id = ?", id)
+	result := sql.db.Exec("UPDATE entities SET updated_at = current_timestamp WHERE entity_id = ?", id)
 	if err := result.Error; err != nil {
 		return err
 	}
@@ -113,10 +110,6 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 		Content: jsonContent,
 	}
 
-	if !since.IsZero() {
-		entity.LastSeen = since
-	}
-
 	jsonQuery, err := entity.JSONQuery()
 	if err != nil {
 		return nil, err
@@ -127,7 +120,7 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 	if since.IsZero() {
 		result = sql.db.Where("etype = ?", entity.Type).Find(&entities, jsonQuery)
 	} else {
-		result = sql.db.Where("etype = ? AND last_seen >= ?", entity.Type, since.UTC()).Find(&entities, jsonQuery)
+		result = sql.db.Where("etype = ? AND updated_at >= ?", entity.Type, since.UTC()).Find(&entities, jsonQuery)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -142,8 +135,8 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 
 		storedEntities = append(storedEntities, &types.Entity{
 			ID:        strconv.FormatUint(e.ID, 10),
-			CreatedAt: e.CreatedAt,
-			LastSeen:  e.LastSeen,
+			CreatedAt: e.CreatedAt.In(time.UTC).Local(),
+			LastSeen:  e.UpdatedAt.In(time.UTC).Local(),
 			Asset:     assetData,
 		})
 	}
@@ -173,8 +166,8 @@ func (sql *sqlRepository) FindEntityById(id string) (*types.Entity, error) {
 
 	return &types.Entity{
 		ID:        strconv.FormatUint(entity.ID, 10),
-		CreatedAt: entity.CreatedAt,
-		LastSeen:  entity.LastSeen,
+		CreatedAt: entity.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  entity.UpdatedAt.In(time.UTC).Local(),
 		Asset:     assetData,
 	}, nil
 }
@@ -190,7 +183,7 @@ func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Tim
 	if since.IsZero() {
 		result = sql.db.Where("etype = ?", atype).Find(&entities)
 	} else {
-		result = sql.db.Where("etype = ? AND last_seen >= ?", atype, since.UTC()).Find(&entities)
+		result = sql.db.Where("etype = ? AND updated_at >= ?", atype, since.UTC()).Find(&entities)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -201,8 +194,8 @@ func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Tim
 		if f, err := e.Parse(); err == nil {
 			results = append(results, &types.Entity{
 				ID:        strconv.FormatUint(e.ID, 10),
-				CreatedAt: e.CreatedAt,
-				LastSeen:  e.LastSeen,
+				CreatedAt: e.CreatedAt.In(time.UTC).Local(),
+				LastSeen:  e.UpdatedAt.In(time.UTC).Local(),
 				Asset:     f,
 			})
 		}

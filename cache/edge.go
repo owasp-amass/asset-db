@@ -11,18 +11,18 @@ import (
 	"github.com/owasp-amass/asset-db/types"
 )
 
-// Link implements the Repository interface.
-func (c *Cache) Link(edge *types.Edge) (*types.Edge, error) {
+// CreateEdge implements the Repository interface.
+func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	e, err := c.cache.Link(edge)
+	e, err := c.cache.CreateEdge(edge)
 	if err != nil {
 		return nil, err
 	}
 
 	c.appendToDBQueue(func() {
-		_, _ = c.db.Link(edge)
+		_, _ = c.db.CreateEdge(edge)
 	})
 
 	return e, nil
@@ -80,14 +80,14 @@ func (c *Cache) DeleteEdge(id string) error {
 			return
 		}
 
-		edges, err := c.db.OutgoingEdges(s, time.Time{}, edge.Relation.Label())
+		edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
 		if err != nil || len(edges) == 0 {
 			return
 		}
 
 		var target *types.Edge
 		for _, e := range edges {
-			if e.ID == o.ID && reflect.DeepEqual(e.Relation, o.Relation) {
+			if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
 				target = e
 				break
 			}

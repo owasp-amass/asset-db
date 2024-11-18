@@ -20,12 +20,12 @@ func TestUnfilteredRelations(t *testing.T) {
 	source := domain.FQDN{Name: "owasp.com"}
 	dest1 := domain.FQDN{Name: "www.example.owasp.org"}
 
-	sourceEntity, err := store.CreateEntity(source)
+	sourceEntity, err := store.CreateAsset(source)
 	if err != nil {
 		t.Fatalf("failed to create asset: %s", err)
 	}
 
-	dest1Entity, err := store.CreateEntity(dest1)
+	dest1Entity, err := store.CreateAsset(dest1)
 	if err != nil {
 		t.Fatalf("failed to create asset: %s", err)
 	}
@@ -46,7 +46,7 @@ func TestUnfilteredRelations(t *testing.T) {
 	ip, _ := netip.ParseAddr("192.168.1.100")
 	dest2 := network.IPAddress{Address: ip, Type: "IPv4"}
 
-	dest2Entity, err := store.CreateEntity(dest2)
+	dest2Entity, err := store.CreateAsset(dest2)
 	if err != nil {
 		t.Fatalf("failed to create asset: %s", err)
 	}
@@ -64,9 +64,9 @@ func TestUnfilteredRelations(t *testing.T) {
 		ToEntity:   dest2Entity,
 	}
 
-	_, err = store.Link(edge1)
+	_, err = store.CreateEdge(edge1)
 	assert.NoError(t, err)
-	r2Rel, err := store.Link(edge2)
+	r2Rel, err := store.CreateEdge(edge2)
 	assert.NoError(t, err)
 
 	// Outgoing relations with no filter returns all outgoing relations.
@@ -102,7 +102,7 @@ func TestUnfilteredRelations(t *testing.T) {
 	time.Sleep(1000 * time.Millisecond)
 
 	// Store a duplicate relation and validate last_seen is updated
-	rr, err := store.Link(edge2)
+	rr, err := store.CreateEdge(edge2)
 	assert.NoError(t, err)
 	assert.NotNil(t, rr)
 	if rr.LastSeen.UnixNano() <= r2Rel.LastSeen.UnixNano() {

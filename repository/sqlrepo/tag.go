@@ -29,11 +29,9 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 	}
 
 	tag := EntityTag{
-		CreatedAt: input.CreatedAt,
-		LastSeen:  input.LastSeen,
-		Type:      string(input.Property.PropertyType()),
-		Content:   jsonContent,
-		EntityID:  entityid,
+		Type:     string(input.Property.PropertyType()),
+		Content:  jsonContent,
+		EntityID: entityid,
 	}
 
 	// ensure that duplicate entity tags are not entered into the database
@@ -42,16 +40,16 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			if input.Property.PropertyType() == t.Property.PropertyType() && input.Property.Value() == t.Property.Value() {
 				if id, err := strconv.ParseUint(t.ID, 10, 64); err == nil {
 					tag.ID = id
-					tag.CreatedAt = t.CreatedAt
-
-					if sql.UpdateEntityTagLastSeen(t.ID) == nil {
-						if f, err := sql.FindEntityTagById(t.ID); err == nil && f != nil {
-							tag.LastSeen = f.LastSeen
-							break
-						}
-					}
+					break
 				}
 			}
+		}
+	} else {
+		if !input.CreatedAt.IsZero() {
+			tag.CreatedAt = input.CreatedAt.UTC()
+		}
+		if !input.LastSeen.IsZero() {
+			tag.UpdatedAt = input.LastSeen.UTC()
 		}
 	}
 
@@ -62,8 +60,8 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 
 	return &types.EntityTag{
 		ID:        strconv.FormatUint(tag.ID, 10),
-		CreatedAt: tag.CreatedAt,
-		LastSeen:  tag.LastSeen,
+		CreatedAt: tag.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  tag.UpdatedAt.In(time.UTC).Local(),
 		Property:  input.Property,
 		Entity:    entity,
 	}, nil
@@ -79,7 +77,7 @@ func (sql *sqlRepository) CreateEntityProperty(entity *types.Entity, prop oam.Pr
 
 // UpdateEntityTagLastSeen performs an update on the entity tag.
 func (sql *sqlRepository) UpdateEntityTagLastSeen(id string) error {
-	result := sql.db.Exec("UPDATE entity_tags SET last_seen = current_timestamp WHERE tag_id = ?", id)
+	result := sql.db.Exec("UPDATE entity_tags SET updated_at = current_timestamp WHERE tag_id = ?", id)
 	if err := result.Error; err != nil {
 		return err
 	}
@@ -108,8 +106,8 @@ func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error)
 
 	return &types.EntityTag{
 		ID:        strconv.FormatUint(tag.ID, 10),
-		CreatedAt: tag.CreatedAt,
-		LastSeen:  tag.LastSeen,
+		CreatedAt: tag.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  tag.UpdatedAt.In(time.UTC).Local(),
 		Property:  data,
 		Entity:    &types.Entity{ID: strconv.FormatUint(tag.EntityID, 10)},
 	}, nil
@@ -129,7 +127,7 @@ func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, n
 	if since.IsZero() {
 		result = sql.db.Where("entity_id = ?", entityId).Find(&tags)
 	} else {
-		result = sql.db.Where("entity_id = ? AND last_seen >= ?", entityId, since.UTC()).Find(&tags)
+		result = sql.db.Where("entity_id = ? AND updated_at >= ?", entityId, since.UTC()).Find(&tags)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -157,8 +155,8 @@ func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, n
 			if found {
 				results = append(results, &types.EntityTag{
 					ID:        strconv.Itoa(int(t.ID)),
-					CreatedAt: t.CreatedAt,
-					LastSeen:  t.LastSeen,
+					CreatedAt: t.CreatedAt.In(time.UTC).Local(),
+					LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
 					Property:  prop,
 					Entity:    entity,
 				})
@@ -202,11 +200,9 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 	}
 
 	tag := EdgeTag{
-		CreatedAt: input.CreatedAt,
-		LastSeen:  input.LastSeen,
-		Type:      string(input.Property.PropertyType()),
-		Content:   jsonContent,
-		EdgeID:    edgeid,
+		Type:    string(input.Property.PropertyType()),
+		Content: jsonContent,
+		EdgeID:  edgeid,
 	}
 
 	// ensure that duplicate edge tags are not entered into the database
@@ -215,16 +211,16 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			if input.Property.PropertyType() == t.Property.PropertyType() && input.Property.Value() == t.Property.Value() {
 				if id, err := strconv.ParseUint(t.ID, 10, 64); err == nil {
 					tag.ID = id
-					tag.CreatedAt = t.CreatedAt
-
-					if sql.UpdateEdgeTagLastSeen(t.ID) == nil {
-						if f, err := sql.FindEdgeTagById(t.ID); err == nil && f != nil {
-							tag.LastSeen = f.LastSeen
-							break
-						}
-					}
+					break
 				}
 			}
+		}
+	} else {
+		if !input.CreatedAt.IsZero() {
+			tag.CreatedAt = input.CreatedAt.UTC()
+		}
+		if !input.LastSeen.IsZero() {
+			tag.UpdatedAt = input.LastSeen.UTC()
 		}
 	}
 
@@ -235,8 +231,8 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 
 	return &types.EdgeTag{
 		ID:        strconv.FormatUint(tag.ID, 10),
-		CreatedAt: tag.CreatedAt,
-		LastSeen:  tag.LastSeen,
+		CreatedAt: tag.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  tag.UpdatedAt.In(time.UTC).Local(),
 		Property:  input.Property,
 		Edge:      edge,
 	}, nil
@@ -252,7 +248,7 @@ func (sql *sqlRepository) CreateEdgeProperty(edge *types.Edge, prop oam.Property
 
 // UpdateEdgeTagLastSeen performs an update on the edge tag.
 func (sql *sqlRepository) UpdateEdgeTagLastSeen(id string) error {
-	result := sql.db.Exec("UPDATE edge_tags SET last_seen = current_timestamp WHERE tag_id = ?", id)
+	result := sql.db.Exec("UPDATE edge_tags SET updated_at = current_timestamp WHERE tag_id = ?", id)
 	if err := result.Error; err != nil {
 		return err
 	}
@@ -286,8 +282,8 @@ func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 
 	return &types.EdgeTag{
 		ID:        strconv.FormatUint(tag.ID, 10),
-		CreatedAt: tag.CreatedAt,
-		LastSeen:  tag.LastSeen,
+		CreatedAt: tag.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  tag.UpdatedAt.In(time.UTC).Local(),
 		Property:  data,
 		Edge:      edge,
 	}, nil
@@ -307,7 +303,7 @@ func (sql *sqlRepository) GetEdgeTags(edge *types.Edge, since time.Time, names .
 	if since.IsZero() {
 		result = sql.db.Where("edge_id = ?", edgeId).Find(&tags)
 	} else {
-		result = sql.db.Where("edge_id = ? AND last_seen >= ?", edgeId, since.UTC()).Find(&tags)
+		result = sql.db.Where("edge_id = ? AND updated_at >= ?", edgeId, since.UTC()).Find(&tags)
 	}
 	if err := result.Error; err != nil {
 		return nil, err
@@ -335,8 +331,8 @@ func (sql *sqlRepository) GetEdgeTags(edge *types.Edge, since time.Time, names .
 			if found {
 				results = append(results, &types.EdgeTag{
 					ID:        strconv.Itoa(int(t.ID)),
-					CreatedAt: t.CreatedAt,
-					LastSeen:  t.LastSeen,
+					CreatedAt: t.CreatedAt.In(time.UTC).Local(),
+					LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
 					Property:  prop,
 					Edge:      edge,
 				})

@@ -5,14 +5,11 @@
 package cache
 
 import (
-	"errors"
 	"sync"
 	"time"
 
 	"github.com/caffix/queue"
-	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
-	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 )
 
 type Cache struct {
@@ -20,28 +17,23 @@ type Cache struct {
 	start time.Time
 	freq  time.Duration
 	done  chan struct{}
-	cdone chan struct{}
 	cache repository.Repository
 	db    repository.Repository
 	queue queue.Queue
 }
 
-func New(database repository.Repository, done chan struct{}) (*Cache, error) {
-	if db := assetdb.New(sqlrepo.SQLiteMemory, ""); db != nil {
-		c := &Cache{
-			start: time.Now(),
-			freq:  10 * time.Minute,
-			done:  done,
-			cdone: make(chan struct{}, 1),
-			cache: db.Repo,
-			db:    database,
-			queue: queue.NewQueue(),
-		}
-
-		go c.processDBCallbacks()
-		return c, nil
+func New(cache, database repository.Repository) (*Cache, error) {
+	c := &Cache{
+		start: time.Now(),
+		freq:  10 * time.Minute,
+		done:  make(chan struct{}, 1),
+		cache: cache,
+		db:    database,
+		queue: queue.NewQueue(),
 	}
-	return nil, errors.New("failed to create the cache repository")
+
+	go c.processDBCallbacks()
+	return c, nil
 }
 
 // StartTime returns the time that the cache was created.
@@ -60,7 +52,7 @@ func (c *Cache) Close() error {
 		}
 	}
 
-	close(c.cdone)
+	close(c.done)
 	for {
 		if c.queue.Empty() {
 			break
@@ -79,8 +71,6 @@ func (c *Cache) appendToDBQueue(callback func()) {
 	select {
 	case <-c.done:
 		return
-	case <-c.cdone:
-		return
 	default:
 	}
 	c.queue.Append(callback)
@@ -91,8 +81,6 @@ loop:
 	for {
 		select {
 		case <-c.done:
-			break loop
-		case <-c.cdone:
 			break loop
 		case <-c.queue.Signal():
 			element, ok := c.queue.Next()

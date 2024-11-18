@@ -12,22 +12,26 @@ import (
 )
 
 // CreateEntity implements the Repository interface.
-func (c *Cache) CreateEntity(asset oam.Asset) (*types.Entity, error) {
+func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	entity, err := c.cache.CreateEntity(asset)
+	entity, err := c.cache.CreateEntity(input)
 	if err != nil {
 		return nil, err
 	}
 
 	if tag, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found {
-		if last, err := time.Parse("2006-01-02 15:04:05", tag.Value()); err == nil && time.Now().Add(-1*c.freq).After(last) {
+		if last, err := time.Parse("2006-01-02 15:04:05", tag.Property.Value()); err == nil && time.Now().Add(-1*c.freq).After(last) {
 			_ = c.cache.DeleteEntityTag(tag.ID)
 			_ = c.createCacheEntityTag(entity, "cache_create_entity")
 
 			c.appendToDBQueue(func() {
-				_, _ = c.db.CreateEntity(asset)
+				_, _ = c.db.CreateEntity(&types.Entity{
+					CreatedAt: input.CreatedAt,
+					LastSeen:  input.LastSeen,
+					Asset:     input.Asset,
+				})
 			})
 		}
 	}
@@ -35,28 +39,28 @@ func (c *Cache) CreateEntity(asset oam.Asset) (*types.Entity, error) {
 	return entity, nil
 }
 
-// UpdateEntityLastSeen implements the Repository interface.
-func (c *Cache) UpdateEntityLastSeen(id string) error {
+// CreateAsset implements the Repository interface.
+func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	err := c.cache.UpdateEntityLastSeen(id)
+	entity, err := c.cache.CreateAsset(asset)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	entity, err := c.cache.FindEntityById(id)
-	if err != nil {
-		return nil
-	}
+	if tag, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found {
+		if last, err := time.Parse("2006-01-02 15:04:05", tag.Property.Value()); err == nil && time.Now().Add(-1*c.freq).After(last) {
+			_ = c.cache.DeleteEntityTag(tag.ID)
+			_ = c.createCacheEntityTag(entity, "cache_create_asset")
 
-	c.appendToDBQueue(func() {
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			_ = c.db.UpdateEntityLastSeen(e[0].ID)
+			c.appendToDBQueue(func() {
+				_, _ = c.db.CreateAsset(asset)
+			})
 		}
-	})
+	}
 
-	return nil
+	return entity, nil
 }
 
 // FindEntityById implements the Repository interface.
@@ -103,7 +107,11 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 
 	var results []*types.Entity
 	for _, entity := range dbentities {
-		if e, err := c.cache.CreateEntity(entity.Asset); err == nil {
+		if e, err := c.cache.CreateEntity(&types.Entity{
+			CreatedAt: entity.CreatedAt,
+			LastSeen:  entity.LastSeen,
+			Asset:     entity.Asset,
+		}); err == nil {
 			results = append(results, e)
 			if tags, err := c.cache.GetEntityTags(entity, c.start, "cache_find_entity_by_content"); err == nil && len(tags) > 0 {
 				for _, tag := range tags {
@@ -152,7 +160,11 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 
 	var results []*types.Entity
 	for _, entity := range dbentities {
-		if e, err := c.cache.CreateEntity(entity.Asset); err == nil {
+		if e, err := c.cache.CreateEntity(&types.Entity{
+			CreatedAt: entity.CreatedAt,
+			LastSeen:  entity.LastSeen,
+			Asset:     entity.Asset,
+		}); err == nil {
 			results = append(results, e)
 			if tags, err := c.cache.GetEntityTags(entity, c.start, "cache_find_entities_by_type"); err == nil && len(tags) > 0 {
 				for _, tag := range tags {

@@ -17,24 +17,24 @@ import (
 )
 
 func TestEntityTag(t *testing.T) {
-	entity, err := store.CreateEntity(&domain.FQDN{Name: "utica.edu"})
+	entity, err := store.CreateAsset(&domain.FQDN{Name: "utica.edu"})
 	assert.NoError(t, err)
 
-	now := time.Now().Truncate(time.Second).UTC()
+	now := time.Now().Truncate(time.Second)
 	prop := &property.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foo",
 	}
 
-	ct, err := store.CreateEntityTag(entity, prop)
+	ct, err := store.CreateEntityProperty(entity, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.Property.Name(), prop.PropertyName)
 	assert.Equal(t, ct.Property.Value(), prop.PropertyValue)
 	assert.Equal(t, oam.SimpleProperty, ct.Property.PropertyType())
-	if now.After(ct.CreatedAt.UTC()) {
+	if now.After(ct.CreatedAt) {
 		t.Errorf("tag.CreatedAt: %s, expected to be after: %s", ct.CreatedAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
-	if now.After(ct.LastSeen.UTC()) {
+	if now.After(ct.LastSeen) {
 		t.Errorf("tag.LastSeen: %s, expected to be after: %s", ct.LastSeen.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
 
@@ -46,7 +46,7 @@ func TestEntityTag(t *testing.T) {
 	assert.Equal(t, ct.Property.Value(), tag.Property.Value())
 
 	time.Sleep(time.Second)
-	ct2, err := store.CreateEntityTag(entity, prop)
+	ct2, err := store.CreateEntityProperty(entity, prop)
 	assert.NoError(t, err)
 	if ct2.LastSeen.UnixNano() < ct.LastSeen.UnixNano() {
 		t.Errorf("ct2.LastSeen: %s, ct.LastSeen: %s", ct2.LastSeen.Format(time.RFC3339Nano), ct.LastSeen.Format(time.RFC3339Nano))
@@ -54,7 +54,7 @@ func TestEntityTag(t *testing.T) {
 
 	time.Sleep(time.Second)
 	prop.PropertyValue = "bar"
-	ct3, err := store.CreateEntityTag(entity, prop)
+	ct3, err := store.CreateEntityProperty(entity, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct3.Property.Value(), prop.PropertyValue)
 	if ct3.CreatedAt.UnixNano() < ct2.CreatedAt.UnixNano() {
@@ -84,13 +84,13 @@ func TestEntityTag(t *testing.T) {
 }
 
 func TestEdgeTag(t *testing.T) {
-	e1, err := store.CreateEntity(&domain.FQDN{Name: "owasp.org"})
+	e1, err := store.CreateAsset(&domain.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
-	e2, err := store.CreateEntity(&domain.FQDN{Name: "www.owasp.org"})
+	e2, err := store.CreateAsset(&domain.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err)
 
-	edge, err := store.Link(&types.Edge{
+	edge, err := store.CreateEdge(&types.Edge{
 		Relation: &relation.BasicDNSRelation{
 			Name:   "dns_record",
 			Header: relation.RRHeader{RRType: 5},
@@ -100,21 +100,21 @@ func TestEdgeTag(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	now := time.Now().Truncate(time.Second).UTC()
+	now := time.Now().Truncate(time.Second)
 	prop := &property.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foo",
 	}
 
-	ct, err := store.CreateEdgeTag(edge, prop)
+	ct, err := store.CreateEdgeProperty(edge, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.Property.Name(), prop.PropertyName)
 	assert.Equal(t, ct.Property.Value(), prop.PropertyValue)
 	assert.Equal(t, oam.SimpleProperty, ct.Property.PropertyType())
-	if now.After(ct.CreatedAt.UTC()) {
+	if now.After(ct.CreatedAt) {
 		t.Errorf("tag.CreatedAt: %s, expected to be after: %s", ct.CreatedAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
-	if now.After(ct.LastSeen.UTC()) {
+	if now.After(ct.LastSeen) {
 		t.Errorf("tag.LastSeen: %s, expected to be after: %s", ct.LastSeen.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
 
@@ -126,7 +126,7 @@ func TestEdgeTag(t *testing.T) {
 	assert.Equal(t, ct.Property.Value(), tag.Property.Value())
 
 	time.Sleep(time.Second)
-	ct2, err := store.CreateEdgeTag(edge, prop)
+	ct2, err := store.CreateEdgeProperty(edge, prop)
 	assert.NoError(t, err)
 	if ct2.LastSeen.UnixNano() < ct.LastSeen.UnixNano() {
 		t.Errorf("ct2.LastSeen: %s, ct.LastSeen: %s", ct2.LastSeen.Format(time.RFC3339Nano), ct.LastSeen.Format(time.RFC3339Nano))
@@ -134,7 +134,7 @@ func TestEdgeTag(t *testing.T) {
 
 	time.Sleep(time.Second)
 	prop.PropertyValue = "bar"
-	ct3, err := store.CreateEdgeTag(edge, prop)
+	ct3, err := store.CreateEdgeProperty(edge, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct3.Property.Value(), prop.PropertyValue)
 	if ct3.CreatedAt.UnixNano() < ct2.CreatedAt.UnixNano() {
