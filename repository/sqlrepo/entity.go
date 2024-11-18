@@ -36,6 +36,8 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 		if input.Asset.AssetType() == e.Asset.AssetType() {
 			if id, err := strconv.ParseUint(e.ID, 10, 64); err == nil {
 				entity.ID = id
+				entity.CreatedAt = e.CreatedAt
+				entity.UpdatedAt = time.Now().UTC()
 			}
 		}
 	} else {

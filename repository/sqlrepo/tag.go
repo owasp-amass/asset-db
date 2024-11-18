@@ -40,6 +40,8 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			if input.Property.PropertyType() == t.Property.PropertyType() && input.Property.Value() == t.Property.Value() {
 				if id, err := strconv.ParseUint(t.ID, 10, 64); err == nil {
 					tag.ID = id
+					tag.CreatedAt = t.CreatedAt
+					tag.UpdatedAt = time.Now().UTC()
 					break
 				}
 			}
@@ -211,6 +213,8 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			if input.Property.PropertyType() == t.Property.PropertyType() && input.Property.Value() == t.Property.Value() {
 				if id, err := strconv.ParseUint(t.ID, 10, 64); err == nil {
 					tag.ID = id
+					tag.CreatedAt = t.CreatedAt
+					tag.UpdatedAt = time.Now().UTC()
 					break
 				}
 			}
