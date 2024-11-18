@@ -15,18 +15,18 @@ import (
 )
 
 func TestCreateEntity(t *testing.T) {
-	c, db, err := createTestRepositories()
+	/*c, db, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer c.Close()
-	defer db.Close()
+	defer db.Close()*/
 
-	cache, err := New(c, db)
+	c, err := New(cache, database)
 	assert.NoError(t, err)
-	defer cache.Close()
+	defer c.Close()
 
 	now := time.Now()
 	t1 := now.Add(-1 * time.Second)
-	entity, err := cache.CreateEntity(&types.Entity{
+	entity, err := c.CreateEntity(&types.Entity{
 		CreatedAt: now,
 		LastSeen:  now,
 		Asset:     &domain.FQDN{Name: "owasp.org"},
@@ -43,7 +43,7 @@ func TestCreateEntity(t *testing.T) {
 
 	time.Sleep(time.Second)
 	t2 = time.Now().Add(time.Second)
-	dbents, err := db.FindEntityByContent(entity.Asset, time.Time{})
+	dbents, err := database.FindEntityByContent(entity.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {

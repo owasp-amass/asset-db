@@ -78,6 +78,7 @@ func migrateDatabase(dbtype, dsn string) error {
 	if err != nil {
 		return err
 	}
+	defer sqlDb.Close()
 
 	_, err = migrate.Exec(sqlDb, name, migrationsSource, migrate.Up)
 	if err != nil {

@@ -51,6 +51,7 @@ func setupSqlite(dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer sqlDb.Close()
 
 	_, err = migrate.Exec(sqlDb, "sqlite3", migrationsSource, migrate.Up)
 	if err != nil {
@@ -82,6 +83,7 @@ func setupPostgres(dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer sqlDb.Close()
 
 	_, err = migrate.Exec(sqlDb, "postgres", migrationsSource, migrate.Up)
 	if err != nil {
@@ -106,6 +108,7 @@ func teardownPostgres(dsn string) {
 	if err != nil {
 		panic(err)
 	}
+	defer sqlDb.Close()
 
 	_, err = migrate.Exec(sqlDb, "postgres", migrationsSource, migrate.Down)
 	if err != nil {
