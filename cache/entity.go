@@ -21,19 +21,16 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if tag, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found {
-		if last, err := time.Parse("2006-01-02 15:04:05", tag.Property.Value()); err == nil && time.Now().Add(-1*c.freq).After(last) {
-			_ = c.cache.DeleteEntityTag(tag.ID)
-			_ = c.createCacheEntityTag(entity, "cache_create_entity")
+	if _, _, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found {
+		_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
 
-			c.appendToDBQueue(func() {
-				_, _ = c.db.CreateEntity(&types.Entity{
-					CreatedAt: input.CreatedAt,
-					LastSeen:  input.LastSeen,
-					Asset:     input.Asset,
-				})
+		c.appendToDBQueue(func() {
+			_, _ = c.db.CreateEntity(&types.Entity{
+				CreatedAt: input.CreatedAt,
+				LastSeen:  input.LastSeen,
+				Asset:     input.Asset,
 			})
-		}
+		})
 	}
 
 	return entity, nil
@@ -49,15 +46,12 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if tag, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found {
-		if last, err := time.Parse("2006-01-02 15:04:05", tag.Property.Value()); err == nil && time.Now().Add(-1*c.freq).After(last) {
-			_ = c.cache.DeleteEntityTag(tag.ID)
-			_ = c.createCacheEntityTag(entity, "cache_create_asset")
+	if _, _, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found {
+		_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
 
-			c.appendToDBQueue(func() {
-				_, _ = c.db.CreateAsset(asset)
-			})
-		}
+		c.appendToDBQueue(func() {
+			_, _ = c.db.CreateAsset(asset)
+		})
 	}
 
 	return entity, nil
@@ -80,7 +74,7 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 			c.Unlock()
 			return entities, err
 		}
-		if _, found := c.checkCacheEntityTag(entities[0], "cache_find_entity_by_content"); found {
+		if _, last, found := c.checkCacheEntityTag(entities[0], "cache_find_entity_by_content"); found && !since.Before(last) {
 			c.Unlock()
 			return entities, err
 		}
@@ -118,7 +112,7 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 					_ = c.cache.DeleteEntityTag(tag.ID)
 				}
 			}
-			_ = c.createCacheEntityTag(entity, "cache_find_entity_by_content")
+			_ = c.createCacheEntityTag(entity, "cache_find_entity_by_content", since)
 		}
 	}
 	return results, nil
@@ -133,7 +127,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 			c.Unlock()
 			return entities, err
 		}
-		if _, found := c.checkCacheEntityTag(entities[0], "cache_find_entities_by_type"); found {
+		if _, last, found := c.checkCacheEntityTag(entities[0], "cache_find_entities_by_type"); found && !since.Before(last) {
 			c.Unlock()
 			return entities, err
 		}
@@ -171,7 +165,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 					_ = c.cache.DeleteEntityTag(tag.ID)
 				}
 			}
-			_ = c.createCacheEntityTag(entity, "cache_find_entities_by_type")
+			_ = c.createCacheEntityTag(entity, "cache_find_entities_by_type", since)
 		}
 	}
 	return results, nil

@@ -15,7 +15,6 @@ import (
 type Cache struct {
 	sync.Mutex
 	start time.Time
-	freq  time.Duration
 	done  chan struct{}
 	cache repository.Repository
 	db    repository.Repository
@@ -25,7 +24,6 @@ type Cache struct {
 func New(cache, database repository.Repository) (*Cache, error) {
 	c := &Cache{
 		start: time.Now(),
-		freq:  10 * time.Minute,
 		done:  make(chan struct{}, 1),
 		cache: cache,
 		db:    database,
@@ -43,22 +41,15 @@ func (c *Cache) StartTime() time.Time {
 
 // Close implements the Repository interface.
 func (c *Cache) Close() error {
-	c.Lock()
-	defer c.Unlock()
-
-	if c.cache != nil {
-		if err := c.cache.Close(); err != nil {
-			return err
-		}
-	}
-
 	close(c.done)
+
 	for {
 		if c.queue.Empty() {
 			break
 		}
 		time.Sleep(2 * time.Second)
 	}
+
 	return nil
 }
 

@@ -65,8 +65,52 @@ func (c *Cache) FindEntityTagById(id string) (*types.EntityTag, error) {
 
 // GetEntityTags implements the Repository interface.
 func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
-	c.Lock()
-	defer c.Unlock()
+	if since.IsZero() || since.Before(c.start) {
+		var dberr error
+		var dbtags []*types.EntityTag
+
+		done := make(chan struct{}, 1)
+		c.appendToDBQueue(func() {
+			defer func() { done <- struct{}{} }()
+
+			if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+				dbtags, dberr = c.db.GetEntityTags(e[0], since, names...)
+
+				for i, tag := range dbtags {
+					if e, err := c.db.FindEntityById(tag.Entity.ID); err == nil && e != nil {
+						dbtags[i].Entity = e
+					}
+				}
+			}
+		})
+		<-done
+		close(done)
+
+		c.Lock()
+		defer c.Unlock()
+
+		if dberr == nil && len(dbtags) > 0 {
+			for _, tag := range dbtags {
+				e, err := c.cache.CreateEntity(&types.Entity{
+					CreatedAt: tag.Entity.CreatedAt,
+					LastSeen:  tag.Entity.LastSeen,
+					Asset:     tag.Entity.Asset,
+				})
+
+				if err == nil && e != nil {
+					_, _ = c.cache.CreateEntityTag(entity, &types.EntityTag{
+						CreatedAt: tag.CreatedAt,
+						LastSeen:  tag.LastSeen,
+						Property:  tag.Property,
+						Entity:    e,
+					})
+				}
+			}
+		}
+	} else {
+		c.Lock()
+		defer c.Unlock()
+	}
 
 	return c.cache.GetEntityTags(entity, since, names...)
 }
@@ -229,8 +273,74 @@ func (c *Cache) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 
 // GetEdgeTags implements the Repository interface.
 func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
-	c.Lock()
-	defer c.Unlock()
+	if since.IsZero() || since.Before(c.start) {
+		var dberr error
+		var dbtags []*types.EdgeTag
+
+		c.Lock()
+		sub, err := c.cache.FindEntityById(edge.FromEntity.ID)
+		if err != nil {
+			c.Unlock()
+			return nil, err
+		}
+
+		obj, err := c.cache.FindEntityById(edge.ToEntity.ID)
+		if err != nil {
+			c.Unlock()
+			return nil, err
+		}
+		c.Unlock()
+
+		done := make(chan struct{}, 1)
+		c.appendToDBQueue(func() {
+			defer func() { done <- struct{}{} }()
+
+			s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+			if err != nil || len(s) != 1 {
+				return
+			}
+
+			o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+			if err != nil || len(o) != 1 {
+				return
+			}
+
+			edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
+			if err != nil || len(edges) == 0 {
+				return
+			}
+
+			var target *types.Edge
+			for _, e := range edges {
+				if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
+					target = e
+					break
+				}
+			}
+			if target != nil {
+				dbtags, dberr = c.db.GetEdgeTags(target, since, names...)
+			}
+		})
+		<-done
+		close(done)
+
+		c.Lock()
+		defer c.Unlock()
+
+		if dberr == nil && len(dbtags) > 0 {
+			for _, tag := range dbtags {
+				_, _ = c.cache.CreateEdgeTag(edge, &types.EdgeTag{
+					CreatedAt: tag.CreatedAt,
+					LastSeen:  tag.LastSeen,
+					Property:  tag.Property,
+					Edge:      edge,
+				})
+			}
+		}
+	} else {
+		c.Lock()
+		defer c.Unlock()
+	}
 
 	return c.cache.GetEdgeTags(edge, since, names...)
 }
@@ -305,7 +415,7 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 	return nil
 }
 
-func (c *Cache) createCacheEntityTag(entity *types.Entity, name string) error {
+func (c *Cache) createCacheEntityTag(entity *types.Entity, name string, since time.Time) error {
 	_, err := c.cache.CreateEntityProperty(entity, &property.SimpleProperty{
 		PropertyName:  name,
 		PropertyValue: time.Now().Format("2006-01-02 15:04:05"),
@@ -313,14 +423,16 @@ func (c *Cache) createCacheEntityTag(entity *types.Entity, name string) error {
 	return err
 }
 
-func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.EntityTag, bool) {
+func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.EntityTag, time.Time, bool) {
 	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, name); err == nil && len(tags) == 1 {
-		return tags[0], true
+		if t, err := time.Parse("2006-01-02 15:04:05", tags[0].Property.Value()); err == nil {
+			return tags[0], t, true
+		}
 	}
-	return nil, false
+	return nil, time.Time{}, false
 }
 
-func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string) error {
+func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string, since time.Time) error {
 	_, err := c.cache.CreateEdgeProperty(edge, &property.SimpleProperty{
 		PropertyName:  name,
 		PropertyValue: time.Now().Format("2006-01-02 15:04:05"),
@@ -328,9 +440,11 @@ func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string) error {
 	return err
 }
 
-func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag, bool) {
+func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag, time.Time, bool) {
 	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, name); err == nil && len(tags) == 1 {
-		return tags[0], true
+		if t, err := time.Parse("2006-01-02 15:04:05", tags[0].Property.Value()); err == nil {
+			return tags[0], t, true
+		}
 	}
-	return nil, false
+	return nil, time.Time{}, false
 }
