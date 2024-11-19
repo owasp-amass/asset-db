@@ -6,16 +6,14 @@ package assetdb
 
 import (
 	"embed"
-	"fmt"
-	"math/rand"
 
+	"github.com/glebarez/sqlite"
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 	migrate "github.com/rubenv/sql-migrate"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -23,7 +21,7 @@ import (
 // It initializes the asset database with the specified database type and DSN.
 func New(dbtype, dsn string) *AssetDB {
 	if dbtype == sqlrepo.SQLiteMemory {
-		dsn = fmt.Sprintf("file:sqlite%d?mode=memory&cache=shared", rand.Int31n(1000))
+		dsn = ":memory:?_pragma=foreign_keys(1)"
 	}
 
 	if db, err := repository.New(dbtype, dsn); err == nil && db != nil {

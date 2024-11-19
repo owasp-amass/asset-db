@@ -15,10 +15,10 @@ import (
 )
 
 func TestCreateEntity(t *testing.T) {
-	/*c, db, err := createTestRepositories()
+	cache, database, err := createTestRepositories()
 	assert.NoError(t, err)
-	defer c.Close()
-	defer db.Close()*/
+	defer cache.Close()
+	defer database.Close()
 
 	c, err := New(cache, database)
 	assert.NoError(t, err)
