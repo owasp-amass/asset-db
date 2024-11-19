@@ -7,29 +7,30 @@ package cache
 import (
 	"errors"
 	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	assetdb "github.com/owasp-amass/asset-db"
-	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
-	migrate "github.com/rubenv/sql-migrate"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 func TestStartTime(t *testing.T) {
-	c, db, err := createTestRepositories()
+	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
-	defer c.Close()
-	defer db.Close()
-	defer teardownPostgres()
+	defer func() {
+		db1.Close()
+		db2.Close()
+		os.RemoveAll(dir)
+	}()
 
 	t1 := time.Now()
 	time.Sleep(250 * time.Millisecond)
-	cache, err := New(c, db)
+	cache, err := New(db1, db2)
 	assert.NoError(t, err)
 	defer cache.Close()
 	time.Sleep(250 * time.Millisecond)
@@ -42,41 +43,26 @@ func TestStartTime(t *testing.T) {
 	}
 }
 
-func createTestRepositories() (repository.Repository, repository.Repository, error) {
-	cache := assetdb.New(sqlrepo.SQLiteMemory, "")
-	if cache == nil {
-		return nil, nil, errors.New("failed to create the cache db")
+func createTestRepositories() (repository.Repository, repository.Repository, string, error) {
+	/*c := assetdb.New(sqlrepo.SQLiteMemory, "")
+	if c == nil {
+		return nil, nil, "", errors.New("failed to create the cache db")
+	}*/
+
+	dir, err := os.MkdirTemp("", fmt.Sprintf("test-%d", rand.Intn(100)))
+	if err != nil {
+		return nil, nil, "", errors.New("failed to create the temp dir")
 	}
 
-	dsn := fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", "postgres", "postgres", "postgres")
-	db := assetdb.New(sqlrepo.Postgres, dsn)
+	c := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
+	if c == nil {
+		return nil, nil, "", errors.New("failed to create the cache db")
+	}
+
+	db := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "assetdb.sqlite"))
 	if db == nil {
-		return nil, nil, errors.New("failed to create the database")
+		return nil, nil, "", errors.New("failed to create the database")
 	}
 
-	return cache.Repo, db.Repo, nil
-}
-
-func teardownPostgres() {
-	dsn := fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", "postgres", "postgres", "postgres")
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
-
-	migrationsSource := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: pgmigrations.Migrations(),
-		Root:       "/",
-	}
-
-	sqlDb, err := db.DB()
-	if err != nil {
-		panic(err)
-	}
-	defer sqlDb.Close()
-
-	_, err = migrate.Exec(sqlDb, "postgres", migrationsSource, migrate.Down)
-	if err != nil {
-		panic(err)
-	}
+	return c.Repo, db.Repo, dir, nil
 }

@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -15,36 +16,38 @@ import (
 )
 
 func TestCreateEntity(t *testing.T) {
-	cache, database, err := createTestRepositories()
+	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
-	defer cache.Close()
-	defer database.Close()
-	defer teardownPostgres()
+	defer func() {
+		db1.Close()
+		db2.Close()
+		os.RemoveAll(dir)
+	}()
 
-	c, err := New(cache, database)
+	c, err := New(db1, db2)
 	assert.NoError(t, err)
 	defer c.Close()
 
 	now := time.Now()
-	t1 := now.Add(-1 * time.Second)
+	ctime := now.Add(-8 * time.Hour)
+	before := ctime.Add(-2 * time.Second)
+	after := ctime.Add(2 * time.Second)
 	entity, err := c.CreateEntity(&types.Entity{
-		CreatedAt: now,
-		LastSeen:  now,
+		CreatedAt: ctime,
+		LastSeen:  ctime,
 		Asset:     &domain.FQDN{Name: "owasp.org"},
 	})
-	t2 := time.Now().Add(time.Second)
 	assert.NoError(t, err)
 
-	if entity.CreatedAt.Before(t1) || entity.CreatedAt.After(t2) {
-		t.Errorf("create time: %s, t1 time: %s, t2 time: %s", entity.CreatedAt.Format(time.RFC3339Nano), t1.Format(time.RFC3339Nano), t2.Format(time.RFC3339Nano))
+	if entity.CreatedAt.Before(before) || entity.CreatedAt.After(after) {
+		t.Errorf("create time: %s, before time: %s, after time: %s", entity.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
 	}
-	if entity.LastSeen.Before(t1) || entity.LastSeen.After(t2) {
-		t.Errorf("create time: %s, t1 time: %s, t2 time: %s", entity.LastSeen.Format(time.RFC3339Nano), t1.Format(time.RFC3339Nano), t2.Format(time.RFC3339Nano))
+	if entity.LastSeen.Before(before) || entity.LastSeen.After(after) {
+		t.Errorf("create time: %s, before time: %s, after time: %s", entity.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
 	}
 
 	time.Sleep(time.Second)
-	t2 = time.Now().Add(time.Second)
-	dbents, err := database.FindEntityByContent(entity.Asset, time.Time{})
+	dbents, err := db2.FindEntityByContent(entity.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -55,10 +58,10 @@ func TestCreateEntity(t *testing.T) {
 	if !reflect.DeepEqual(entity.Asset, dbent.Asset) {
 		t.Errorf("DeepEqual failed for the assets in the two entities")
 	}
-	if dbent.CreatedAt.Before(t1) || dbent.CreatedAt.After(t2) {
-		t.Errorf("create time: %s, t1 time: %s, t2 time: %s", dbent.CreatedAt.Format(time.RFC3339Nano), t1.Format(time.RFC3339Nano), t2.Format(time.RFC3339Nano))
+	if dbent.CreatedAt.Before(before) || dbent.CreatedAt.After(after) {
+		t.Errorf("create time: %s, before time: %s, after time: %s", dbent.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
 	}
-	if dbent.LastSeen.Before(t1) || dbent.LastSeen.After(t2) {
-		t.Errorf("create time: %s, t1 time: %s, t2 time: %s", dbent.LastSeen.Format(time.RFC3339Nano), t1.Format(time.RFC3339Nano), t2.Format(time.RFC3339Nano))
+	if dbent.LastSeen.Before(before) || dbent.LastSeen.After(after) {
+		t.Errorf("create time: %s, before time: %s, after time: %s", dbent.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
 	}
 }
