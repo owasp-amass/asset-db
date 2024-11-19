@@ -11,9 +11,13 @@ import (
 	"time"
 
 	assetdb "github.com/owasp-amass/asset-db"
+	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
+	migrate "github.com/rubenv/sql-migrate"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func TestStartTime(t *testing.T) {
@@ -21,6 +25,7 @@ func TestStartTime(t *testing.T) {
 	assert.NoError(t, err)
 	defer c.Close()
 	defer db.Close()
+	defer teardownPostgres()
 
 	t1 := time.Now()
 	time.Sleep(250 * time.Millisecond)
@@ -44,10 +49,34 @@ func createTestRepositories() (repository.Repository, repository.Repository, err
 	}
 
 	dsn := fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", "postgres", "postgres", "postgres")
-	db, err := repository.New(sqlrepo.Postgres, dsn)
-	if err != nil || db == nil {
+	db := assetdb.New(sqlrepo.Postgres, dsn)
+	if db == nil {
 		return nil, nil, errors.New("failed to create the database")
 	}
 
-	return cache.Repo, db, nil
+	return cache.Repo, db.Repo, nil
+}
+
+func teardownPostgres() {
+	dsn := fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", "postgres", "postgres", "postgres")
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		panic(err)
+	}
+
+	migrationsSource := migrate.EmbedFileSystemMigrationSource{
+		FileSystem: pgmigrations.Migrations(),
+		Root:       "/",
+	}
+
+	sqlDb, err := db.DB()
+	if err != nil {
+		panic(err)
+	}
+	defer sqlDb.Close()
+
+	_, err = migrate.Exec(sqlDb, "postgres", migrationsSource, migrate.Down)
+	if err != nil {
+		panic(err)
+	}
 }

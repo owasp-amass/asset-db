@@ -19,6 +19,7 @@ func TestCreateEntity(t *testing.T) {
 	assert.NoError(t, err)
 	defer cache.Close()
 	defer database.Close()
+	defer teardownPostgres()
 
 	c, err := New(cache, database)
 	assert.NoError(t, err)
