@@ -44,10 +44,10 @@ func createTestRepositories() (repository.Repository, repository.Repository, err
 	}
 
 	dsn := fmt.Sprintf("host=localhost port=5432 user=%s password=%s dbname=%s", "postgres", "postgres", "postgres")
-	db := assetdb.New(sqlrepo.Postgres, dsn)
-	if db == nil {
+	db, err := repository.New(sqlrepo.Postgres, dsn)
+	if err != nil || db == nil {
 		return nil, nil, errors.New("failed to create the database")
 	}
 
-	return cache.Repo, db.Repo, nil
+	return cache.Repo, db, nil
 }
