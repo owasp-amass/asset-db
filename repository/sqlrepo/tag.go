@@ -47,10 +47,15 @@ func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			}
 		}
 	} else {
-		if !input.CreatedAt.IsZero() {
+		if input.CreatedAt.IsZero() {
+			tag.CreatedAt = time.Now().UTC()
+		} else {
 			tag.CreatedAt = input.CreatedAt.UTC()
 		}
-		if !input.LastSeen.IsZero() {
+
+		if input.LastSeen.IsZero() {
+			tag.UpdatedAt = time.Now().UTC()
+		} else {
 			tag.UpdatedAt = input.LastSeen.UTC()
 		}
 	}
@@ -220,10 +225,15 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			}
 		}
 	} else {
-		if !input.CreatedAt.IsZero() {
+		if input.CreatedAt.IsZero() {
+			tag.CreatedAt = time.Now().UTC()
+		} else {
 			tag.CreatedAt = input.CreatedAt.UTC()
 		}
-		if !input.LastSeen.IsZero() {
+
+		if input.LastSeen.IsZero() {
+			tag.UpdatedAt = time.Now().UTC()
+		} else {
 			tag.UpdatedAt = input.LastSeen.UTC()
 		}
 	}

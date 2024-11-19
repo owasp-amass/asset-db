@@ -176,14 +176,14 @@ func (c *Cache) DeleteEntity(id string) error {
 	c.Lock()
 	defer c.Unlock()
 
-	err := c.cache.DeleteEntity(id)
-	if err != nil {
-		return err
-	}
-
 	entity, err := c.cache.FindEntityById(id)
 	if err != nil {
 		return nil
+	}
+
+	err = c.cache.DeleteEntity(id)
+	if err != nil {
+		return err
 	}
 
 	c.appendToDBQueue(func() {

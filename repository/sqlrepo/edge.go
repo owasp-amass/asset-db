@@ -57,10 +57,14 @@ func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 		FromEntityID: fromEntityId,
 		ToEntityID:   toEntityId,
 	}
-	if !edge.CreatedAt.IsZero() {
+	if edge.CreatedAt.IsZero() {
+		r.CreatedAt = time.Now().UTC()
+	} else {
 		r.CreatedAt = edge.CreatedAt.UTC()
 	}
-	if !edge.LastSeen.IsZero() {
+	if edge.LastSeen.IsZero() {
+		r.UpdatedAt = time.Now().UTC()
+	} else {
 		r.UpdatedAt = edge.LastSeen.UTC()
 	}
 

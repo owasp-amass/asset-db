@@ -43,12 +43,25 @@ func TestStartTime(t *testing.T) {
 	}
 }
 
-func createTestRepositories() (repository.Repository, repository.Repository, string, error) {
-	/*c := assetdb.New(sqlrepo.SQLiteMemory, "")
-	if c == nil {
-		return nil, nil, "", errors.New("failed to create the cache db")
-	}*/
+func TestGetDBType(t *testing.T) {
+	db1, db2, dir, err := createTestRepositories()
+	assert.NoError(t, err)
+	defer func() {
+		db1.Close()
+		db2.Close()
+		os.RemoveAll(dir)
+	}()
 
+	cache, err := New(db1, db2)
+	assert.NoError(t, err)
+	defer cache.Close()
+
+	if dbtype := cache.GetDBType(); dbtype != sqlrepo.SQLite {
+		t.Errorf("DB type was: %s, expected: %s", dbtype, sqlrepo.SQLite)
+	}
+}
+
+func createTestRepositories() (repository.Repository, repository.Repository, string, error) {
 	dir, err := os.MkdirTemp("", fmt.Sprintf("test-%d", rand.Intn(100)))
 	if err != nil {
 		return nil, nil, "", errors.New("failed to create the temp dir")

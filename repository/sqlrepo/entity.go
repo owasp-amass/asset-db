@@ -41,10 +41,15 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 			}
 		}
 	} else {
-		if !input.CreatedAt.IsZero() {
+		if input.CreatedAt.IsZero() {
+			entity.CreatedAt = time.Now().UTC()
+		} else {
 			entity.CreatedAt = input.CreatedAt.UTC()
 		}
-		if !input.LastSeen.IsZero() {
+
+		if input.LastSeen.IsZero() {
+			entity.UpdatedAt = time.Now().UTC()
+		} else {
 			entity.UpdatedAt = input.LastSeen.UTC()
 		}
 	}
@@ -90,10 +95,7 @@ func (sql *sqlRepository) DeleteEntity(id string) error {
 
 	entity := Entity{ID: entityId}
 	result := sql.db.Delete(&entity)
-	if err := result.Error; err != nil {
-		return err
-	}
-	return nil
+	return result.Error
 }
 
 // FindEntityByContent finds entity in the database that match the provided asset data and last seen after the since parameter.
@@ -128,22 +130,22 @@ func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Ti
 		return nil, err
 	}
 
-	var storedEntities []*types.Entity
+	var results []*types.Entity
 	for _, e := range entities {
-		assetData, err := e.Parse()
-		if err != nil {
-			return nil, err
+		if assetData, err := e.Parse(); err == nil {
+			results = append(results, &types.Entity{
+				ID:        strconv.FormatUint(e.ID, 10),
+				CreatedAt: e.CreatedAt.In(time.UTC).Local(),
+				LastSeen:  e.UpdatedAt.In(time.UTC).Local(),
+				Asset:     assetData,
+			})
 		}
-
-		storedEntities = append(storedEntities, &types.Entity{
-			ID:        strconv.FormatUint(e.ID, 10),
-			CreatedAt: e.CreatedAt.In(time.UTC).Local(),
-			LastSeen:  e.UpdatedAt.In(time.UTC).Local(),
-			Asset:     assetData,
-		})
 	}
 
-	return storedEntities, nil
+	if len(results) == 0 {
+		return nil, errors.New("zero entities found")
+	}
+	return results, nil
 }
 
 // FindEntityById finds an entity in the database by the ID.
