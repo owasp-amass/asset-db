@@ -5,6 +5,7 @@
 package sqlrepo
 
 import (
+	"errors"
 	"strconv"
 	"time"
 
@@ -171,6 +172,9 @@ func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, n
 		}
 	}
 
+	if len(results) == 0 {
+		return nil, errors.New("zero tags found")
+	}
 	return results, nil
 }
 
@@ -354,6 +358,9 @@ func (sql *sqlRepository) GetEdgeTags(edge *types.Edge, since time.Time, names .
 		}
 	}
 
+	if len(results) == 0 {
+		return nil, errors.New("zero tags found")
+	}
 	return results, nil
 }
 

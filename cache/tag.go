@@ -418,14 +418,14 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 func (c *Cache) createCacheEntityTag(entity *types.Entity, name string, since time.Time) error {
 	_, err := c.cache.CreateEntityProperty(entity, &property.SimpleProperty{
 		PropertyName:  name,
-		PropertyValue: time.Now().Format("2006-01-02 15:04:05"),
+		PropertyValue: since.Format(time.RFC3339Nano),
 	})
 	return err
 }
 
 func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.EntityTag, time.Time, bool) {
 	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, name); err == nil && len(tags) == 1 {
-		if t, err := time.Parse("2006-01-02 15:04:05", tags[0].Property.Value()); err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value()); err == nil {
 			return tags[0], t, true
 		}
 	}
@@ -435,14 +435,14 @@ func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.E
 func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string, since time.Time) error {
 	_, err := c.cache.CreateEdgeProperty(edge, &property.SimpleProperty{
 		PropertyName:  name,
-		PropertyValue: time.Now().Format("2006-01-02 15:04:05"),
+		PropertyValue: since.Format(time.RFC3339Nano),
 	})
 	return err
 }
 
 func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag, time.Time, bool) {
 	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, name); err == nil && len(tags) == 1 {
-		if t, err := time.Parse("2006-01-02 15:04:05", tags[0].Property.Value()); err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value()); err == nil {
 			return tags[0], t, true
 		}
 	}

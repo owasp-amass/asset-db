@@ -4,13 +4,13 @@ go 1.23.1
 
 require (
 	github.com/caffix/queue v0.3.1
+	github.com/caffix/stringset v0.2.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/owasp-amass/open-asset-model v0.12.0
 	github.com/rubenv/sql-migrate v1.7.0
 	github.com/stretchr/testify v1.9.0
 	gorm.io/datatypes v1.2.4
 	gorm.io/driver/postgres v1.5.9
-	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.12
 )
 
@@ -41,6 +41,7 @@ require (
 	golang.org/x/text v0.20.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
+	gorm.io/driver/sqlite v1.5.6 // indirect
 	modernc.org/libc v1.61.2 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect

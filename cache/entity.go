@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"errors"
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -69,17 +70,14 @@ func (c *Cache) FindEntityById(id string) (*types.Entity, error) {
 func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error) {
 	c.Lock()
 	entities, err := c.cache.FindEntityByContent(asset, since)
-	if err == nil && len(entities) == 1 {
-		if !since.IsZero() && !since.Before(c.start) {
-			c.Unlock()
-			return entities, err
-		}
-		if _, last, found := c.checkCacheEntityTag(entities[0], "cache_find_entity_by_content"); found && !since.Before(last) {
-			c.Unlock()
-			return entities, err
-		}
+	if err == nil && len(entities) >= 1 {
+		c.Unlock()
+		return entities, nil
 	}
 	c.Unlock()
+	if !since.IsZero() && !since.Before(c.start) {
+		return nil, err
+	}
 
 	var dberr error
 	var dbentities []*types.Entity
@@ -107,13 +105,11 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 			Asset:     entity.Asset,
 		}); err == nil {
 			results = append(results, e)
-			if tags, err := c.cache.GetEntityTags(entity, c.start, "cache_find_entity_by_content"); err == nil && len(tags) > 0 {
-				for _, tag := range tags {
-					_ = c.cache.DeleteEntityTag(tag.ID)
-				}
-			}
-			_ = c.createCacheEntityTag(entity, "cache_find_entity_by_content", since)
 		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("zero entities found")
 	}
 	return results, nil
 }
