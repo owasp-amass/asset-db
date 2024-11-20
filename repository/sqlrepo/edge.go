@@ -162,6 +162,9 @@ func (sql *sqlRepository) IncomingEdges(entity *types.Entity, since time.Time, l
 		results = edges
 	}
 
+	if len(results) == 0 {
+		return nil, errors.New("zero edges found")
+	}
 	return toEdges(results), nil
 }
 
@@ -203,6 +206,9 @@ func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 		results = edges
 	}
 
+	if len(results) == 0 {
+		return nil, errors.New("zero edges found")
+	}
 	return toEdges(results), nil
 }
 

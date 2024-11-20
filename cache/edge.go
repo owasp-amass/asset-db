@@ -32,7 +32,7 @@ func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	}
 
 	if _, _, found := c.checkCacheEdgeTag(edge, "cache_create_edge"); !found {
-		_ = c.createCacheEdgeTag(edge, "cache_create_edge", time.Now())
+		_ = c.createCacheEdgeTag(e, "cache_create_edge", time.Now())
 
 		c.appendToDBQueue(func() {
 			s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
@@ -56,6 +56,14 @@ func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	}
 
 	return e, nil
+}
+
+// FindEdgeById implements the Repository interface.
+func (c *Cache) FindEdgeById(id string) (*types.Edge, error) {
+	c.Lock()
+	defer c.Unlock()
+
+	return c.cache.FindEdgeById(id)
 }
 
 // IncomingEdges implements the Repository interface.
@@ -150,7 +158,7 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 			defer func() { done <- struct{}{} }()
 
 			if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-				dbedges, dberr = c.db.IncomingEdges(e[0], since, labels...)
+				dbedges, dberr = c.db.OutgoingEdges(e[0], since, labels...)
 
 				for i, edge := range dbedges {
 					if e, err := c.db.FindEntityById(edge.ToEntity.ID); err == nil && e != nil {
@@ -189,18 +197,13 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 		defer c.Unlock()
 	}
 
-	return c.cache.IncomingEdges(entity, since, labels...)
+	return c.cache.OutgoingEdges(entity, since, labels...)
 }
 
 // DeleteEdge implements the Repository interface.
 func (c *Cache) DeleteEdge(id string) error {
 	c.Lock()
 	defer c.Unlock()
-
-	err := c.cache.DeleteEdge(id)
-	if err != nil {
-		return err
-	}
 
 	edge, err := c.cache.FindEdgeById(id)
 	if err != nil {
@@ -215,6 +218,10 @@ func (c *Cache) DeleteEdge(id string) error {
 	obj, err := c.cache.FindEntityById(edge.ToEntity.ID)
 	if err != nil {
 		return nil
+	}
+
+	if err := c.cache.DeleteEdge(id); err != nil {
+		return err
 	}
 
 	c.appendToDBQueue(func() {
@@ -235,7 +242,7 @@ func (c *Cache) DeleteEdge(id string) error {
 
 		var target *types.Edge
 		for _, e := range edges {
-			if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
+			if e.ToEntity.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
 				target = e
 				break
 			}

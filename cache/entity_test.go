@@ -51,7 +51,7 @@ func TestCreateEntity(t *testing.T) {
 		t.Errorf("failed to create the cache tag:")
 	}
 
-	time.Sleep(time.Second)
+	time.Sleep(250 * time.Millisecond)
 	dbents, err := db2.FindEntityByContent(entity.Asset, before)
 	assert.NoError(t, err)
 
@@ -100,7 +100,7 @@ func TestCreateAsset(t *testing.T) {
 		t.Errorf("failed to create the cache tag:")
 	}
 
-	time.Sleep(time.Second)
+	time.Sleep(250 * time.Millisecond)
 	dbents, err := db2.FindEntityByContent(entity.Asset, now)
 	assert.NoError(t, err)
 
