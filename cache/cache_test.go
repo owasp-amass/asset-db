@@ -19,6 +19,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestCacheImplementsRepository(t *testing.T) {
+	var _ repository.Repository = &Cache{}      // Verify proper implementation of the Repository interface
+	var _ repository.Repository = (*Cache)(nil) // Verify *Cache properly implements the  Repository interface.
+}
+
 func TestStartTime(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)

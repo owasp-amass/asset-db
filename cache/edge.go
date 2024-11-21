@@ -207,17 +207,17 @@ func (c *Cache) DeleteEdge(id string) error {
 
 	edge, err := c.cache.FindEdgeById(id)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	sub, err := c.cache.FindEntityById(edge.FromEntity.ID)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	obj, err := c.cache.FindEntityById(edge.ToEntity.ID)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if err := c.cache.DeleteEdge(id); err != nil {

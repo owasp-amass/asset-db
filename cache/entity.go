@@ -174,7 +174,7 @@ func (c *Cache) DeleteEntity(id string) error {
 
 	entity, err := c.cache.FindEntityById(id)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	err = c.cache.DeleteEntity(id)

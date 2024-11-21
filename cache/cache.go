@@ -68,23 +68,33 @@ func (c *Cache) appendToDBQueue(callback func()) {
 }
 
 func (c *Cache) processDBCallbacks() {
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-c.done:
 			break loop
 		case <-c.queue.Signal():
-			element, ok := c.queue.Next()
-
-			for i := 0; i < 10 && ok; i++ {
-				if callback, success := element.(func()); success {
-					callback()
-				}
-
-				element, ok = c.queue.Next()
+			c.executeQueueElements()
+		case <-t.C:
+			if c.queue.Len() > 0 {
+				c.executeQueueElements()
 			}
 		}
 	}
 	// drain the callback queue of all remaining elements
 	c.queue.Process(func(data interface{}) {})
+}
+
+func (c *Cache) executeQueueElements() {
+	element, ok := c.queue.Next()
+
+	for i := 0; i < 10 && ok; i++ {
+		if callback, success := element.(func()); success {
+			callback()
+		}
+
+		element, ok = c.queue.Next()
+	}
 }

@@ -18,15 +18,6 @@ func (c *Cache) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*
 	c.Lock()
 	defer c.Unlock()
 
-	// if the tag already exists, then do not create it again
-	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
-		for _, tag := range tags {
-			if reflect.DeepEqual(input.Property, tag.Property) {
-				return tag, nil
-			}
-		}
-	}
-
 	tag, err := c.cache.CreateEntityTag(entity, input)
 	if err != nil {
 		return nil, err
@@ -83,13 +74,7 @@ func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...st
 			defer func() { done <- struct{}{} }()
 
 			if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-				dbtags, dberr = c.db.GetEntityTags(e[0], since, names...)
-
-				for i, tag := range dbtags {
-					if e, err := c.db.FindEntityById(tag.Entity.ID); err == nil && e != nil {
-						dbtags[i].Entity = e
-					}
-				}
+				dbtags, dberr = c.db.GetEntityTags(e[0], since)
 			}
 		})
 		<-done
@@ -100,20 +85,11 @@ func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...st
 
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
-				e, err := c.cache.CreateEntity(&types.Entity{
-					CreatedAt: tag.Entity.CreatedAt,
-					LastSeen:  tag.Entity.LastSeen,
-					Asset:     tag.Entity.Asset,
+				_, _ = c.cache.CreateEntityTag(entity, &types.EntityTag{
+					CreatedAt: tag.CreatedAt,
+					LastSeen:  tag.LastSeen,
+					Property:  tag.Property,
 				})
-
-				if err == nil && e != nil {
-					_, _ = c.cache.CreateEntityTag(entity, &types.EntityTag{
-						CreatedAt: tag.CreatedAt,
-						LastSeen:  tag.LastSeen,
-						Property:  tag.Property,
-						Entity:    e,
-					})
-				}
 			}
 		}
 	} else {
@@ -131,12 +107,12 @@ func (c *Cache) DeleteEntityTag(id string) error {
 
 	tag, err := c.cache.FindEntityTagById(id)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	entity, err := c.cache.FindEntityById(tag.Entity.ID)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if err := c.cache.DeleteEntityTag(id); err != nil {
@@ -148,8 +124,7 @@ func (c *Cache) DeleteEntityTag(id string) error {
 			if tags, err := c.db.GetEntityTags(e[0], time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
 				for _, t := range tags {
 					if t.Property.Value() == tag.Property.Value() {
-						_ = c.db.DeleteEntity(t.ID)
-						break
+						_ = c.db.DeleteEntityTag(t.ID)
 					}
 				}
 			}
@@ -163,15 +138,6 @@ func (c *Cache) DeleteEntityTag(id string) error {
 func (c *Cache) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.EdgeTag, error) {
 	c.Lock()
 	defer c.Unlock()
-
-	// if the tag already exists, then do not create it again
-	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
-		for _, tag := range tags {
-			if reflect.DeepEqual(input.Property, tag.Property) {
-				return tag, nil
-			}
-		}
-	}
 
 	tag, err := c.cache.CreateEdgeTag(edge, input)
 	if err != nil {
@@ -291,9 +257,6 @@ func (c *Cache) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 // GetEdgeTags implements the Repository interface.
 func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
 	if since.IsZero() || since.Before(c.start) {
-		var dberr error
-		var dbtags []*types.EdgeTag
-
 		c.Lock()
 		sub, err := c.cache.FindEntityById(edge.FromEntity.ID)
 		if err != nil {
@@ -308,6 +271,8 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 		}
 		c.Unlock()
 
+		var dberr error
+		var dbtags []*types.EdgeTag
 		done := make(chan struct{}, 1)
 		c.appendToDBQueue(func() {
 			defer func() { done <- struct{}{} }()
@@ -335,7 +300,7 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 				}
 			}
 			if target != nil {
-				dbtags, dberr = c.db.GetEdgeTags(target, since, names...)
+				dbtags, dberr = c.db.GetEdgeTags(target, since)
 			}
 		})
 		<-done
@@ -350,7 +315,6 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 					CreatedAt: tag.CreatedAt,
 					LastSeen:  tag.LastSeen,
 					Property:  tag.Property,
-					Edge:      edge,
 				})
 			}
 		}
@@ -369,22 +333,22 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 
 	tag, err := c.cache.FindEdgeTagById(id)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	edge2, err := c.cache.FindEdgeById(tag.Edge.ID)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	sub, err := c.cache.FindEntityById(edge2.FromEntity.ID)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	obj, err := c.cache.FindEntityById(edge2.ToEntity.ID)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if err := c.cache.DeleteEdgeTag(id); err != nil {
@@ -422,7 +386,6 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 			for _, t := range tags {
 				if tag.Property.Value() == t.Property.Value() {
 					_ = c.db.DeleteEdgeTag(t.ID)
-					break
 				}
 			}
 		}

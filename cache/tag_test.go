@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/property"
@@ -167,6 +168,100 @@ func TestFindEntityTagById(t *testing.T) {
 	}
 }
 
+func TestGetEntityTags(t *testing.T) {
+	db1, db2, dir, err := createTestRepositories()
+	assert.NoError(t, err)
+	defer func() {
+		db1.Close()
+		db2.Close()
+		os.RemoveAll(dir)
+	}()
+
+	c, err := New(db1, db2)
+	assert.NoError(t, err)
+	defer c.Close()
+
+	now := time.Now()
+	ctime := now.Add(-8 * time.Hour)
+	before := ctime.Add(-2 * time.Second)
+	entity, err := c.CreateEntity(&types.Entity{
+		CreatedAt: ctime,
+		LastSeen:  ctime,
+		Asset:     &domain.FQDN{Name: "caffix.com"},
+	})
+	assert.NoError(t, err)
+	time.Sleep(250 * time.Millisecond)
+
+	dbents, err := c.db.FindEntityByContent(entity.Asset, time.Time{})
+	assert.NoError(t, err)
+
+	if num := len(dbents); num != 1 {
+		t.Errorf("failed to return the corrent number of entities: %d", num)
+	}
+	dbent := dbents[0]
+
+	set1 := stringset.New()
+	defer set1.Close()
+	// add some old stuff to the database
+	for _, name := range []string{"owasp.org", "utica.edu", "sunypoly.edu"} {
+		set1.Insert(name)
+		_, err := c.db.CreateEntityTag(dbent, &types.EntityTag{
+			CreatedAt: ctime,
+			LastSeen:  ctime,
+			Property: &property.SimpleProperty{
+				PropertyName:  "test",
+				PropertyValue: name,
+			},
+		})
+		assert.NoError(t, err)
+	}
+
+	set2 := stringset.New()
+	defer set2.Close()
+	// add some new stuff to the database
+	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
+		set2.Insert(name)
+		_, err := c.CreateEntityProperty(entity, &property.SimpleProperty{
+			PropertyName:  "test",
+			PropertyValue: name,
+		})
+		assert.NoError(t, err)
+	}
+	after := time.Now()
+
+	// some tests that shouldn't return anything
+	_, err = c.GetEntityTags(entity, after)
+	assert.Error(t, err)
+
+	tags, err := c.GetEntityTags(entity, now, "test")
+	assert.NoError(t, err)
+	if num := len(tags); num != 3 {
+		t.Errorf("incorrect number of entity tags: %d", num)
+	}
+
+	for _, tag := range tags {
+		set2.Remove(tag.Property.Value())
+	}
+	// only entities from set2 should have been removed
+	if set1.Len() != 3 || set2.Len() != 0 {
+		t.Errorf("first request failed to produce the correct tags")
+	}
+
+	tags, err = c.GetEntityTags(entity, before, "test")
+	assert.NoError(t, err)
+	if num := len(tags); num != 6 {
+		t.Errorf("incorrect number of entity tags: %d", num)
+	}
+
+	for _, tag := range tags {
+		set1.Remove(tag.Property.Value())
+	}
+	// all entities should now be been removed
+	if set1.Len() != 0 || set2.Len() != 0 {
+		t.Errorf("second request failed to produce the correct tags")
+	}
+}
+
 func TestDeleteEntityTag(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
@@ -205,8 +300,13 @@ func TestDeleteEntityTag(t *testing.T) {
 	_, err = c.FindEntityTagById(tag.ID)
 	assert.Error(t, err)
 
-	_, err = c.db.GetEntityTags(dbent, c.StartTime())
+	tags, err := c.db.GetEntityTags(dbent, c.StartTime())
 	assert.Error(t, err)
+	if len(tags) > 0 {
+		for _, tag := range tags {
+			t.Errorf("tag %s:%s should have been deleted", tag.Property.Name(), tag.Property.Value())
+		}
+	}
 }
 
 func TestCreateEdgeTag(t *testing.T) {
@@ -366,6 +466,105 @@ func TestFindEdgeTagById(t *testing.T) {
 
 	if !reflect.DeepEqual(tag.Property, tag2.Property) {
 		t.Errorf("DeepEqual failed for the properties in the two tags")
+	}
+}
+
+func TestGetEdgeTags(t *testing.T) {
+	db1, db2, dir, err := createTestRepositories()
+	assert.NoError(t, err)
+	defer func() {
+		db1.Close()
+		db2.Close()
+		os.RemoveAll(dir)
+	}()
+
+	c, err := New(db1, db2)
+	assert.NoError(t, err)
+	defer c.Close()
+
+	now := time.Now()
+	ctime := now.Add(-8 * time.Hour)
+	before := ctime.Add(-2 * time.Second)
+	edge, err := createTestEdge(c, now)
+	assert.NoError(t, err)
+
+	time.Sleep(250 * time.Millisecond)
+	s, err := c.db.FindEntityByContent(edge.FromEntity.Asset, time.Time{})
+	assert.NoError(t, err)
+
+	o, err := c.db.FindEntityByContent(edge.ToEntity.Asset, time.Time{})
+	assert.NoError(t, err)
+
+	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
+	assert.NoError(t, err)
+
+	var target *types.Edge
+	for _, e := range edges {
+		if e.ToEntity.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
+			target = e
+			break
+		}
+	}
+
+	set1 := stringset.New()
+	defer set1.Close()
+	// add some old stuff to the database
+	for _, name := range []string{"owasp.org", "utica.edu", "sunypoly.edu"} {
+		set1.Insert(name)
+		_, err := c.db.CreateEdgeTag(target, &types.EdgeTag{
+			CreatedAt: ctime,
+			LastSeen:  ctime,
+			Property: &property.SimpleProperty{
+				PropertyName:  "test",
+				PropertyValue: name,
+			},
+		})
+		assert.NoError(t, err)
+	}
+
+	set2 := stringset.New()
+	defer set2.Close()
+	// add some new stuff to the database
+	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
+		set2.Insert(name)
+		_, err := c.CreateEdgeProperty(edge, &property.SimpleProperty{
+			PropertyName:  "test",
+			PropertyValue: name,
+		})
+		assert.NoError(t, err)
+	}
+	after := time.Now().Add(time.Second)
+
+	// some tests that shouldn't return anything
+	_, err = c.GetEdgeTags(edge, after)
+	assert.Error(t, err)
+
+	tags, err := c.GetEdgeTags(edge, now, "test")
+	assert.NoError(t, err)
+	if num := len(tags); num != 3 {
+		t.Errorf("incorrect number of edge tags: %d", num)
+	}
+
+	for _, tag := range tags {
+		set2.Remove(tag.Property.Value())
+	}
+	// only entities from set2 should have been removed
+	if set1.Len() != 3 || set2.Len() != 0 {
+		t.Errorf("first request failed to produce the correct tags")
+	}
+
+	tags, err = c.GetEdgeTags(edge, before, "test")
+	assert.NoError(t, err)
+	if num := len(tags); num != 6 {
+		t.Errorf("incorrect number of edge tags: %d", num)
+	}
+
+	for _, tag := range tags {
+		set1.Remove(tag.Property.Value())
+	}
+	// all entities should now be been removed
+	if set1.Len() != 0 || set2.Len() != 0 {
+		t.Errorf("second request failed to produce the correct tags")
 	}
 }
 
