@@ -199,6 +199,7 @@ func TestGetEntityTags(t *testing.T) {
 		t.Errorf("failed to return the corrent number of entities: %d", num)
 	}
 	dbent := dbents[0]
+	time.Sleep(time.Second)
 
 	set1 := stringset.New()
 	defer set1.Close()
@@ -227,13 +228,17 @@ func TestGetEntityTags(t *testing.T) {
 		})
 		assert.NoError(t, err)
 	}
+	time.Sleep(time.Second)
 	after := time.Now()
 
 	// some tests that shouldn't return anything
 	_, err = c.GetEntityTags(entity, after)
 	assert.Error(t, err)
+	// there shouldn't be a tag for this entity, since it didn't require the database
+	_, err = c.cache.GetEntityTags(entity, time.Time{}, "cache_get_entity_tags")
+	assert.Error(t, err)
 
-	tags, err := c.GetEntityTags(entity, now, "test")
+	tags, err := c.GetEntityTags(entity, c.StartTime(), "test")
 	assert.NoError(t, err)
 	if num := len(tags); num != 3 {
 		t.Errorf("incorrect number of entity tags: %d", num)
@@ -246,6 +251,9 @@ func TestGetEntityTags(t *testing.T) {
 	if set1.Len() != 3 || set2.Len() != 0 {
 		t.Errorf("first request failed to produce the correct tags")
 	}
+	// there shouldn't be a tag for this entity, since it didn't require the database
+	_, err = c.cache.GetEntityTags(entity, time.Time{}, "cache_get_entity_tags")
+	assert.Error(t, err)
 
 	tags, err = c.GetEntityTags(entity, before, "test")
 	assert.NoError(t, err)
@@ -259,6 +267,18 @@ func TestGetEntityTags(t *testing.T) {
 	// all entities should now be been removed
 	if set1.Len() != 0 || set2.Len() != 0 {
 		t.Errorf("second request failed to produce the correct tags")
+	}
+	// there should be a tag for this entity
+	tags, err = c.cache.GetEntityTags(entity, time.Time{}, "cache_get_entity_tags")
+	assert.NoError(t, err)
+	if len(tags) != 1 {
+		t.Errorf("second request failed to produce the expected number of edge tags")
+	}
+
+	tagtime, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value())
+	assert.NoError(t, err)
+	if tagtime.Before(before) || tagtime.After(after) {
+		t.Errorf("tag time: %s, before time: %s, after time: %s", tagtime.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
 	}
 }
 
@@ -505,6 +525,7 @@ func TestGetEdgeTags(t *testing.T) {
 			break
 		}
 	}
+	time.Sleep(time.Second)
 
 	set1 := stringset.New()
 	defer set1.Close()
@@ -533,13 +554,17 @@ func TestGetEdgeTags(t *testing.T) {
 		})
 		assert.NoError(t, err)
 	}
-	after := time.Now().Add(time.Second)
+	time.Sleep(time.Second)
+	after := time.Now()
 
 	// some tests that shouldn't return anything
 	_, err = c.GetEdgeTags(edge, after)
 	assert.Error(t, err)
+	// there shouldn't be a tag for this entity, since it didn't require the database
+	_, err = c.cache.GetEdgeTags(edge, time.Time{}, "cache_get_edge_tags")
+	assert.Error(t, err)
 
-	tags, err := c.GetEdgeTags(edge, now, "test")
+	tags, err := c.GetEdgeTags(edge, c.StartTime(), "test")
 	assert.NoError(t, err)
 	if num := len(tags); num != 3 {
 		t.Errorf("incorrect number of edge tags: %d", num)
@@ -552,6 +577,9 @@ func TestGetEdgeTags(t *testing.T) {
 	if set1.Len() != 3 || set2.Len() != 0 {
 		t.Errorf("first request failed to produce the correct tags")
 	}
+	// there shouldn't be a tag for this entity, since it didn't require the database
+	_, err = c.cache.GetEdgeTags(edge, time.Time{}, "cache_get_edge_tags")
+	assert.Error(t, err)
 
 	tags, err = c.GetEdgeTags(edge, before, "test")
 	assert.NoError(t, err)
@@ -565,6 +593,18 @@ func TestGetEdgeTags(t *testing.T) {
 	// all entities should now be been removed
 	if set1.Len() != 0 || set2.Len() != 0 {
 		t.Errorf("second request failed to produce the correct tags")
+	}
+	// there should be a tag for this entity
+	tags, err = c.cache.GetEdgeTags(edge, time.Time{}, "cache_get_edge_tags")
+	assert.NoError(t, err)
+	if len(tags) != 1 {
+		t.Errorf("second request failed to produce the expected number of edge tags")
+	}
+
+	tagtime, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value())
+	assert.NoError(t, err)
+	if tagtime.Before(before) || tagtime.After(after) {
+		t.Errorf("tag time: %s, before time: %s, after time: %s", tagtime.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
 	}
 }
 
