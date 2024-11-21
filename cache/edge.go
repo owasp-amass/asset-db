@@ -91,7 +91,7 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 			defer func() { done <- struct{}{} }()
 
 			if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-				dbedges, dberr = c.db.IncomingEdges(e[0], since, labels...)
+				dbedges, dberr = c.db.IncomingEdges(e[0], since)
 
 				for i, edge := range dbedges {
 					if e, err := c.db.FindEntityById(edge.ToEntity.ID); err == nil && e != nil {
@@ -158,7 +158,7 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 			defer func() { done <- struct{}{} }()
 
 			if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-				dbedges, dberr = c.db.OutgoingEdges(e[0], since, labels...)
+				dbedges, dberr = c.db.OutgoingEdges(e[0], since)
 
 				for i, edge := range dbedges {
 					if e, err := c.db.FindEntityById(edge.ToEntity.ID); err == nil && e != nil {

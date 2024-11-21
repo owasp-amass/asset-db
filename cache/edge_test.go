@@ -35,34 +35,7 @@ func TestCreateEdge(t *testing.T) {
 	before := ctime.Add(-2 * time.Second)
 	after := ctime.Add(2 * time.Second)
 
-	entity1, err := c.CreateEntity(&types.Entity{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "owasp.org"},
-	})
-	assert.NoError(t, err)
-
-	entity2, err := c.CreateEntity(&types.Entity{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "www.owasp.org"},
-	})
-	assert.NoError(t, err)
-
-	edge, err := c.CreateEdge(&types.Edge{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Relation: &relation.BasicDNSRelation{
-			Name: "dns_record",
-			Header: relation.RRHeader{
-				RRType: 5,
-				Class:  1,
-				TTL:    3600,
-			},
-		},
-		FromEntity: entity2,
-		ToEntity:   entity1,
-	})
+	edge, err := createTestEdge(c, ctime)
 	assert.NoError(t, err)
 
 	if edge.CreatedAt.Before(before) || edge.CreatedAt.After(after) {
@@ -76,7 +49,7 @@ func TestCreateEdge(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := db2.FindEntityByContent(entity2.Asset, before)
+	dbents, err := c.db.FindEntityByContent(edge.FromEntity.Asset, before)
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -84,7 +57,7 @@ func TestCreateEdge(t *testing.T) {
 	}
 	dbent := dbents[0]
 
-	dbedges, err := db2.OutgoingEdges(dbent, before, "dns_record")
+	dbedges, err := c.db.OutgoingEdges(dbent, before, "dns_record")
 	assert.NoError(t, err)
 
 	if num := len(dbedges); num != 1 {
@@ -103,6 +76,48 @@ func TestCreateEdge(t *testing.T) {
 	}
 }
 
+func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
+	entity1, err := cache.CreateEntity(&types.Entity{
+		CreatedAt: ctime,
+		LastSeen:  ctime,
+		Asset:     &domain.FQDN{Name: "owasp.org"},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	entity2, err := cache.CreateEntity(&types.Entity{
+		CreatedAt: ctime,
+		LastSeen:  ctime,
+		Asset:     &domain.FQDN{Name: "www.owasp.org"},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	edge, err := cache.CreateEdge(&types.Edge{
+		CreatedAt: ctime,
+		LastSeen:  ctime,
+		Relation: &relation.BasicDNSRelation{
+			Name: "dns_record",
+			Header: relation.RRHeader{
+				RRType: 5,
+				Class:  1,
+				TTL:    3600,
+			},
+		},
+		FromEntity: entity2,
+		ToEntity:   entity1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	edge.FromEntity = entity2
+	edge.ToEntity = entity1
+	return edge, nil
+}
+
 func TestFindEdgeById(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
@@ -119,34 +134,7 @@ func TestFindEdgeById(t *testing.T) {
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)
 
-	entity1, err := c.CreateEntity(&types.Entity{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "owasp.org"},
-	})
-	assert.NoError(t, err)
-
-	entity2, err := c.CreateEntity(&types.Entity{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "www.owasp.org"},
-	})
-	assert.NoError(t, err)
-
-	edge, err := c.CreateEdge(&types.Edge{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Relation: &relation.BasicDNSRelation{
-			Name: "dns_record",
-			Header: relation.RRHeader{
-				RRType: 5,
-				Class:  1,
-				TTL:    3600,
-			},
-		},
-		FromEntity: entity2,
-		ToEntity:   entity1,
-	})
+	edge, err := createTestEdge(c, ctime)
 	assert.NoError(t, err)
 
 	e, err := c.FindEdgeById(edge.ID)
@@ -418,34 +406,7 @@ func TestDeleteEdge(t *testing.T) {
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
 
-	entity1, err := c.CreateEntity(&types.Entity{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "owasp.org"},
-	})
-	assert.NoError(t, err)
-
-	entity2, err := c.CreateEntity(&types.Entity{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "www.owasp.org"},
-	})
-	assert.NoError(t, err)
-
-	edge, err := c.CreateEdge(&types.Edge{
-		CreatedAt: ctime,
-		LastSeen:  ctime,
-		Relation: &relation.BasicDNSRelation{
-			Name: "dns_record",
-			Header: relation.RRHeader{
-				RRType: 5,
-				Class:  1,
-				TTL:    3600,
-			},
-		},
-		FromEntity: entity2,
-		ToEntity:   entity1,
-	})
+	edge, err := createTestEdge(c, ctime)
 	assert.NoError(t, err)
 
 	err = c.DeleteEdge(edge.ID)
@@ -455,7 +416,7 @@ func TestDeleteEdge(t *testing.T) {
 	assert.Error(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	dbent, err := c.db.FindEntityByContent(entity2.Asset, time.Time{})
+	dbent, err := c.db.FindEntityByContent(edge.FromEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 	_, err = c.db.OutgoingEdges(dbent[0], before, edge.Relation.Label())
 	assert.Error(t, err)

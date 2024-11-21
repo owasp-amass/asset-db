@@ -18,6 +18,15 @@ func (c *Cache) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*
 	c.Lock()
 	defer c.Unlock()
 
+	// if the tag already exists, then do not create it again
+	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if reflect.DeepEqual(input.Property, tag.Property) {
+				return tag, nil
+			}
+		}
+	}
+
 	tag, err := c.cache.CreateEntityTag(entity, input)
 	if err != nil {
 		return nil, err
@@ -120,11 +129,6 @@ func (c *Cache) DeleteEntityTag(id string) error {
 	c.Lock()
 	defer c.Unlock()
 
-	err := c.cache.DeleteEntityTag(id)
-	if err != nil {
-		return err
-	}
-
 	tag, err := c.cache.FindEntityTagById(id)
 	if err != nil {
 		return nil
@@ -133,6 +137,10 @@ func (c *Cache) DeleteEntityTag(id string) error {
 	entity, err := c.cache.FindEntityById(tag.Entity.ID)
 	if err != nil {
 		return nil
+	}
+
+	if err := c.cache.DeleteEntityTag(id); err != nil {
+		return err
 	}
 
 	c.appendToDBQueue(func() {
@@ -155,6 +163,15 @@ func (c *Cache) DeleteEntityTag(id string) error {
 func (c *Cache) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.EdgeTag, error) {
 	c.Lock()
 	defer c.Unlock()
+
+	// if the tag already exists, then do not create it again
+	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if reflect.DeepEqual(input.Property, tag.Property) {
+				return tag, nil
+			}
+		}
+	}
 
 	tag, err := c.cache.CreateEdgeTag(edge, input)
 	if err != nil {
@@ -350,11 +367,6 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 	c.Lock()
 	defer c.Unlock()
 
-	err := c.cache.DeleteEdgeTag(id)
-	if err != nil {
-		return err
-	}
-
 	tag, err := c.cache.FindEdgeTagById(id)
 	if err != nil {
 		return nil
@@ -373,6 +385,10 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 	obj, err := c.cache.FindEntityById(edge2.ToEntity.ID)
 	if err != nil {
 		return nil
+	}
+
+	if err := c.cache.DeleteEdgeTag(id); err != nil {
+		return err
 	}
 
 	c.appendToDBQueue(func() {
