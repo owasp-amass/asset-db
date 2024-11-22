@@ -52,7 +52,7 @@ func (c *Cache) Close() error {
 		time.Sleep(2 * time.Second)
 	}
 
-	return nil
+	return c.cache.Close()
 }
 
 // GetDBType implements the Repository interface.
