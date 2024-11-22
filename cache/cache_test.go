@@ -35,7 +35,7 @@ func TestStartTime(t *testing.T) {
 
 	t1 := time.Now()
 	time.Sleep(250 * time.Millisecond)
-	cache, err := New(db1, db2)
+	cache, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer cache.Close()
 	time.Sleep(250 * time.Millisecond)
@@ -57,7 +57,7 @@ func TestGetDBType(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	cache, err := New(db1, db2)
+	cache, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer cache.Close()
 

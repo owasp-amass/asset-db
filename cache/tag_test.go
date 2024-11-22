@@ -26,7 +26,7 @@ func TestCreateEntityTag(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -90,7 +90,7 @@ func TestCreateEntityProperty(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -148,7 +148,7 @@ func TestFindEntityTagById(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -177,7 +177,7 @@ func TestGetEntityTags(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -291,7 +291,7 @@ func TestDeleteEntityTag(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -338,7 +338,7 @@ func TestCreateEdgeTag(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -402,7 +402,7 @@ func TestCreateEdgeProperty(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -469,7 +469,7 @@ func TestFindEdgeTagById(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -498,7 +498,7 @@ func TestGetEdgeTags(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -617,7 +617,7 @@ func TestDeleteEdgeTag(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 

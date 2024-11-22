@@ -26,7 +26,7 @@ func TestCreateEdge(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -127,7 +127,7 @@ func TestFindEdgeById(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -154,7 +154,7 @@ func TestIncomingEdges(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -277,7 +277,7 @@ func TestOutgoingEdges(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -398,7 +398,7 @@ func TestDeleteEdge(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 

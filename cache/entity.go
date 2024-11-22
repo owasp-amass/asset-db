@@ -22,7 +22,10 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if _, _, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found {
+	if tag, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
+		if found {
+			_ = c.DeleteEntityTag(tag.ID)
+		}
 		_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
 
 		c.appendToDBQueue(func() {
@@ -47,7 +50,10 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if _, _, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found {
+	if tag, last, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found || last.Add(c.freq).Before(time.Now()) {
+		if found {
+			_ = c.DeleteEntityTag(tag.ID)
+		}
 		_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
 
 		c.appendToDBQueue(func() {

@@ -21,7 +21,7 @@ func (c *Cache) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*
 	// if the tag already exists, then do not create it again
 	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
-			if input.Property.Value() == tag.Property.Value() {
+			if input.Property.Value() == tag.Property.Value() && tag.LastSeen.Add(c.freq).After(time.Now()) {
 				return tag, nil
 			}
 		}
@@ -53,7 +53,7 @@ func (c *Cache) CreateEntityProperty(entity *types.Entity, property oam.Property
 	// if the tag already exists, then do not create it again
 	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, property.Name()); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
-			if property.Value() == tag.Property.Value() {
+			if property.Value() == tag.Property.Value() && tag.LastSeen.Add(c.freq).After(time.Now()) {
 				return tag, nil
 			}
 		}
@@ -174,7 +174,7 @@ func (c *Cache) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.Ed
 	// if the tag already exists, then do not create it again
 	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
-			if input.Property.Value() == tag.Property.Value() {
+			if input.Property.Value() == tag.Property.Value() && tag.LastSeen.Add(c.freq).After(time.Now()) {
 				return tag, nil
 			}
 		}
@@ -239,7 +239,7 @@ func (c *Cache) CreateEdgeProperty(edge *types.Edge, property oam.Property) (*ty
 	// if the tag already exists, then do not create it again
 	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, property.Name()); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
-			if property.Value() == tag.Property.Value() {
+			if property.Value() == tag.Property.Value() && tag.LastSeen.Add(c.freq).After(time.Now()) {
 				return tag, nil
 			}
 		}

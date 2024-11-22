@@ -26,7 +26,7 @@ func TestCreateEntity(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -80,7 +80,7 @@ func TestCreateAsset(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -129,7 +129,7 @@ func TestFindEntityById(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -153,7 +153,7 @@ func TestFindEntityByContent(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -240,7 +240,7 @@ func TestFindEntitiesByType(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 
@@ -385,7 +385,7 @@ func TestDeleteEntity(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	c, err := New(db1, db2)
+	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
 	defer c.Close()
 

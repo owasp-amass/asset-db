@@ -31,7 +31,10 @@ func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 		return nil, err
 	}
 
-	if _, _, found := c.checkCacheEdgeTag(edge, "cache_create_edge"); !found {
+	if tag, last, found := c.checkCacheEdgeTag(edge, "cache_create_edge"); !found || last.Add(c.freq).Before(time.Now()) {
+		if found {
+			_ = c.DeleteEntityTag(tag.ID)
+		}
 		_ = c.createCacheEdgeTag(e, "cache_create_edge", time.Now())
 
 		c.appendToDBQueue(func() {

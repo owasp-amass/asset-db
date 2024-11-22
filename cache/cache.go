@@ -15,15 +15,17 @@ import (
 type Cache struct {
 	sync.Mutex
 	start time.Time
+	freq  time.Duration
 	done  chan struct{}
 	cache repository.Repository
 	db    repository.Repository
 	queue queue.Queue
 }
 
-func New(cache, database repository.Repository) (*Cache, error) {
+func New(cache, database repository.Repository, freq time.Duration) (*Cache, error) {
 	c := &Cache{
 		start: time.Now(),
+		freq:  freq,
 		done:  make(chan struct{}, 1),
 		cache: cache,
 		db:    database,
