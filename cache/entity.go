@@ -24,7 +24,7 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 
 	if tag, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
 		if found {
-			_ = c.DeleteEntityTag(tag.ID)
+			_ = c.cache.DeleteEntityTag(tag.ID)
 		}
 		_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
 
@@ -52,7 +52,7 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 
 	if tag, last, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found || last.Add(c.freq).Before(time.Now()) {
 		if found {
-			_ = c.DeleteEntityTag(tag.ID)
+			_ = c.cache.DeleteEntityTag(tag.ID)
 		}
 		_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
 
@@ -76,7 +76,7 @@ func (c *Cache) FindEntityById(id string) (*types.Entity, error) {
 func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error) {
 	c.Lock()
 	entities, err := c.cache.FindEntityByContent(asset, since)
-	if err == nil && len(entities) >= 1 {
+	if err == nil && len(entities) > 0 {
 		c.Unlock()
 		return entities, nil
 	}
