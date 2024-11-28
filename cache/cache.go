@@ -91,6 +91,10 @@ loop:
 			}
 		}
 	}
-	// drain the callback queue of all remaining elements
-	c.queue.Process(func(data interface{}) {})
+	// execute the remaining callbacks in the queue
+	c.queue.Process(func(data interface{}) {
+		if callback, success := data.(func()); success {
+			callback()
+		}
+	})
 }
