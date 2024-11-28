@@ -42,7 +42,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$AMASS_DB" <<-EOSQ
             r2.from_entity_id) INNER JOIN entities AS ips ON r2.to_entity_id = ips.id) 
             WHERE fqdns.etype = 'FQDN' AND srvs.etype = 'FQDN' AND ips.etype = 'IPAddress' 
             AND r1.etype IN ('PrefDNSRelation', 'SRVDNSRelation') AND r2.etype = 'BasicDNSRelation' 
-            AND r1.content->>'label' = 'dns_record' AND r2.conent->>'label' = 'dns_record' 
+            AND r1.content->>'label' = 'dns_record' AND r2.content->>'label' = 'dns_record' 
             AND r1.content->>'header.rr_type' IN (33, 2, 15) AND r2.content->>'header.rr_type' IN (1, 28) 
             AND r1.updated_at >= _from AND r1.updated_at <= _to AND r2.updated_at >= _from AND r2.updated_at <= _to 
             AND fqdns.content->>'name' = ANY(_names)
