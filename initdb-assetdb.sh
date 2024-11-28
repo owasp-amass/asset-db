@@ -37,11 +37,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$AMASS_DB" <<-EOSQ
 
         FOR _var_r IN (
             SELECT srvs.content->>'name' AS "name", ips.content->>'address' AS "addr" 
-            FROM ((((assets AS fqdns INNER JOIN relations AS r1 ON fqdns.id = r1.from_asset_id) 
-            INNER JOIN assets AS srvs ON r1.to_asset_id = srvs.id) INNER JOIN relations AS r2 ON srvs.id = 
-            r2.from_asset_id) INNER JOIN assets AS ips ON r2.to_asset_id = ips.id) 
-            WHERE fqdns.type = 'FQDN' AND srvs.type = 'FQDN' AND ips.type = 'IPAddress' 
-            AND r1.type IN ('srv_record','ns_record','mx_record') AND r2.type IN ('a_record','aaaa_record') 
+            FROM ((((entities AS fqdns INNER JOIN edges AS r1 ON fqdns.id = r1.from_entity_id) 
+            INNER JOIN entities AS srvs ON r1.to_entity_id = srvs.id) INNER JOIN edges AS r2 ON srvs.id = 
+            r2.from_entity_id) INNER JOIN entities AS ips ON r2.to_entity_id = ips.id) 
+            WHERE fqdns.etype = 'FQDN' AND srvs.etype = 'FQDN' AND ips.etype = 'IPAddress' 
+            AND r1.etype = 'dns_record' AND r2.etype = 'dns_record' 
+            AND r1.content->>'header.rr_type' IN (33, 2, 15) AND r2.content->>'header.rr_type' IN (1, 28) 
             AND r1.last_seen >= _from AND r1.last_seen <= _to AND r2.last_seen >= _from AND r2.last_seen <= _to 
             AND fqdns.content->>'name' = ANY(_names)
         ) LOOP fqdn = _var_r.name;
@@ -52,12 +53,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$AMASS_DB" <<-EOSQ
 
         FOR _var_r IN (
             SELECT fqdns.content->>'name' AS "name", ips.content->>'address' AS "addr" 
-            FROM ((assets AS fqdns 
-            INNER JOIN relations ON fqdns.id = relations.from_asset_id) 
-            INNER JOIN assets AS ips ON relations.to_asset_id = ips.id) 
-            WHERE fqdns.type = 'FQDN' AND ips.type = 'IPAddress' 
-            AND relations.type IN ('a_record', 'aaaa_record') 
-            AND relations.last_seen >= _from AND relations.last_seen <= _to 
+            FROM ((entities AS fqdns 
+            INNER JOIN edges ON fqdns.id = edges.from_entity_id) 
+            INNER JOIN entities AS ips ON edges.to_entity_id = ips.id) 
+            WHERE fqdns.etype = 'FQDN' AND ips.etype = 'IPAddress' 
+            AND edges.etype = 'dns_record' AND edges.content->>'header.rr_type' IN (1, 28) 
+            AND edges.last_seen >= _from AND edges.last_seen <= _to 
             AND fqdns.content->>'name' = ANY(_names)
         ) LOOP fqdn = _var_r.name;
             ip_addr = _var_r.addr;
@@ -70,18 +71,19 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$AMASS_DB" <<-EOSQ
                 WITH RECURSIVE traverse_cname(_fqdn) AS ( 
                 VALUES(_name) 
                 UNION 
-                SELECT cnames.content->>'name' FROM ((assets AS fqdns 
-                INNER JOIN relations ON fqdns.id = relations.from_asset_id) 
-                INNER JOIN assets AS cnames ON relations.to_asset_id = cnames.id), traverse_cname 
-                WHERE fqdns.type = 'FQDN' AND cnames.type = 'FQDN' 
-                AND relations.last_seen >= _from AND relations.last_seen <= _to 
-                AND relations.type = 'cname_record' AND fqdns.content->>'name' = traverse_cname._fqdn) 
+                SELECT cnames.content->>'name' FROM ((entities AS fqdns 
+                INNER JOIN edges ON fqdns.id = edges.from_entity_id) 
+                INNER JOIN entities AS cnames ON edges.to_entity_id = cnames.id), traverse_cname 
+                WHERE fqdns.etype = 'FQDN' AND cnames.etype = 'FQDN' 
+                AND edges.last_seen >= _from AND edges.last_seen <= _to 
+                AND edges.etype = 'dns_record' AND edges.content->>'header.rr_type' = 5 
+                AND fqdns.content->>'name' = traverse_cname._fqdn) 
                 SELECT fqdns.content->>'name' AS "name", ips.content->>'address' AS "addr" 
-                FROM ((assets AS fqdns INNER JOIN relations ON fqdns.id = relations.from_asset_id) 
-                INNER JOIN assets AS ips ON relations.to_asset_id = ips.id) 
-                WHERE fqdns.type = 'FQDN' AND ips.type = 'IPAddress' 
-                AND relations.last_seen >= _from AND relations.last_seen <= _to 
-                AND relations.type IN ('a_record', 'aaaa_record') 
+                FROM ((entities AS fqdns INNER JOIN edges ON fqdns.id = edges.from_entity_id) 
+                INNER JOIN entities AS ips ON edges.to_entity_id = ips.id) 
+                WHERE fqdns.etype = 'FQDN' AND ips.etype = 'IPAddress' 
+                AND edges.last_seen >= _from AND edges.last_seen <= _to 
+                AND edges.etype = 'dns_record' AND edges.content->>'header.rr_type' IN (1, 28) 
                 AND fqdns.content->>'name' IN (SELECT _fqdn FROM traverse_cname)
             ) LOOP fqdn = _name;
                 ip_addr = _var_r.addr;
