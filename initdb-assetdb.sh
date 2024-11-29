@@ -39,7 +39,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$AMASS_DB" <<-EOSQ
             SELECT srvs.content->>'name' AS "name", ips.content->>'address' AS "addr" 
             FROM ((((entities AS fqdns 
             INNER JOIN edges AS r1 ON fqdns.entity_id = r1.from_entity_id) 
-            INNER JOIN entities AS srvs ON r1.to_entity_id = srvs.id) 
+            INNER JOIN entities AS srvs ON r1.to_entity_id = srvs.entity_id) 
             INNER JOIN edges AS r2 ON srvs.entity_id = r2.from_entity_id) 
             INNER JOIN entities AS ips ON r2.to_entity_id = ips.entity_id) 
             WHERE fqdns.etype = 'FQDN' AND srvs.etype = 'FQDN' AND ips.etype = 'IPAddress' 
