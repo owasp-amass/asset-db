@@ -121,6 +121,61 @@ func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error)
 	}, nil
 }
 
+// FindEntityTagsByContent finds entity tags in the database that match the provided property data and updated_at after the since parameter.
+// It takes an oam.Property as input and searches for entity tags with matching content in the database.
+// If since.IsZero(), the parameter will be ignored.
+// The property data is serialized to JSON and compared against the Content field of the EntityTag struct.
+// Returns a slice of matching entity tags as []*types.EntityTag or an error if the search fails.
+func (sql *sqlRepository) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
+	jsonContent, err := prop.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	tag := EntityTag{
+		Type:    string(prop.PropertyType()),
+		Content: jsonContent,
+	}
+
+	nameQuery, err := tag.NameJSONQuery()
+	if err != nil {
+		return nil, err
+	}
+
+	valueQuery, err := tag.ValueJSONQuery()
+	if err != nil {
+		return nil, err
+	}
+
+	tx := sql.db.Where("ttype = ?", tag.Type)
+	if !since.IsZero() {
+		tx = tx.Where("updated_at >= ?", since.UTC())
+	}
+
+	var tags []EntityTag
+	tx = tx.Where(nameQuery).Where(valueQuery).Find(&tags)
+	if err := tx.Error; err != nil {
+		return nil, err
+	}
+
+	var results []*types.EntityTag
+	for _, t := range tags {
+		if propData, err := t.Parse(); err == nil {
+			results = append(results, &types.EntityTag{
+				ID:        strconv.FormatUint(t.ID, 10),
+				CreatedAt: t.CreatedAt.In(time.UTC).Local(),
+				LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
+				Property:  propData,
+			})
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("zero entity tags found")
+	}
+	return results, nil
+}
+
 // GetEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no names are specified, all tags for the specified entity are returned.
@@ -305,6 +360,61 @@ func (sql *sqlRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 		Property:  data,
 		Edge:      edge,
 	}, nil
+}
+
+// FindEdgeTagsByContent finds edge tags in the database that match the provided property data and updated_at after the since parameter.
+// It takes an oam.Property as input and searches for edge tags with matching content in the database.
+// If since.IsZero(), the parameter will be ignored.
+// The property data is serialized to JSON and compared against the Content field of the EdgeTag struct.
+// Returns a slice of matching edge tags as []*types.EdgeTag or an error if the search fails.
+func (sql *sqlRepository) FindEdgeTagsByContent(prop oam.Property, since time.Time) ([]*types.EdgeTag, error) {
+	jsonContent, err := prop.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	tag := EdgeTag{
+		Type:    string(prop.PropertyType()),
+		Content: jsonContent,
+	}
+
+	nameQuery, err := tag.NameJSONQuery()
+	if err != nil {
+		return nil, err
+	}
+
+	valueQuery, err := tag.ValueJSONQuery()
+	if err != nil {
+		return nil, err
+	}
+
+	tx := sql.db.Where("ttype = ?", tag.Type)
+	if !since.IsZero() {
+		tx = tx.Where("updated_at >= ?", since.UTC())
+	}
+
+	var tags []EdgeTag
+	tx = tx.Where(nameQuery).Where(valueQuery).Find(&tags)
+	if err := tx.Error; err != nil {
+		return nil, err
+	}
+
+	var results []*types.EdgeTag
+	for _, t := range tags {
+		if propData, err := t.Parse(); err == nil {
+			results = append(results, &types.EdgeTag{
+				ID:        strconv.FormatUint(t.ID, 10),
+				CreatedAt: t.CreatedAt.In(time.UTC).Local(),
+				LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
+				Property:  propData,
+			})
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("zero edge tags found")
+	}
+	return results, nil
 }
 
 // GetEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.

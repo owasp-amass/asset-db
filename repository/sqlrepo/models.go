@@ -292,3 +292,77 @@ func parseProperty(ptype string, content datatypes.JSON) (oam.Property, error) {
 
 	return prop, err
 }
+
+// NameJSONQuery generates the JSON query for the field returned by the Property Name method.
+// It returns the parsed property and an error, if any.
+func (e *EntityTag) NameJSONQuery() (*datatypes.JSONQueryExpression, error) {
+	prop, err := e.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	return propertyNameJSONQuery(prop)
+}
+
+// NameJSONQuery generates the JSON query for the field returned by the Property Name method.
+// It returns the parsed property and an error, if any.
+func (e *EdgeTag) NameJSONQuery() (*datatypes.JSONQueryExpression, error) {
+	prop, err := e.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	return propertyNameJSONQuery(prop)
+}
+
+func propertyNameJSONQuery(prop oam.Property) (*datatypes.JSONQueryExpression, error) {
+	jsonQuery := datatypes.JSONQuery("content")
+
+	switch v := prop.(type) {
+	case *property.SimpleProperty:
+		return jsonQuery.Equals(v.PropertyName, "property_name"), nil
+	case *property.SourceProperty:
+		return jsonQuery.Equals(v.Source, "name"), nil
+	case *property.VulnProperty:
+		return jsonQuery.Equals(v.ID, "id"), nil
+	}
+
+	return nil, fmt.Errorf("unknown property type: %s", prop.PropertyType())
+}
+
+// ValueJSONQuery generates the JSON query for the field returned by the Property Value method.
+// It returns the parsed property and an error, if any.
+func (e *EntityTag) ValueJSONQuery() (*datatypes.JSONQueryExpression, error) {
+	prop, err := e.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	return propertyValueJSONQuery(prop)
+}
+
+// ValueJSONQuery generates the JSON query for the field returned by the Property Value method.
+// It returns the parsed property and an error, if any.
+func (e *EdgeTag) ValueJSONQuery() (*datatypes.JSONQueryExpression, error) {
+	prop, err := e.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	return propertyValueJSONQuery(prop)
+}
+
+func propertyValueJSONQuery(prop oam.Property) (*datatypes.JSONQueryExpression, error) {
+	jsonQuery := datatypes.JSONQuery("content")
+
+	switch v := prop.(type) {
+	case *property.SimpleProperty:
+		return jsonQuery.Equals(v.PropertyValue, "property_value"), nil
+	case *property.SourceProperty:
+		return jsonQuery.Equals(v.Confidence, "confidence"), nil
+	case *property.VulnProperty:
+		return jsonQuery.Equals(v.Description, "desc"), nil
+	}
+
+	return nil, fmt.Errorf("unknown property type: %s", prop.PropertyType())
+}

@@ -454,6 +454,11 @@ func (m *mockAssetDB) FindEntityTagById(id string) (*types.EntityTag, error) {
 	return args.Get(0).(*types.EntityTag), args.Error(1)
 }
 
+func (m *mockAssetDB) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
+	args := m.Called(prop, since)
+	return args.Get(0).([]*types.EntityTag), args.Error(1)
+}
+
 func (m *mockAssetDB) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
 	args := m.Called(entity, since, names)
 	return args.Get(0).([]*types.EntityTag), args.Error(1)
@@ -477,6 +482,11 @@ func (m *mockAssetDB) CreateEdgeProperty(edge *types.Edge, property oam.Property
 func (m *mockAssetDB) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 	args := m.Called(id)
 	return args.Get(0).(*types.EdgeTag), args.Error(1)
+}
+
+func (m *mockAssetDB) FindEdgeTagsByContent(prop oam.Property, since time.Time) ([]*types.EdgeTag, error) {
+	args := m.Called(prop, since)
+	return args.Get(0).([]*types.EdgeTag), args.Error(1)
 }
 
 func (m *mockAssetDB) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {

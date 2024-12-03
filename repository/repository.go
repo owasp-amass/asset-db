@@ -20,10 +20,10 @@ type Repository interface {
 	GetDBType() string
 	CreateEntity(entity *types.Entity) (*types.Entity, error)
 	CreateAsset(asset oam.Asset) (*types.Entity, error)
-	DeleteEntity(id string) error
 	FindEntityById(id string) (*types.Entity, error)
 	FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
+	DeleteEntity(id string) error
 	CreateEdge(edge *types.Edge) (*types.Edge, error)
 	FindEdgeById(id string) (*types.Edge, error)
 	IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error)
@@ -32,11 +32,13 @@ type Repository interface {
 	CreateEntityTag(entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error)
 	CreateEntityProperty(entity *types.Entity, property oam.Property) (*types.EntityTag, error)
 	FindEntityTagById(id string) (*types.EntityTag, error)
+	FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error)
 	GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error)
 	DeleteEntityTag(id string) error
 	CreateEdgeTag(edge *types.Edge, tag *types.EdgeTag) (*types.EdgeTag, error)
 	CreateEdgeProperty(edge *types.Edge, property oam.Property) (*types.EdgeTag, error)
 	FindEdgeTagById(id string) (*types.EdgeTag, error)
+	FindEdgeTagsByContent(prop oam.Property, since time.Time) ([]*types.EdgeTag, error)
 	GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error)
 	DeleteEdgeTag(id string) error
 	Close() error

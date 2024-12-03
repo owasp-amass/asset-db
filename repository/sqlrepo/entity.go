@@ -84,70 +84,6 @@ func (sql *sqlRepository) UpdateEntityLastSeen(id string) error {
 	return nil
 }
 
-// DeleteEntity removes an entity in the database by its ID.
-// It takes a string representing the entity ID and removes the corresponding entity from the database.
-// Returns an error if the entity is not found.
-func (sql *sqlRepository) DeleteEntity(id string) error {
-	entityId, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return err
-	}
-
-	entity := Entity{ID: entityId}
-	result := sql.db.Delete(&entity)
-	return result.Error
-}
-
-// FindEntityByContent finds entity in the database that match the provided asset data and last seen after the since parameter.
-// It takes an oam.Asset as input and searches for entities with matching content in the database.
-// If since.IsZero(), the parameter will be ignored.
-// The asset data is serialized to JSON and compared against the Content field of the Entity struct.
-// Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Time) ([]*types.Entity, error) {
-	jsonContent, err := assetData.JSON()
-	if err != nil {
-		return nil, err
-	}
-
-	entity := Entity{
-		Type:    string(assetData.AssetType()),
-		Content: jsonContent,
-	}
-
-	jsonQuery, err := entity.JSONQuery()
-	if err != nil {
-		return nil, err
-	}
-
-	var entities []Entity
-	var result *gorm.DB
-	if since.IsZero() {
-		result = sql.db.Where("etype = ?", entity.Type).Find(&entities, jsonQuery)
-	} else {
-		result = sql.db.Where("etype = ? AND updated_at >= ?", entity.Type, since.UTC()).Find(&entities, jsonQuery)
-	}
-	if err := result.Error; err != nil {
-		return nil, err
-	}
-
-	var results []*types.Entity
-	for _, e := range entities {
-		if assetData, err := e.Parse(); err == nil {
-			results = append(results, &types.Entity{
-				ID:        strconv.FormatUint(e.ID, 10),
-				CreatedAt: e.CreatedAt.In(time.UTC).Local(),
-				LastSeen:  e.UpdatedAt.In(time.UTC).Local(),
-				Asset:     assetData,
-			})
-		}
-	}
-
-	if len(results) == 0 {
-		return nil, errors.New("zero entities found")
-	}
-	return results, nil
-}
-
 // FindEntityById finds an entity in the database by the ID.
 // It takes a string representing the entity ID and retrieves the corresponding entity from the database.
 // Returns the found entity as a types.Entity or an error if the asset is not found.
@@ -174,6 +110,56 @@ func (sql *sqlRepository) FindEntityById(id string) (*types.Entity, error) {
 		LastSeen:  entity.UpdatedAt.In(time.UTC).Local(),
 		Asset:     assetData,
 	}, nil
+}
+
+// FindEntityByContent finds entities in the database that match the provided asset data and last seen after the since parameter.
+// It takes an oam.Asset as input and searches for entities with matching content in the database.
+// If since.IsZero(), the parameter will be ignored.
+// The asset data is serialized to JSON and compared against the Content field of the Entity struct.
+// Returns a slice of matching entities as []*types.Entity or an error if the search fails.
+func (sql *sqlRepository) FindEntityByContent(assetData oam.Asset, since time.Time) ([]*types.Entity, error) {
+	jsonContent, err := assetData.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	entity := Entity{
+		Type:    string(assetData.AssetType()),
+		Content: jsonContent,
+	}
+
+	jsonQuery, err := entity.JSONQuery()
+	if err != nil {
+		return nil, err
+	}
+
+	tx := sql.db.Where("etype = ?", entity.Type)
+	if !since.IsZero() {
+		tx = tx.Where("updated_at >= ?", since.UTC())
+	}
+
+	var entities []Entity
+	tx = tx.Where(jsonQuery).Find(&entities)
+	if err := tx.Error; err != nil {
+		return nil, err
+	}
+
+	var results []*types.Entity
+	for _, e := range entities {
+		if assetData, err := e.Parse(); err == nil {
+			results = append(results, &types.Entity{
+				ID:        strconv.FormatUint(e.ID, 10),
+				CreatedAt: e.CreatedAt.In(time.UTC).Local(),
+				LastSeen:  e.UpdatedAt.In(time.UTC).Local(),
+				Asset:     assetData,
+			})
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("zero entities found")
+	}
+	return results, nil
 }
 
 // FindEntitiesByType finds all entities in the database of the provided asset type and last seen after the since parameter.
@@ -209,4 +195,18 @@ func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Tim
 		return nil, errors.New("no entities of the specified type")
 	}
 	return results, nil
+}
+
+// DeleteEntity removes an entity in the database by its ID.
+// It takes a string representing the entity ID and removes the corresponding entity from the database.
+// Returns an error if the entity is not found.
+func (sql *sqlRepository) DeleteEntity(id string) error {
+	entityId, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	entity := Entity{ID: entityId}
+	result := sql.db.Delete(&entity)
+	return result.Error
 }
