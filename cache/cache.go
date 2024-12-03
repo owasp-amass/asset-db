@@ -5,15 +5,15 @@
 package cache
 
 import (
-	"sync"
 	"time"
 
 	"github.com/caffix/queue"
 	"github.com/owasp-amass/asset-db/repository"
+	"github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/open-asset-model/property"
 )
 
 type Cache struct {
-	sync.Mutex
 	start time.Time
 	freq  time.Duration
 	done  chan struct{}
@@ -97,4 +97,38 @@ loop:
 			callback()
 		}
 	})
+}
+
+func (c *Cache) createCacheEntityTag(entity *types.Entity, name string, since time.Time) error {
+	_, err := c.cache.CreateEntityProperty(entity, &property.SimpleProperty{
+		PropertyName:  name,
+		PropertyValue: since.Format(time.RFC3339Nano),
+	})
+	return err
+}
+
+func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.EntityTag, time.Time, bool) {
+	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, name); err == nil && len(tags) == 1 {
+		if t, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value()); err == nil {
+			return tags[0], t, true
+		}
+	}
+	return nil, time.Time{}, false
+}
+
+func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string, since time.Time) error {
+	_, err := c.cache.CreateEdgeProperty(edge, &property.SimpleProperty{
+		PropertyName:  name,
+		PropertyValue: since.Format(time.RFC3339Nano),
+	})
+	return err
+}
+
+func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag, time.Time, bool) {
+	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, name); err == nil && len(tags) == 1 {
+		if t, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value()); err == nil {
+			return tags[0], t, true
+		}
+	}
+	return nil, time.Time{}, false
 }

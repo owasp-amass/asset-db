@@ -13,9 +13,6 @@ import (
 
 // CreateEdge implements the Repository interface.
 func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
-	c.Lock()
-	defer c.Unlock()
-
 	e, err := c.cache.CreateEdge(edge)
 	if err != nil {
 		return nil, err
@@ -63,9 +60,6 @@ func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 
 // FindEdgeById implements the Repository interface.
 func (c *Cache) FindEdgeById(id string) (*types.Edge, error) {
-	c.Lock()
-	defer c.Unlock()
-
 	return c.cache.FindEdgeById(id)
 }
 
@@ -74,7 +68,6 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 	var dbquery bool
 
 	if since.IsZero() || since.Before(c.start) {
-		c.Lock()
 		if tag, last, found := c.checkCacheEntityTag(entity, "cache_incoming_edges"); !found || since.Before(last) {
 			dbquery = true
 			if found {
@@ -82,7 +75,6 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 			}
 			_ = c.createCacheEntityTag(entity, "cache_incoming_edges", since)
 		}
-		c.Unlock()
 	}
 
 	if dbquery {
@@ -106,9 +98,6 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 		<-done
 		close(done)
 
-		c.Lock()
-		defer c.Unlock()
-
 		if dberr == nil && len(dbedges) > 0 {
 			for _, edge := range dbedges {
 				e, err := c.cache.CreateEntity(&types.Entity{
@@ -128,9 +117,6 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 				}
 			}
 		}
-	} else {
-		c.Lock()
-		defer c.Unlock()
 	}
 
 	return c.cache.IncomingEdges(entity, since, labels...)
@@ -141,7 +127,6 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 	var dbquery bool
 
 	if since.IsZero() || since.Before(c.start) {
-		c.Lock()
 		if tag, last, found := c.checkCacheEntityTag(entity, "cache_outgoing_edges"); !found || since.Before(last) {
 			dbquery = true
 			if found {
@@ -149,7 +134,6 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 			}
 			_ = c.createCacheEntityTag(entity, "cache_outgoing_edges", since)
 		}
-		c.Unlock()
 	}
 
 	if dbquery {
@@ -173,9 +157,6 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 		<-done
 		close(done)
 
-		c.Lock()
-		defer c.Unlock()
-
 		if dberr == nil && len(dbedges) > 0 {
 			for _, edge := range dbedges {
 				e, err := c.cache.CreateEntity(&types.Entity{
@@ -195,9 +176,6 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 				}
 			}
 		}
-	} else {
-		c.Lock()
-		defer c.Unlock()
 	}
 
 	return c.cache.OutgoingEdges(entity, since, labels...)
@@ -205,9 +183,6 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 
 // DeleteEdge implements the Repository interface.
 func (c *Cache) DeleteEdge(id string) error {
-	c.Lock()
-	defer c.Unlock()
-
 	edge, err := c.cache.FindEdgeById(id)
 	if err != nil {
 		return err

@@ -14,9 +14,6 @@ import (
 
 // CreateEntity implements the Repository interface.
 func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
-	c.Lock()
-	defer c.Unlock()
-
 	entity, err := c.cache.CreateEntity(input)
 	if err != nil {
 		return nil, err
@@ -42,9 +39,6 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 
 // CreateAsset implements the Repository interface.
 func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
-	c.Lock()
-	defer c.Unlock()
-
 	entity, err := c.cache.CreateAsset(asset)
 	if err != nil {
 		return nil, err
@@ -66,21 +60,16 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 
 // FindEntityById implements the Repository interface.
 func (c *Cache) FindEntityById(id string) (*types.Entity, error) {
-	c.Lock()
-	defer c.Unlock()
-
 	return c.cache.FindEntityById(id)
 }
 
 // FindEntityByContent implements the Repository interface.
 func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error) {
-	c.Lock()
 	entities, err := c.cache.FindEntityByContent(asset, since)
 	if err == nil && len(entities) > 0 {
-		c.Unlock()
 		return entities, nil
 	}
-	c.Unlock()
+
 	if !since.IsZero() && !since.Before(c.start) {
 		return nil, err
 	}
@@ -99,9 +88,6 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 	if dberr != nil {
 		return entities, err
 	}
-
-	c.Lock()
-	defer c.Unlock()
 
 	var results []*types.Entity
 	for _, entity := range dbentities {
@@ -122,19 +108,15 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 
 // FindEntitiesByType implements the Repository interface.
 func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
-	c.Lock()
 	entities, err := c.cache.FindEntitiesByType(atype, since)
 	if err == nil && len(entities) > 0 {
 		if !since.IsZero() && !since.Before(c.start) {
-			c.Unlock()
 			return entities, err
 		}
 		if _, last, found := c.checkCacheEntityTag(entities[0], "cache_find_entities_by_type"); found && !since.Before(last) {
-			c.Unlock()
 			return entities, err
 		}
 	}
-	c.Unlock()
 
 	var dberr error
 	var dbentities []*types.Entity
@@ -150,9 +132,6 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 	if dberr != nil {
 		return entities, err
 	}
-
-	c.Lock()
-	defer c.Unlock()
 
 	var results []*types.Entity
 	for _, entity := range dbentities {
@@ -175,9 +154,6 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 
 // DeleteEntity implements the Repository interface.
 func (c *Cache) DeleteEntity(id string) error {
-	c.Lock()
-	defer c.Unlock()
-
 	entity, err := c.cache.FindEntityById(id)
 	if err != nil {
 		return err
