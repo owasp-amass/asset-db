@@ -5,7 +5,6 @@
 package cache
 
 import (
-	"errors"
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -28,15 +27,13 @@ func (c *Cache) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*
 		return nil, err
 	}
 
-	c.appendToDBQueue(func() {
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			_, _ = c.db.CreateEntityTag(e[0], &types.EntityTag{
-				CreatedAt: input.CreatedAt,
-				LastSeen:  input.LastSeen,
-				Property:  input.Property,
-			})
-		}
-	})
+	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+		_, _ = c.db.CreateEntityTag(e[0], &types.EntityTag{
+			CreatedAt: input.CreatedAt,
+			LastSeen:  input.LastSeen,
+			Property:  input.Property,
+		})
+	}
 
 	return tag, nil
 }
@@ -57,11 +54,9 @@ func (c *Cache) CreateEntityProperty(entity *types.Entity, property oam.Property
 		return nil, err
 	}
 
-	c.appendToDBQueue(func() {
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			_, _ = c.db.CreateEntityProperty(e[0], property)
-		}
-	})
+	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+		_, _ = c.db.CreateEntityProperty(e[0], property)
+	}
 
 	return tag, nil
 }
@@ -73,23 +68,10 @@ func (c *Cache) FindEntityTagById(id string) (*types.EntityTag, error) {
 
 // FindEntityTagsByContent implements the Repository interface.
 func (c *Cache) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
-	tags, err := c.cache.FindEntityTagsByContent(prop, since)
-	if err == nil && len(tags) > 0 {
-		return tags, nil
-	}
+	if since.IsZero() || since.Before(c.start) {
+		var dbentities []*types.Entity
 
-	if !since.IsZero() && !since.Before(c.start) {
-		return nil, err
-	}
-
-	var dberr error
-	var dbtags []*types.EntityTag
-	var dbentities []*types.Entity
-	done := make(chan struct{}, 1)
-	c.appendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		dbtags, dberr = c.db.FindEntityTagsByContent(prop, since)
+		dbtags, dberr := c.db.FindEntityTagsByContent(prop, since)
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
 				if entity, err := c.db.FindEntityById(tag.Entity.ID); err == nil && entity != nil {
@@ -97,34 +79,26 @@ func (c *Cache) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*
 				}
 			}
 		}
-	})
-	<-done
-	close(done)
 
-	if dberr != nil {
-		return tags, err
-	}
-
-	var results []*types.EntityTag
-	for i, tag := range dbtags {
-		entity, err := c.cache.CreateEntity(dbentities[i])
-		if err != nil || entity == nil {
-			continue
-		}
-
-		if e, err := c.cache.CreateEntityTag(entity, &types.EntityTag{
-			CreatedAt: tag.CreatedAt,
-			LastSeen:  tag.LastSeen,
-			Property:  tag.Property,
-		}); err == nil {
-			results = append(results, e)
+		if dberr == nil {
+			for i, tag := range dbtags {
+				if entity, err := c.cache.CreateEntity(&types.Entity{
+					CreatedAt: dbentities[i].CreatedAt,
+					LastSeen:  dbentities[i].LastSeen,
+					Asset:     dbentities[i].Asset,
+				}); err == nil && entity != nil {
+					_, _ = c.cache.CreateEntityTag(entity, &types.EntityTag{
+						CreatedAt: tag.CreatedAt,
+						LastSeen:  tag.LastSeen,
+						Property:  tag.Property,
+						Entity:    entity,
+					})
+				}
+			}
 		}
 	}
 
-	if len(results) == 0 {
-		return nil, errors.New("zero entity tags found")
-	}
-	return results, nil
+	return c.cache.FindEntityTagsByContent(prop, since)
 }
 
 // GetEntityTags implements the Repository interface.
@@ -145,16 +119,9 @@ func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...st
 		var dberr error
 		var dbtags []*types.EntityTag
 
-		done := make(chan struct{}, 1)
-		c.appendToDBQueue(func() {
-			defer func() { done <- struct{}{} }()
-
-			if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-				dbtags, dberr = c.db.GetEntityTags(e[0], since)
-			}
-		})
-		<-done
-		close(done)
+		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+			dbtags, dberr = c.db.GetEntityTags(e[0], since)
+		}
 
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
@@ -186,17 +153,15 @@ func (c *Cache) DeleteEntityTag(id string) error {
 		return err
 	}
 
-	c.appendToDBQueue(func() {
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			if tags, err := c.db.GetEntityTags(e[0], time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
-				for _, t := range tags {
-					if t.Property.Value() == tag.Property.Value() {
-						_ = c.db.DeleteEntityTag(t.ID)
-					}
+	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+		if tags, err := c.db.GetEntityTags(e[0], time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
+			for _, t := range tags {
+				if t.Property.Value() == tag.Property.Value() {
+					_ = c.db.DeleteEntityTag(t.ID)
 				}
 			}
 		}
-	})
+	}
 
 	return nil
 }

@@ -168,6 +168,85 @@ func TestFindEntityTagById(t *testing.T) {
 	}
 }
 
+func TestFindEntityTagsByContent(t *testing.T) {
+	db1, db2, dir, err := createTestRepositories()
+	assert.NoError(t, err)
+	defer func() {
+		db1.Close()
+		db2.Close()
+		os.RemoveAll(dir)
+	}()
+
+	c, err := New(db1, db2, time.Minute)
+	assert.NoError(t, err)
+	defer c.Close()
+
+	// add some really old stuff to the database
+	now := time.Now()
+	prop := &property.SimpleProperty{
+		PropertyName:  "test",
+		PropertyValue: "foobar",
+	}
+	ctime1 := now.Add(-24 * time.Hour)
+	cbefore1 := ctime1.Add(-20 * time.Second)
+	fqdn1 := &domain.FQDN{Name: "owasp.org"}
+	entity1, err := c.db.CreateEntity(&types.Entity{
+		CreatedAt: ctime1,
+		LastSeen:  ctime1,
+		Asset:     fqdn1,
+	})
+	assert.NoError(t, err)
+	_, err = c.db.CreateEntityTag(entity1, &types.EntityTag{
+		CreatedAt: ctime1,
+		LastSeen:  ctime1,
+		Property:  prop,
+	})
+	assert.NoError(t, err)
+	// add some not so old stuff to the database
+	ctime2 := now.Add(-8 * time.Hour)
+	cbefore2 := ctime2.Add(-20 * time.Second)
+	fqdn2 := &domain.FQDN{Name: "utica.edu"}
+	entity2, err := c.db.CreateEntity(&types.Entity{
+		CreatedAt: ctime2,
+		LastSeen:  ctime2,
+		Asset:     fqdn2,
+	})
+	assert.NoError(t, err)
+	_, err = c.db.CreateEntityTag(entity2, &types.EntityTag{
+		CreatedAt: ctime2,
+		LastSeen:  ctime2,
+		Property:  prop,
+	})
+	assert.NoError(t, err)
+	// add new entities to the database
+	entity3, err := c.CreateAsset(&domain.FQDN{Name: "sunypoly.edu"})
+	assert.NoError(t, err)
+	_, err = c.CreateEntityProperty(entity3, prop)
+	assert.NoError(t, err)
+	after := time.Now().Add(time.Second)
+
+	_, err = c.FindEntityTagsByContent(prop, after)
+	assert.Error(t, err)
+
+	tags, err := c.FindEntityTagsByContent(prop, c.StartTime())
+	assert.NoError(t, err)
+	if len(tags) != 1 {
+		t.Errorf("first request failed to produce the expected number of tags")
+	}
+
+	tags, err = c.FindEntityTagsByContent(prop, cbefore2)
+	assert.NoError(t, err)
+	if len(tags) != 2 {
+		t.Errorf("second request failed to produce the expected number of tags")
+	}
+
+	tags, err = c.FindEntityTagsByContent(prop, cbefore1)
+	assert.NoError(t, err)
+	if len(tags) != 3 {
+		t.Errorf("third request failed to produce the expected number of tags")
+	}
+}
+
 func TestGetEntityTags(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)

@@ -5,7 +5,6 @@
 package cache
 
 import (
-	"errors"
 	"reflect"
 	"time"
 
@@ -44,35 +43,33 @@ func (c *Cache) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.Ed
 		return nil, err
 	}
 
-	c.appendToDBQueue(func() {
-		s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
-		if err != nil || len(s) != 1 {
-			return
-		}
+	s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+	if err != nil || len(s) != 1 {
+		return nil, err
+	}
 
-		o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
-		if err != nil || len(o) != 1 {
-			return
-		}
+	o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+	if err != nil || len(o) != 1 {
+		return nil, err
+	}
 
-		edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
-		if err != nil || len(edges) == 0 {
-			return
-		}
+	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
+	if err != nil || len(edges) == 0 {
+		return nil, err
+	}
 
-		var target *types.Edge
-		for _, e := range edges {
-			if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
-				target = e
-				break
-			}
+	var target *types.Edge
+	for _, e := range edges {
+		if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
+			target = e
+			break
 		}
-		if target != nil {
-			_, _ = c.db.CreateEdgeProperty(target, input.Property)
-		}
-	})
+	}
+	if target != nil {
+		_, err = c.db.CreateEdgeProperty(target, input.Property)
+	}
 
-	return tag, nil
+	return tag, err
 }
 
 // CreateEdgeProperty implements the Repository interface.
@@ -106,35 +103,33 @@ func (c *Cache) CreateEdgeProperty(edge *types.Edge, property oam.Property) (*ty
 		return nil, err
 	}
 
-	c.appendToDBQueue(func() {
-		s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
-		if err != nil || len(s) != 1 {
-			return
-		}
+	s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+	if err != nil || len(s) != 1 {
+		return nil, err
+	}
 
-		o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
-		if err != nil || len(o) != 1 {
-			return
-		}
+	o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+	if err != nil || len(o) != 1 {
+		return nil, err
+	}
 
-		edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
-		if err != nil || len(edges) == 0 {
-			return
-		}
+	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
+	if err != nil || len(edges) == 0 {
+		return nil, err
+	}
 
-		var target *types.Edge
-		for _, e := range edges {
-			if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
-				target = e
-				break
-			}
+	var target *types.Edge
+	for _, e := range edges {
+		if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
+			target = e
+			break
 		}
-		if target != nil {
-			_, _ = c.db.CreateEdgeProperty(target, property)
-		}
-	})
+	}
+	if target != nil {
+		_, err = c.db.CreateEdgeProperty(target, property)
+	}
 
-	return tag, nil
+	return tag, err
 }
 
 // FindEdgeTagById implements the Repository interface.
@@ -144,24 +139,11 @@ func (c *Cache) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 
 // FindEdgeTagsByContent implements the Repository interface.
 func (c *Cache) FindEdgeTagsByContent(prop oam.Property, since time.Time) ([]*types.EdgeTag, error) {
-	tags, err := c.cache.FindEdgeTagsByContent(prop, since)
-	if err == nil && len(tags) > 0 {
-		return tags, nil
-	}
+	if since.IsZero() || since.Before(c.start) {
+		var dbedges []*types.Edge
+		var froms, tos []*types.Entity
 
-	if !since.IsZero() && !since.Before(c.start) {
-		return nil, err
-	}
-
-	var dberr error
-	var dbedges []*types.Edge
-	var dbtags []*types.EdgeTag
-	var froms, tos []*types.Entity
-	done := make(chan struct{}, 1)
-	c.appendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		dbtags, dberr = c.db.FindEdgeTagsByContent(prop, since)
+		dbtags, dberr := c.db.FindEdgeTagsByContent(prop, since)
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
 				if edge, err := c.db.FindEdgeById(tag.Edge.ID); err == nil && edge != nil {
@@ -179,58 +161,48 @@ func (c *Cache) FindEdgeTagsByContent(prop oam.Property, since time.Time) ([]*ty
 				}
 			}
 		}
-	})
-	<-done
-	close(done)
 
-	if dberr != nil {
-		return tags, err
-	}
+		if dberr == nil {
+			for i, tag := range dbtags {
+				from, err := c.cache.CreateEntity(&types.Entity{
+					CreatedAt: froms[i].CreatedAt,
+					LastSeen:  froms[i].LastSeen,
+					Asset:     froms[i].Asset,
+				})
+				if err != nil || from == nil {
+					continue
+				}
 
-	var results []*types.EdgeTag
-	for i, tag := range dbtags {
-		from, err := c.cache.CreateEntity(&types.Entity{
-			CreatedAt: froms[i].CreatedAt,
-			LastSeen:  froms[i].LastSeen,
-			Asset:     froms[i].Asset,
-		})
-		if err != nil || from == nil {
-			continue
-		}
+				to, err := c.cache.CreateEntity(&types.Entity{
+					CreatedAt: tos[i].CreatedAt,
+					LastSeen:  tos[i].LastSeen,
+					Asset:     tos[i].Asset,
+				})
+				if err != nil || to == nil {
+					continue
+				}
 
-		to, err := c.cache.CreateEntity(&types.Entity{
-			CreatedAt: tos[i].CreatedAt,
-			LastSeen:  tos[i].LastSeen,
-			Asset:     tos[i].Asset,
-		})
-		if err != nil || to == nil {
-			continue
-		}
+				edge, err := c.cache.CreateEdge(&types.Edge{
+					CreatedAt:  dbedges[i].CreatedAt,
+					LastSeen:   dbedges[i].LastSeen,
+					Relation:   dbedges[i].Relation,
+					FromEntity: from,
+					ToEntity:   to,
+				})
+				if err != nil || edge == nil {
+					continue
+				}
 
-		edge, err := c.cache.CreateEdge(&types.Edge{
-			CreatedAt:  dbedges[i].CreatedAt,
-			LastSeen:   dbedges[i].LastSeen,
-			Relation:   dbedges[i].Relation,
-			FromEntity: from,
-			ToEntity:   to,
-		})
-		if err != nil || edge == nil {
-			continue
-		}
-
-		if e, err := c.cache.CreateEdgeTag(edge, &types.EdgeTag{
-			CreatedAt: tag.CreatedAt,
-			LastSeen:  tag.LastSeen,
-			Property:  tag.Property,
-		}); err == nil {
-			results = append(results, e)
+				_, _ = c.cache.CreateEdgeTag(edge, &types.EdgeTag{
+					CreatedAt: tag.CreatedAt,
+					LastSeen:  tag.LastSeen,
+					Property:  tag.Property,
+				})
+			}
 		}
 	}
 
-	if len(results) == 0 {
-		return nil, errors.New("zero edge tags found")
-	}
-	return results, nil
+	return c.cache.FindEdgeTagsByContent(prop, since)
 }
 
 // GetEdgeTags implements the Repository interface.
@@ -260,38 +232,32 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 
 		var dberr error
 		var dbtags []*types.EdgeTag
-		done := make(chan struct{}, 1)
-		c.appendToDBQueue(func() {
-			defer func() { done <- struct{}{} }()
 
-			s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
-			if err != nil || len(s) != 1 {
-				return
-			}
+		s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+		if err != nil || len(s) != 1 {
+			return nil, err
+		}
 
-			o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
-			if err != nil || len(o) != 1 {
-				return
-			}
+		o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+		if err != nil || len(o) != 1 {
+			return nil, err
+		}
 
-			edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
-			if err != nil || len(edges) == 0 {
-				return
-			}
+		edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
+		if err != nil || len(edges) == 0 {
+			return nil, err
+		}
 
-			var target *types.Edge
-			for _, e := range edges {
-				if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
-					target = e
-					break
-				}
+		var target *types.Edge
+		for _, e := range edges {
+			if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
+				target = e
+				break
 			}
-			if target != nil {
-				dbtags, dberr = c.db.GetEdgeTags(target, since)
-			}
-		})
-		<-done
-		close(done)
+		}
+		if target != nil {
+			dbtags, dberr = c.db.GetEdgeTags(target, since)
+		}
 
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
@@ -333,41 +299,39 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 		return err
 	}
 
-	c.appendToDBQueue(func() {
-		s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
-		if err != nil || len(s) != 1 {
-			return
-		}
+	s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+	if err != nil || len(s) != 1 {
+		return err
+	}
 
-		o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
-		if err != nil || len(o) != 1 {
-			return
-		}
+	o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+	if err != nil || len(o) != 1 {
+		return err
+	}
 
-		edges, err := c.db.OutgoingEdges(s[0], time.Time{}, tag.Edge.Relation.Label())
-		if err != nil || len(edges) == 0 {
-			return
-		}
+	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, tag.Edge.Relation.Label())
+	if err != nil || len(edges) == 0 {
+		return err
+	}
 
-		var target *types.Edge
-		for _, e := range edges {
-			if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
-				target = e
-				break
+	var target *types.Edge
+	for _, e := range edges {
+		if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
+			target = e
+			break
+		}
+	}
+	if target == nil {
+		return err
+	}
+
+	if tags, err := c.db.GetEdgeTags(target, time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
+		for _, t := range tags {
+			if tag.Property.Value() == t.Property.Value() {
+				_ = c.db.DeleteEdgeTag(t.ID)
 			}
 		}
-		if target == nil {
-			return
-		}
-
-		if tags, err := c.db.GetEdgeTags(target, time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
-			for _, t := range tags {
-				if tag.Property.Value() == t.Property.Value() {
-					_ = c.db.DeleteEdgeTag(t.ID)
-				}
-			}
-		}
-	})
+	}
 
 	return nil
 }

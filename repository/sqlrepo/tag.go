@@ -166,6 +166,7 @@ func (sql *sqlRepository) FindEntityTagsByContent(prop oam.Property, since time.
 				CreatedAt: t.CreatedAt.In(time.UTC).Local(),
 				LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
 				Property:  propData,
+				Entity:    &types.Entity{ID: strconv.FormatUint(t.EntityID, 10)},
 			})
 		}
 	}
@@ -407,6 +408,7 @@ func (sql *sqlRepository) FindEdgeTagsByContent(prop oam.Property, since time.Ti
 				CreatedAt: t.CreatedAt.In(time.UTC).Local(),
 				LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
 				Property:  propData,
+				Edge:      &types.Edge{ID: strconv.FormatUint(t.EdgeID, 10)},
 			})
 		}
 	}

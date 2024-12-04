@@ -177,6 +177,81 @@ func TestFindEdgeTagById(t *testing.T) {
 	}
 }
 
+func TestFindEdgeTagsByContent(t *testing.T) {
+	db1, db2, dir, err := createTestRepositories()
+	assert.NoError(t, err)
+	defer func() {
+		db1.Close()
+		db2.Close()
+		os.RemoveAll(dir)
+	}()
+
+	c, err := New(db1, db2, time.Minute)
+	assert.NoError(t, err)
+	defer c.Close()
+
+	// add some really old stuff to the database
+	now := time.Now()
+	ctime1 := now.Add(-24 * time.Hour)
+	cbefore1 := ctime1.Add(-20 * time.Second)
+	edge, err := createTestEdge(c, ctime1)
+	assert.NoError(t, err)
+	prop1 := &property.SimpleProperty{
+		PropertyName:  "test1",
+		PropertyValue: "foobar",
+	}
+	_, err = c.CreateEdgeTag(edge, &types.EdgeTag{
+		CreatedAt: ctime1,
+		LastSeen:  ctime1,
+		Property:  prop1,
+		Edge:      edge,
+	})
+	assert.NoError(t, err)
+	// add some not so old stuff to the database
+	ctime2 := now.Add(-8 * time.Hour)
+	cbefore2 := ctime2.Add(-20 * time.Second)
+	prop2 := &property.SimpleProperty{
+		PropertyName:  "test2",
+		PropertyValue: "foobar",
+	}
+	_, err = c.CreateEdgeTag(edge, &types.EdgeTag{
+		CreatedAt: ctime2,
+		LastSeen:  ctime2,
+		Property:  prop2,
+		Edge:      edge,
+	})
+	assert.NoError(t, err)
+	// add new entities to the database
+	prop3 := &property.SimpleProperty{
+		PropertyName:  "test3",
+		PropertyValue: "foobar",
+	}
+	_, err = c.CreateEdgeProperty(edge, prop3)
+	assert.NoError(t, err)
+	after := time.Now().Add(time.Second)
+
+	_, err = c.FindEdgeTagsByContent(prop3, after)
+	assert.Error(t, err)
+
+	tags, err := c.FindEdgeTagsByContent(prop3, c.StartTime())
+	assert.NoError(t, err)
+	if len(tags) != 1 {
+		t.Errorf("first request failed to produce the expected number of tags")
+	}
+
+	tags, err = c.FindEdgeTagsByContent(prop2, cbefore2)
+	assert.NoError(t, err)
+	if len(tags) != 1 {
+		t.Errorf("second request failed to produce the expected number of tags")
+	}
+
+	tags, err = c.FindEdgeTagsByContent(prop1, cbefore1)
+	assert.NoError(t, err)
+	if len(tags) != 1 {
+		t.Errorf("third request failed to produce the expected number of tags")
+	}
+}
+
 func TestGetEdgeTags(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)

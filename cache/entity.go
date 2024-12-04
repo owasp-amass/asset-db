@@ -25,16 +25,14 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 		}
 		_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
 
-		c.appendToDBQueue(func() {
-			_, _ = c.db.CreateEntity(&types.Entity{
-				CreatedAt: input.CreatedAt,
-				LastSeen:  input.LastSeen,
-				Asset:     input.Asset,
-			})
+		_, err = c.db.CreateEntity(&types.Entity{
+			CreatedAt: input.CreatedAt,
+			LastSeen:  input.LastSeen,
+			Asset:     input.Asset,
 		})
 	}
 
-	return entity, nil
+	return entity, err
 }
 
 // CreateAsset implements the Repository interface.
@@ -50,12 +48,10 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 		}
 		_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
 
-		c.appendToDBQueue(func() {
-			_, _ = c.db.CreateAsset(asset)
-		})
+		_, err = c.db.CreateAsset(asset)
 	}
 
-	return entity, nil
+	return entity, err
 }
 
 // FindEntityById implements the Repository interface.
@@ -74,17 +70,7 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 		return nil, err
 	}
 
-	var dberr error
-	var dbentities []*types.Entity
-	done := make(chan struct{}, 1)
-	c.appendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		dbentities, dberr = c.db.FindEntityByContent(asset, since)
-	})
-	<-done
-	close(done)
-
+	dbentities, dberr := c.db.FindEntityByContent(asset, since)
 	if dberr != nil {
 		return entities, err
 	}
@@ -118,17 +104,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 		}
 	}
 
-	var dberr error
-	var dbentities []*types.Entity
-	done := make(chan struct{}, 1)
-	c.appendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		dbentities, dberr = c.db.FindEntitiesByType(atype, since)
-	})
-	<-done
-	close(done)
-
+	dbentities, dberr := c.db.FindEntitiesByType(atype, since)
 	if dberr != nil {
 		return entities, err
 	}
@@ -164,11 +140,9 @@ func (c *Cache) DeleteEntity(id string) error {
 		return err
 	}
 
-	c.appendToDBQueue(func() {
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			_ = c.db.DeleteEntity(e[0].ID)
-		}
-	})
+	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+		_ = c.db.DeleteEntity(e[0].ID)
+	}
 
 	return nil
 }
