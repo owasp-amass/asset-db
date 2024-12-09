@@ -6,6 +6,8 @@ package assetdb
 
 import (
 	"embed"
+	"fmt"
+	"math/rand"
 
 	"github.com/glebarez/sqlite"
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
@@ -19,29 +21,19 @@ import (
 
 // New creates a new assetDB instance.
 // It initializes the asset database with the specified database type and DSN.
-func New(dbtype, dsn string) *AssetDB {
+func New(dbtype, dsn string) (repository.Repository, error) {
 	if dbtype == sqlrepo.SQLiteMemory {
-		dsn = ":memory:?_pragma=foreign_keys(1)"
+		dsn = fmt.Sprintf("file:mem%d?mode=memory&cache=shared", rand.Intn(1000))
 	}
 
-	if db, err := repository.New(dbtype, dsn); err == nil && db != nil {
-		if err := migrateDatabase(dbtype, dsn); err == nil {
-			return &AssetDB{
-				Repo: db,
-			}
-		}
+	db, err := repository.New(dbtype, dsn)
+	if err != nil {
+		return nil, err
 	}
-	return nil
-}
-
-// Close will close the assetdb and return any errors.
-func (as *AssetDB) Close() error {
-	return as.Repo.Close()
-}
-
-// GetDBType returns the type of the underlying database.
-func (as *AssetDB) GetDBType() string {
-	return as.Repo.GetDBType()
+	if err := migrateDatabase(dbtype, dsn); err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 func migrateDatabase(dbtype, dsn string) error {

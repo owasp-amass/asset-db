@@ -72,15 +72,15 @@ func createTestRepositories() (repository.Repository, repository.Repository, str
 		return nil, nil, "", errors.New("failed to create the temp dir")
 	}
 
-	c := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
-	if c == nil {
-		return nil, nil, "", errors.New("failed to create the cache db")
+	c, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to create the cache db: %s", err.Error())
 	}
 
-	db := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "assetdb.sqlite"))
-	if db == nil {
-		return nil, nil, "", errors.New("failed to create the database")
+	db, err := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "assetdb.sqlite"))
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to create the database: %s", err.Error())
 	}
 
-	return c.Repo, db.Repo, dir, nil
+	return c, db, dir, nil
 }
