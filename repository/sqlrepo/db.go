@@ -100,5 +100,5 @@ func (sql *sqlRepository) Close() error {
 
 // GetDBType returns the type of the database.
 func (sql *sqlRepository) GetDBType() string {
-	return string(sql.dbtype)
+	return sql.dbtype
 }
