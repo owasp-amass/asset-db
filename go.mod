@@ -3,9 +3,9 @@ module github.com/owasp-amass/asset-db
 go 1.23.1
 
 require (
-	github.com/caffix/queue v0.3.1
 	github.com/caffix/stringset v0.2.0
 	github.com/glebarez/sqlite v1.11.0
+	github.com/neo4j/neo4j-go-driver/v5 v5.27.0
 	github.com/owasp-amass/open-asset-model v0.12.0
 	github.com/rubenv/sql-migrate v1.7.0
 	github.com/stretchr/testify v1.9.0
@@ -33,7 +33,6 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
 	golang.org/x/crypto v0.29.0 // indirect
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f // indirect
 	golang.org/x/sync v0.9.0 // indirect

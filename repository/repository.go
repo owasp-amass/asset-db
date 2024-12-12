@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -47,6 +48,8 @@ type Repository interface {
 // New creates a new instance of the asset database repository.
 func New(dbtype, dsn string) (Repository, error) {
 	switch strings.ToLower(dbtype) {
+	case strings.ToLower(neo4j.Neo4j):
+		return neo4j.New(dbtype, dsn)
 	case strings.ToLower(sqlrepo.Postgres):
 		fallthrough
 	case strings.ToLower(sqlrepo.SQLite):

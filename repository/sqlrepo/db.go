@@ -45,9 +45,9 @@ func newDatabase(dbtype, dsn string) (*gorm.DB, error) {
 	case Postgres:
 		return postgresDatabase(dsn)
 	case SQLite:
-		fallthrough
+		return sqliteDatabase(dsn, 3, 5)
 	case SQLiteMemory:
-		return sqliteDatabase(dsn)
+		return sqliteDatabase(dsn, 50, 100)
 	}
 	return nil, errors.New("unknown DB type")
 }
@@ -72,7 +72,7 @@ func postgresDatabase(dsn string) (*gorm.DB, error) {
 }
 
 // sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
-func sqliteDatabase(dsn string) (*gorm.DB, error) {
+func sqliteDatabase(dsn string, conns, idles int) (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		return nil, err
@@ -83,8 +83,8 @@ func sqliteDatabase(dsn string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetMaxOpenConns(3)
+	sqlDB.SetMaxOpenConns(conns)
+	sqlDB.SetMaxIdleConns(idles)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
 	return db, nil
