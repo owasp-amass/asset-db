@@ -258,7 +258,7 @@ func TestRepository(t *testing.T) {
 				t.Fatalf("failed to find entity by id: expected entity %s, got %s", sourceEntity.Asset, foundAsset.Asset)
 			}
 
-			foundAssetByContent, err := store.FindEntityByContent(sourceEntity.Asset, start)
+			foundAssetByContent, err := store.FindEntitiesByContent(sourceEntity.Asset, start)
 			assert.NoError(t, err)
 			assert.NotEqual(t, foundAssetByContent, nil)
 

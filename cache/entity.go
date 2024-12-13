@@ -59,9 +59,9 @@ func (c *Cache) FindEntityById(id string) (*types.Entity, error) {
 	return c.cache.FindEntityById(id)
 }
 
-// FindEntityByContent implements the Repository interface.
-func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error) {
-	entities, err := c.cache.FindEntityByContent(asset, since)
+// FindEntitiesByContent implements the Repository interface.
+func (c *Cache) FindEntitiesByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error) {
+	entities, err := c.cache.FindEntitiesByContent(asset, since)
 	if err == nil && len(entities) > 0 {
 		return entities, nil
 	}
@@ -70,7 +70,7 @@ func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.
 		return nil, err
 	}
 
-	dbentities, dberr := c.db.FindEntityByContent(asset, since)
+	dbentities, dberr := c.db.FindEntitiesByContent(asset, since)
 	if dberr != nil {
 		return entities, err
 	}

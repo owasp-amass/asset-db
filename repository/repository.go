@@ -22,7 +22,7 @@ type Repository interface {
 	CreateEntity(entity *types.Entity) (*types.Entity, error)
 	CreateAsset(asset oam.Asset) (*types.Entity, error)
 	FindEntityById(id string) (*types.Entity, error)
-	FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
+	FindEntitiesByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error)
 	FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	DeleteEntity(id string) error
 	CreateEdge(edge *types.Edge) (*types.Edge, error)

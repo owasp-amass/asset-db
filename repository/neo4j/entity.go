@@ -2,15 +2,16 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package sqlrepo
+package neo4j
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
 
+	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
-	oam "github.com/owasp-amass/open-asset-model"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ import (
 // It takes an Entity as input and persists it in the database.
 // The asset is serialized to JSON and stored in the Content field of the Entity struct.
 // Returns the created entity as a types.Entity or an error if the creation fails.
-func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, error) {
+func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, error) {
 	jsonContent, err := input.Asset.JSON()
 	if err != nil {
 		return nil, err
@@ -30,7 +31,7 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 	}
 
 	// ensure that duplicate entities are not entered into the database
-	if entities, err := sql.FindEntityByContent(input.Asset, time.Time{}); err == nil && len(entities) == 1 {
+	if entities, err := neo.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) == 1 {
 		e := entities[0]
 
 		if input.Asset.AssetType() == e.Asset.AssetType() {
@@ -71,12 +72,12 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 // It takes an oam.Asset as input and persists it in the database.
 // The asset is serialized to JSON and stored in the Content field of the Entity struct.
 // Returns the created entity as a types.Entity or an error if the creation fails.
-func (sql *sqlRepository) CreateAsset(asset oam.Asset) (*types.Entity, error) {
-	return sql.CreateEntity(&types.Entity{Asset: asset})
+func (neo *neoRepository) CreateAsset(asset oam.Asset) (*types.Entity, error) {
+	return neo.CreateEntity(&types.Entity{Asset: asset})
 }
 
 // UpdateEntityLastSeen performs an update on the entity.
-func (sql *sqlRepository) UpdateEntityLastSeen(id string) error {
+func (neo *neoRepository) UpdateEntityLastSeen(id string) error {
 	result := sql.db.Exec("UPDATE entities SET updated_at = current_timestamp WHERE entity_id = ?", id)
 	if err := result.Error; err != nil {
 		return err
@@ -87,7 +88,7 @@ func (sql *sqlRepository) UpdateEntityLastSeen(id string) error {
 // FindEntityById finds an entity in the database by the ID.
 // It takes a string representing the entity ID and retrieves the corresponding entity from the database.
 // Returns the found entity as a types.Entity or an error if the asset is not found.
-func (sql *sqlRepository) FindEntityById(id string) (*types.Entity, error) {
+func (neo *neoRepository) FindEntityById(id string) (*types.Entity, error) {
 	entityId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return nil, err
@@ -117,7 +118,7 @@ func (sql *sqlRepository) FindEntityById(id string) (*types.Entity, error) {
 // If since.IsZero(), the parameter will be ignored.
 // The asset data is serialized to JSON and compared against the Content field of the Entity struct.
 // Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (sql *sqlRepository) FindEntitiesByContent(assetData oam.Asset, since time.Time) ([]*types.Entity, error) {
+func (neo *neoRepository) FindEntitiesByContent(assetData oam.Asset, since time.Time) ([]*types.Entity, error) {
 	jsonContent, err := assetData.JSON()
 	if err != nil {
 		return nil, err
@@ -166,7 +167,7 @@ func (sql *sqlRepository) FindEntitiesByContent(assetData oam.Asset, since time.
 // It takes an asset type and retrieves the corresponding entities from the database.
 // If since.IsZero(), the parameter will be ignored.
 // Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
+func (neo *neoRepository) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
 	var entities []Entity
 	var result *gorm.DB
 
@@ -200,13 +201,18 @@ func (sql *sqlRepository) FindEntitiesByType(atype oam.AssetType, since time.Tim
 // DeleteEntity removes an entity in the database by its ID.
 // It takes a string representing the entity ID and removes the corresponding entity from the database.
 // Returns an error if the entity is not found.
-func (sql *sqlRepository) DeleteEntity(id string) error {
-	entityId, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return err
-	}
+func (neo *neoRepository) DeleteEntity(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	entity := Entity{ID: entityId}
-	result := sql.db.Delete(&entity)
-	return result.Error
+	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+		"MATCH (n:Entity {entity_id: $entity_id}) DETACH DELETE n",
+		map[string]interface{}{
+			"entity_id": id,
+		},
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
+
+	return err
 }
