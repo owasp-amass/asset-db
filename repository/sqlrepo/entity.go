@@ -30,7 +30,7 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 	}
 
 	// ensure that duplicate entities are not entered into the database
-	if entities, err := sql.FindEntityByContent(input.Asset, time.Time{}); err == nil && len(entities) == 1 {
+	if entities, err := sql.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) == 1 {
 		e := entities[0]
 
 		if input.Asset.AssetType() == e.Asset.AssetType() {
@@ -73,15 +73,6 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 // Returns the created entity as a types.Entity or an error if the creation fails.
 func (sql *sqlRepository) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 	return sql.CreateEntity(&types.Entity{Asset: asset})
-}
-
-// UpdateEntityLastSeen performs an update on the entity.
-func (sql *sqlRepository) UpdateEntityLastSeen(id string) error {
-	result := sql.db.Exec("UPDATE entities SET updated_at = current_timestamp WHERE entity_id = ?", id)
-	if err := result.Error; err != nil {
-		return err
-	}
-	return nil
 }
 
 // FindEntityById finds an entity in the database by the ID.

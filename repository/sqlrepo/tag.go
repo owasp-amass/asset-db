@@ -83,15 +83,6 @@ func (sql *sqlRepository) CreateEntityProperty(entity *types.Entity, prop oam.Pr
 	return sql.CreateEntityTag(entity, &types.EntityTag{Property: prop})
 }
 
-// UpdateEntityTagLastSeen performs an update on the entity tag.
-func (sql *sqlRepository) UpdateEntityTagLastSeen(id string) error {
-	result := sql.db.Exec("UPDATE entity_tags SET updated_at = current_timestamp WHERE tag_id = ?", id)
-	if err := result.Error; err != nil {
-		return err
-	}
-	return nil
-}
-
 // FindEntityTagById finds an entity tag in the database by the ID.
 // It takes a string representing the entity tag ID and retrieves the corresponding tag from the database.
 // Returns the discovered tag as a types.EntityTag or an error if the asset is not found.
@@ -318,15 +309,6 @@ func (sql *sqlRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 // Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
 func (sql *sqlRepository) CreateEdgeProperty(edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
 	return sql.CreateEdgeTag(edge, &types.EdgeTag{Property: prop})
-}
-
-// UpdateEdgeTagLastSeen performs an update on the edge tag.
-func (sql *sqlRepository) UpdateEdgeTagLastSeen(id string) error {
-	result := sql.db.Exec("UPDATE edge_tags SET updated_at = current_timestamp WHERE tag_id = ?", id)
-	if err := result.Error; err != nil {
-		return err
-	}
-	return nil
 }
 
 // FindEdgeTagById finds an edge tag in the database by the ID.

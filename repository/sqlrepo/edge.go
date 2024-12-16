@@ -31,6 +31,12 @@ func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 			edge.FromEntity.Asset.AssetType(), edge.Relation.Label(), edge.ToEntity.Asset.AssetType())
 	}
 
+	var updated time.Time
+	if edge.LastSeen.IsZero() {
+		updated = time.Now().UTC()
+	} else {
+		updated = edge.LastSeen.UTC()
+	}
 	// ensure that duplicate relationships are not entered into the database
 	if e, found := sql.isDuplicateEdge(edge); found {
 		return e, nil
@@ -56,16 +62,12 @@ func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 		Content:      jsonContent,
 		FromEntityID: fromEntityId,
 		ToEntityID:   toEntityId,
+		UpdatedAt:    updated,
 	}
 	if edge.CreatedAt.IsZero() {
 		r.CreatedAt = time.Now().UTC()
 	} else {
 		r.CreatedAt = edge.CreatedAt.UTC()
-	}
-	if edge.LastSeen.IsZero() {
-		r.UpdatedAt = time.Now().UTC()
-	} else {
-		r.UpdatedAt = edge.LastSeen.UTC()
 	}
 
 	result := sql.db.Create(&r)
@@ -76,7 +78,7 @@ func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 }
 
 // isDuplicateEdge checks if the relationship between source and dest already exists.
-func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge) (*types.Edge, bool) {
+func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (*types.Edge, bool) {
 	var dup bool
 	var e *types.Edge
 
@@ -98,18 +100,42 @@ func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge) (*types.Edge, bool) 
 	return e, dup
 }
 
-// edgeSeen updates the last seen timestamp for the specified edge.
-func (sql *sqlRepository) edgeSeen(rel *types.Edge) error {
-	id, err := strconv.ParseInt(rel.ID, 10, 64)
+// edgeSeen updates the updated_at timestamp for the specified edge.
+func (sql *sqlRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
+	id, err := strconv.ParseUint(rel.ID, 10, 64)
 	if err != nil {
-		return fmt.Errorf("failed to update updated_at for ID %s could not parse id; err: %w", rel.ID, err)
-	}
-
-	result := sql.db.Exec("UPDATE edges SET updated_at = current_timestamp WHERE edge_id = ?", id)
-	if err := result.Error; err != nil {
 		return err
 	}
 
+	jsonContent, err := rel.Relation.JSON()
+	if err != nil {
+		return err
+	}
+
+	fromEntityId, err := strconv.ParseUint(rel.FromEntity.ID, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	toEntityId, err := strconv.ParseUint(rel.ToEntity.ID, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	r := Edge{
+		ID:           id,
+		Type:         string(rel.Relation.RelationType()),
+		Content:      jsonContent,
+		FromEntityID: fromEntityId,
+		ToEntityID:   toEntityId,
+		CreatedAt:    rel.CreatedAt,
+		UpdatedAt:    updated,
+	}
+
+	result := sql.db.Save(&r)
+	if err := result.Error; err != nil {
+		return err
+	}
 	return nil
 }
 
