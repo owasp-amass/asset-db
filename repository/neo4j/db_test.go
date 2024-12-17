@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	neomigrations "github.com/owasp-amass/asset-db/migrations/neo4j"
-	"github.com/stretchr/testify/assert"
 )
 
 var store *neoRepository
@@ -25,6 +24,7 @@ func TestMain(m *testing.M) {
 		fmt.Println(err)
 		return
 	}
+	defer store.Close()
 
 	if err := neomigrations.InitializeSchema(store.db, store.dbname); err != nil {
 		fmt.Println(err)
@@ -32,11 +32,6 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
-}
-
-func TestClose(t *testing.T) {
-	err := store.Close()
-	assert.NoError(t, err)
 }
 
 func TestGetDBType(t *testing.T) {

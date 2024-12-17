@@ -7,10 +7,12 @@ package neo4j
 import (
 	"errors"
 	"net/netip"
+	"time"
 
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/file"
@@ -19,27 +21,26 @@ import (
 	"github.com/owasp-amass/open-asset-model/people"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/service"
+	"github.com/owasp-amass/open-asset-model/url"
 )
 
 func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
-	if node == nil {
-		return nil, errors.New("the node is nil")
-	}
-
 	id, err := neo4jdb.GetProperty[string](node, "entity_id")
 	if err != nil {
 		return nil, err
 	}
 
-	created, err := neo4jdb.GetProperty[neo4jdb.LocalDateTime](node, "created_at")
+	t, err := neo4jdb.GetProperty[neo4jdb.LocalDateTime](node, "created_at")
 	if err != nil {
 		return nil, err
 	}
+	created := t.Time().In(time.UTC).Local()
 
-	updated, err := neo4jdb.GetProperty[neo4jdb.LocalDateTime](node, "updated_at")
+	t, err = neo4jdb.GetProperty[neo4jdb.LocalDateTime](node, "updated_at")
 	if err != nil {
 		return nil, err
 	}
+	updated := t.Time().In(time.UTC).Local()
 
 	etype, err := neo4jdb.GetProperty[string](node, "etype")
 	if err != nil {
@@ -79,9 +80,16 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 		asset, err = nodeToPhone(node)
 	case oam.Service:
 		asset, err = nodeToService(node)
+	case oam.TLSCertificate:
+		asset, err = nodeToTLSCertificate(node)
+	case oam.URL:
+		asset, err = nodeToURL(node)
 	}
 	if err != nil {
 		return nil, err
+	}
+	if asset == nil {
+		return nil, errors.New("asset type not supported")
 	}
 
 	return &types.Entity{
@@ -93,19 +101,16 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 }
 
 func nodeToAutnumRecord(node neo4jdb.Node) (*oamreg.AutnumRecord, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	raw, err := neo4jdb.GetProperty[string](node, "raw")
 	if err != nil {
 		return nil, err
 	}
 
-	number, err := neo4jdb.GetProperty[int](node, "number")
+	num, err := neo4jdb.GetProperty[int64](node, "number")
 	if err != nil {
 		return nil, err
 	}
+	number := int(num)
 
 	handle, err := neo4jdb.GetProperty[string](node, "handle")
 	if err != nil {
@@ -155,23 +160,16 @@ func nodeToAutnumRecord(node neo4jdb.Node) (*oamreg.AutnumRecord, error) {
 }
 
 func nodeToAutonomousSystem(node neo4jdb.Node) (*oamnet.AutonomousSystem, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
-	number, err := neo4jdb.GetProperty[int](node, "number")
+	num, err := neo4jdb.GetProperty[int64](node, "number")
 	if err != nil {
 		return nil, err
 	}
+	number := int(num)
 
 	return &oamnet.AutonomousSystem{Number: number}, nil
 }
 
 func nodeToContactRecord(node neo4jdb.Node) (*contact.ContactRecord, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	discovered, err := neo4jdb.GetProperty[string](node, "discovered_at")
 	if err != nil {
 		return nil, err
@@ -181,10 +179,6 @@ func nodeToContactRecord(node neo4jdb.Node) (*contact.ContactRecord, error) {
 }
 
 func nodeToDomainRecord(node neo4jdb.Node) (*oamreg.DomainRecord, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	raw, err := neo4jdb.GetProperty[string](node, "raw")
 	if err != nil {
 		return nil, err
@@ -267,10 +261,6 @@ func nodeToDomainRecord(node neo4jdb.Node) (*oamreg.DomainRecord, error) {
 }
 
 func nodeToEmailAddress(node neo4jdb.Node) (*contact.EmailAddress, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	address, err := neo4jdb.GetProperty[string](node, "address")
 	if err != nil {
 		return nil, err
@@ -294,10 +284,6 @@ func nodeToEmailAddress(node neo4jdb.Node) (*contact.EmailAddress, error) {
 }
 
 func nodeToFile(node neo4jdb.Node) (*file.File, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	url, err := neo4jdb.GetProperty[string](node, "url")
 	if err != nil {
 		return nil, err
@@ -321,10 +307,6 @@ func nodeToFile(node neo4jdb.Node) (*file.File, error) {
 }
 
 func nodeToFQDN(node neo4jdb.Node) (*domain.FQDN, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	name, err := neo4jdb.GetProperty[string](node, "name")
 	if err != nil {
 		return nil, err
@@ -334,10 +316,6 @@ func nodeToFQDN(node neo4jdb.Node) (*domain.FQDN, error) {
 }
 
 func nodeToIPAddress(node neo4jdb.Node) (*oamnet.IPAddress, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	ip, err := neo4jdb.GetProperty[string](node, "address")
 	if err != nil {
 		return nil, err
@@ -360,10 +338,6 @@ func nodeToIPAddress(node neo4jdb.Node) (*oamnet.IPAddress, error) {
 }
 
 func nodeToIPNetRecord(node neo4jdb.Node) (*oamreg.IPNetRecord, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	raw, err := neo4jdb.GetProperty[string](node, "raw")
 	if err != nil {
 		return nil, err
@@ -473,10 +447,6 @@ func nodeToIPNetRecord(node neo4jdb.Node) (*oamreg.IPNetRecord, error) {
 }
 
 func nodeToLocation(node neo4jdb.Node) (*contact.Location, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	addr, err := neo4jdb.GetProperty[string](node, "address")
 	if err != nil {
 		return nil, err
@@ -548,10 +518,6 @@ func nodeToLocation(node neo4jdb.Node) (*contact.Location, error) {
 }
 
 func nodeToNetblock(node neo4jdb.Node) (*oamnet.Netblock, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	cidr, err := neo4jdb.GetProperty[string](node, "cidr")
 	if err != nil {
 		return nil, err
@@ -574,10 +540,6 @@ func nodeToNetblock(node neo4jdb.Node) (*oamnet.Netblock, error) {
 }
 
 func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	name, err := neo4jdb.GetProperty[string](node, "name")
 	if err != nil {
 		return nil, err
@@ -595,10 +557,6 @@ func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
 }
 
 func nodeToPerson(node neo4jdb.Node) (*people.Person, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	full, err := neo4jdb.GetProperty[string](node, "full_name")
 	if err != nil {
 		return nil, err
@@ -628,10 +586,6 @@ func nodeToPerson(node neo4jdb.Node) (*people.Person, error) {
 }
 
 func nodeToPhone(node neo4jdb.Node) (*contact.Phone, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	ptype, err := neo4jdb.GetProperty[string](node, "type")
 	if err != nil {
 		return nil, err
@@ -652,10 +606,11 @@ func nodeToPhone(node neo4jdb.Node) (*contact.Phone, error) {
 		return nil, err
 	}
 
-	code, err := neo4jdb.GetProperty[int](node, "country_code")
+	code, err := neo4jdb.GetProperty[int64](node, "country_code")
 	if err != nil {
 		return nil, err
 	}
+	cc := int(code)
 
 	ext, err := neo4jdb.GetProperty[string](node, "ext")
 	if err != nil {
@@ -667,16 +622,12 @@ func nodeToPhone(node neo4jdb.Node) (*contact.Phone, error) {
 		Raw:           raw,
 		E164:          e164,
 		CountryAbbrev: abbrev,
-		CountryCode:   code,
+		CountryCode:   cc,
 		Ext:           ext,
 	}, nil
 }
 
 func nodeToService(node neo4jdb.Node) (*service.Service, error) {
-	if node == nil {
-		return nil, errors.New("The node is nil")
-	}
-
 	ident, err := neo4jdb.GetProperty[string](node, "identifier")
 	if err != nil {
 		return nil, err
@@ -687,14 +638,179 @@ func nodeToService(node neo4jdb.Node) (*service.Service, error) {
 		return nil, err
 	}
 
-	len, err := neo4jdb.GetProperty[int](node, "banner_length")
+	l, err := neo4jdb.GetProperty[int64](node, "banner_length")
 	if err != nil {
 		return nil, err
 	}
+	blen := int(l)
 
 	return &service.Service{
 		Identifier: ident,
 		Banner:     banner,
-		BannerLen:  len,
+		BannerLen:  blen,
+	}, nil
+}
+
+func nodeToTLSCertificate(node neo4jdb.Node) (*oamcert.TLSCertificate, error) {
+	version, err := neo4jdb.GetProperty[string](node, "version")
+	if err != nil {
+		return nil, err
+	}
+
+	serial, err := neo4jdb.GetProperty[string](node, "serial_number")
+	if err != nil {
+		return nil, err
+	}
+
+	subjectCommon, err := neo4jdb.GetProperty[string](node, "subject_common_name")
+	if err != nil {
+		return nil, err
+	}
+
+	issuer, err := neo4jdb.GetProperty[string](node, "issuer_common_name")
+	if err != nil {
+		return nil, err
+	}
+
+	before, err := neo4jdb.GetProperty[string](node, "not_before")
+	if err != nil {
+		return nil, err
+	}
+
+	after, err := neo4jdb.GetProperty[string](node, "not_after")
+	if err != nil {
+		return nil, err
+	}
+
+	list, err := neo4jdb.GetProperty[[]interface{}](node, "key_usage")
+	if err != nil {
+		return nil, err
+	}
+
+	var keyUsage []string
+	for _, s := range list {
+		keyUsage = append(keyUsage, s.(string))
+	}
+
+	list, err = neo4jdb.GetProperty[[]interface{}](node, "ext_key_usage")
+	if err != nil {
+		return nil, err
+	}
+
+	var extKeyUsage []string
+	for _, s := range list {
+		extKeyUsage = append(extKeyUsage, s.(string))
+	}
+
+	sig, err := neo4jdb.GetProperty[string](node, "signature_algorithm")
+	if err != nil {
+		return nil, err
+	}
+
+	public, err := neo4jdb.GetProperty[string](node, "public_key_algorithm")
+	if err != nil {
+		return nil, err
+	}
+
+	isCA, err := neo4jdb.GetProperty[bool](node, "is_ca")
+	if err != nil {
+		return nil, err
+	}
+
+	list, err = neo4jdb.GetProperty[[]interface{}](node, "crl_distribution_points")
+	if err != nil {
+		return nil, err
+	}
+
+	var dist []string
+	for _, s := range list {
+		dist = append(dist, s.(string))
+	}
+
+	subjectKey, err := neo4jdb.GetProperty[string](node, "subject_key_id")
+	if err != nil {
+		return nil, err
+	}
+
+	autorityKey, err := neo4jdb.GetProperty[string](node, "authority_key_id")
+	if err != nil {
+		return nil, err
+	}
+
+	return &oamcert.TLSCertificate{
+		Version:               version,
+		SerialNumber:          serial,
+		SubjectCommonName:     subjectCommon,
+		IssuerCommonName:      issuer,
+		NotBefore:             before,
+		NotAfter:              after,
+		KeyUsage:              keyUsage,
+		ExtKeyUsage:           extKeyUsage,
+		SignatureAlgorithm:    sig,
+		PublicKeyAlgorithm:    public,
+		IsCA:                  isCA,
+		CRLDistributionPoints: dist,
+		SubjectKeyID:          subjectKey,
+		AuthorityKeyID:        autorityKey,
+	}, nil
+}
+
+func nodeToURL(node neo4jdb.Node) (*url.URL, error) {
+	raw, err := neo4jdb.GetProperty[string](node, "url")
+	if err != nil {
+		return nil, err
+	}
+
+	scheme, err := neo4jdb.GetProperty[string](node, "scheme")
+	if err != nil {
+		return nil, err
+	}
+
+	username, err := neo4jdb.GetProperty[string](node, "username")
+	if err != nil {
+		return nil, err
+	}
+
+	password, err := neo4jdb.GetProperty[string](node, "password")
+	if err != nil {
+		return nil, err
+	}
+
+	host, err := neo4jdb.GetProperty[string](node, "host")
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := neo4jdb.GetProperty[int64](node, "port")
+	if err != nil {
+		return nil, err
+	}
+	port := int(p)
+
+	path, err := neo4jdb.GetProperty[string](node, "path")
+	if err != nil {
+		return nil, err
+	}
+
+	options, err := neo4jdb.GetProperty[string](node, "options")
+	if err != nil {
+		return nil, err
+	}
+
+	frag, err := neo4jdb.GetProperty[string](node, "fragment")
+	if err != nil {
+		return nil, err
+	}
+
+	return &url.URL{
+		Raw:      raw,
+		Scheme:   scheme,
+		Username: username,
+		Password: password,
+		Host:     host,
+		Port:     port,
+		Path:     path,
+		Options:  options,
+		Fragment: frag,
 	}, nil
 }
