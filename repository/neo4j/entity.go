@@ -77,15 +77,10 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 			input.ID = neo.uniqueEntityID()
 		}
 		if input.CreatedAt.IsZero() {
-			entity.CreatedAt = time.Now()
-		} else {
-			entity.CreatedAt = input.CreatedAt
+			input.CreatedAt = time.Now()
 		}
-
 		if input.LastSeen.IsZero() {
-			entity.LastSeen = time.Now()
-		} else {
-			entity.LastSeen = input.LastSeen
+			input.LastSeen = time.Now()
 		}
 
 		props, err := entityPropsMap(input)
@@ -96,12 +91,9 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
-			"CREATE (a:$($labels) $props) RETURN a",
-			map[string]interface{}{
-				"labels": []string{"Entity", string(input.Asset.AssetType())},
-				"props":  props,
-			},
+		query := fmt.Sprintf("CREATE (a:Entity:%s $props) RETURN a", input.Asset.AssetType())
+		result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+			map[string]interface{}{"props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 		)
@@ -156,8 +148,8 @@ func (neo *neoRepository) FindEntityById(id string) (*types.Entity, error) {
 	defer cancel()
 
 	result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
-		"MATCH (a:Entity {entity_id: $entity_id}) RETURN a",
-		map[string]interface{}{"entity_id": id},
+		"MATCH (a:Entity {entity_id: $eid}) RETURN a",
+		map[string]interface{}{"eid": id},
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -191,7 +183,7 @@ func (neo *neoRepository) FindEntitiesByContent(assetData oam.Asset, since time.
 
 	query := "MATCH " + qnode + " RETURN a"
 	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH %s WHERE a.updated_at >= '%s' RETURN a", qnode, timeToNeo4jTime(since))
+		query = fmt.Sprintf("MATCH %s WHERE a.updated_at >= localDateTime('%s') RETURN a", qnode, timeToNeo4jTime(since))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -230,7 +222,7 @@ func (neo *neoRepository) FindEntitiesByContent(assetData oam.Asset, since time.
 func (neo *neoRepository) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
 	query := fmt.Sprintf("MATCH (a:%s) RETURN a", string(atype))
 	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH (a:%s) WHERE a.updated_at >= '%s' RETURN a", string(atype), timeToNeo4jTime(since))
+		query = fmt.Sprintf("MATCH (a:%s) WHERE a.updated_at >= localDateTime('%s') RETURN a", string(atype), timeToNeo4jTime(since))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

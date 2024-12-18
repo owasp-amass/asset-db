@@ -17,18 +17,19 @@ import (
 var store *neoRepository
 
 func TestMain(m *testing.M) {
+	var err error
 	dsn := "bolt://neo4j:hackme4fun@localhost:7687/amass"
 
-	store, err := New("neo4j", dsn)
+	store, err = New("neo4j", dsn)
 	if err != nil {
 		fmt.Println(err)
-		return
+		os.Exit(1)
 	}
 	defer store.Close()
 
 	if err := neomigrations.InitializeSchema(store.db, store.dbname); err != nil {
 		fmt.Println(err)
-		return
+		os.Exit(1)
 	}
 
 	os.Exit(m.Run())

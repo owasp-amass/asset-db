@@ -7,7 +7,6 @@ package neo4j
 import (
 	"errors"
 	"net/netip"
-	"time"
 
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
@@ -34,13 +33,13 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 	if err != nil {
 		return nil, err
 	}
-	created := t.Time().In(time.UTC).Local()
+	created := neo4jTimeToTime(t)
 
 	t, err = neo4jdb.GetProperty[neo4jdb.LocalDateTime](node, "updated_at")
 	if err != nil {
 		return nil, err
 	}
-	updated := t.Time().In(time.UTC).Local()
+	updated := neo4jTimeToTime(t)
 
 	etype, err := neo4jdb.GetProperty[string](node, "etype")
 	if err != nil {
