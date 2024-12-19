@@ -46,9 +46,8 @@ func TestCreateEntity(t *testing.T) {
 	} else if fqdn1.Name != fqdn2.Name {
 		t.Errorf("Failed to keep the asset the same")
 	}
-	if !entity.CreatedAt.Equal(newer.CreatedAt) {
-		t.Errorf("Failed to keep the CreatedAt timestamp the same")
-	}
+
+	assert.Equal(t, entity.CreatedAt, newer.CreatedAt)
 	if !entity.LastSeen.Before(newer.LastSeen) {
 		t.Errorf("Failed to update the LastSeen timestamp")
 	}
@@ -61,9 +60,7 @@ func TestCreateEntity(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	if newer.ID == second.ID {
-		t.Errorf("Failed to create an unique entity_id for the second entity")
-	}
+	asset.Equal(t, entity.ID, second.ID)
 	if !second.CreatedAt.After(newer.LastSeen) {
 		t.Errorf("Failed to assign the second entity an accurate creation time")
 	}
@@ -78,12 +75,9 @@ func TestFindEntityById(t *testing.T) {
 	assert.NoError(t, err)
 
 	same, err := store.FindEntityById(entity.ID)
-	if err != nil {
-		t.Errorf("Failed to find the entity: %v", err)
-	}
-	if entity.ID != same.ID {
-		t.Errorf("Failed to return an entity with the correct ID")
-	}
+	assert.NoError(t, err)
+	asset.Equal(t, entity.ID, same.ID)
+
 	if fqdn1, ok := entity.Asset.(*domain.FQDN); !ok {
 		t.Errorf("Failed to type assert the first asset")
 	} else if fqdn2, ok := same.Asset.(*domain.FQDN); !ok {
@@ -105,10 +99,8 @@ func TestFindEntitiesByContent(t *testing.T) {
 	e, err := store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(-1*time.Second))
 	assert.NoError(t, err)
 	same := e[0]
+	asset.Equal(t, entity.ID, same.ID)
 
-	if entity.ID != same.ID {
-		t.Errorf("Failed to return an entity with the correct ID")
-	}
 	if fqdn1, ok := entity.Asset.(*domain.FQDN); !ok {
 		t.Errorf("Failed to type assert the first asset")
 	} else if fqdn2, ok := same.Asset.(*domain.FQDN); !ok {
