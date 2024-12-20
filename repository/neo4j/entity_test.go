@@ -146,3 +146,21 @@ func TestFindEntitiesByType(t *testing.T) {
 		t.Errorf("Failed to return the correct number of entities")
 	}
 }
+
+func TestDeleteEntity(t *testing.T) {
+	entity, err := store.CreateEntity(&types.Entity{
+		Asset: &domain.FQDN{
+			Name: "delete.entity",
+		},
+	})
+	assert.NoError(t, err)
+
+	err = store.DeleteEntity(entity.ID)
+	assert.NoError(t, err)
+
+	_, err := store.FindEntityById(entity.ID)
+	assert.Error(t, err)
+
+	err = store.DeleteEntity(entity.ID)
+	assert.Error(t, err)
+}

@@ -27,7 +27,7 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 		return nil, errors.New("the input entity is nil")
 	}
 	// ensure that duplicate entities are not entered into the database
-	if entities, err := neo.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) == 1 {
+	if entities, err := neo.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) > 0 {
 		e := entities[0]
 
 		if input.Asset.AssetType() != e.Asset.AssetType() {

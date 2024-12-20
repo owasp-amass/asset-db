@@ -2,9 +2,10 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package sqlrepo
+package neo4j
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -19,7 +20,7 @@ import (
 // CreateEdge creates an edge between two entities in the database.
 // The edge is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
-func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
+func (neo *neoRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	if edge == nil || edge.Relation == nil || edge.FromEntity == nil ||
 		edge.FromEntity.Asset == nil || edge.ToEntity == nil || edge.ToEntity.Asset == nil {
 		return nil, errors.New("failed input validation checks")
@@ -38,7 +39,7 @@ func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 		updated = edge.LastSeen.UTC()
 	}
 	// ensure that duplicate relationships are not entered into the database
-	if e, found := sql.isDuplicateEdge(edge, updated); found {
+	if e, found := neo.isDuplicateEdge(edge, updated); found {
 		return e, nil
 	}
 
@@ -78,16 +79,16 @@ func (sql *sqlRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 }
 
 // isDuplicateEdge checks if the relationship between source and dest already exists.
-func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (*types.Edge, bool) {
+func (neo *neoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (*types.Edge, bool) {
 	var dup bool
 	var e *types.Edge
 
-	if outs, err := sql.OutgoingEdges(edge.FromEntity, time.Time{}, edge.Relation.Label()); err == nil {
+	if outs, err := neo.OutgoingEdges(edge.FromEntity, time.Time{}, edge.Relation.Label()); err == nil {
 		for _, out := range outs {
 			if edge.ToEntity.ID == out.ToEntity.ID && reflect.DeepEqual(edge.Relation, out.Relation) {
-				_ = sql.edgeSeen(out, updated)
+				_ = neo.edgeSeen(out, updated)
 
-				e, err = sql.FindEdgeById(out.ID)
+				e, err = neo.FindEdgeById(out.ID)
 				if err != nil {
 					return nil, false
 				}
@@ -97,11 +98,12 @@ func (sql *sqlRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (
 			}
 		}
 	}
+
 	return e, dup
 }
 
 // edgeSeen updates the updated_at timestamp for the specified edge.
-func (sql *sqlRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
+func (neo *neoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	id, err := strconv.ParseUint(rel.ID, 10, 64)
 	if err != nil {
 		return err
@@ -139,21 +141,63 @@ func (sql *sqlRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	return nil
 }
 
-func (sql *sqlRepository) FindEdgeById(id string) (*types.Edge, error) {
-	var rel Edge
+func (neo *neoRepository) FindEdgeById(id string) (*types.Edge, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	result := sql.db.Where("edge_id = ?", id).First(&rel)
-	if err := result.Error; err != nil {
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+		"MATCH (from:Entity)-[r]->(to:Entity) WHERE r.elementId = $eid RETURN r, from.entity_id AS fid, to.entity_id AS tid",
+		map[string]interface{}{
+			"eid": id,
+		},
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
+
+	if err != nil {
 		return nil, err
 	}
+	if len(result.Records) == 0 {
+		return nil, errors.New("no edge was found")
+	}
 
-	return toEdge(rel), nil
+	r, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Relationship](result.Records[0], "r")
+	if err != nil {
+		return nil, err
+	}
+	if isnil {
+		return nil, errors.New("the record value for the relationship is nil")
+	}
+
+	fid, isnil, err := neo4jdb.GetRecordValue[string](result.Records[0], "fid")
+	if err != nil {
+		return nil, err
+	}
+	if isnil {
+		return nil, errors.New("the record value for the from entity ID is nil")
+	}
+
+	tid, isnil, err := neo4jdb.GetRecordValue[string](result.Records[0], "tid")
+	if err != nil {
+		return nil, err
+	}
+	if isnil {
+		return nil, errors.New("the record value for the to entity ID is nil")
+	}
+
+	edge, err := relationshipToEdge(r)
+	if err != nil {
+		return nil, err
+	}
+	edge.FromEntity = &types.Entity{ID: fid}
+	edge.ToEntity = &types.Entity{ID: tid}
+	return edge, err
 }
 
 // IncomingEdges finds all edges pointing to the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all incoming eges are returned.
-func (sql *sqlRepository) IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (neo *neoRepository) IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	entityId, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
@@ -197,7 +241,7 @@ func (sql *sqlRepository) IncomingEdges(entity *types.Entity, since time.Time, l
 // OutgoingEdges finds all edges from the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all outgoing edges are returned.
-func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (neo *neoRepository) OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	entityId, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
@@ -241,51 +285,18 @@ func (sql *sqlRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 // DeleteEdge removes an edge in the database by its ID.
 // It takes a string representing the edge ID and removes the corresponding edge from the database.
 // Returns an error if the edge is not found.
-func (sql *sqlRepository) DeleteEdge(id string) error {
-	relId, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return err
-	}
-	return sql.deleteEdges([]uint64{relId})
-}
+func (neo *neoRepository) DeleteEdge(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-// deleteEdges removes all rows in the Edges table with primary keys in the provided slice.
-func (sql *sqlRepository) deleteEdges(ids []uint64) error {
-	return sql.db.Exec("DELETE FROM edges WHERE edge_id IN ?", ids).Error
-}
-
-// toEdge converts a database Edge to a types.Edge.
-func toEdge(r Edge) *types.Edge {
-	e := &r
-	rel, err := e.Parse()
-	if err != nil {
-		return nil
-	}
-
-	return &types.Edge{
-		ID:        strconv.FormatUint(r.ID, 10),
-		CreatedAt: r.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  r.UpdatedAt.In(time.UTC).Local(),
-		Relation:  rel,
-		FromEntity: &types.Entity{
-			ID: strconv.FormatUint(r.FromEntityID, 10),
-			// Not joining to Asset to get Content
+	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+		"MATCH ()-[r]->() WHERE r.elementId = $eid DELETE r",
+		map[string]interface{}{
+			"eid": id,
 		},
-		ToEntity: &types.Entity{
-			ID: strconv.FormatUint(r.ToEntityID, 10),
-			// Not joining to Asset to get Content
-		},
-	}
-}
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
 
-// toEdges converts a slice of database Edges to a slice of types.Edge structs.
-func toEdges(edges []Edge) []*types.Edge {
-	var res []*types.Edge
-
-	for _, r := range edges {
-		if e := toEdge(r); e != nil {
-			res = append(res, e)
-		}
-	}
-	return res
+	return err
 }

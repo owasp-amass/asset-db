@@ -30,7 +30,7 @@ func (sql *sqlRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 	}
 
 	// ensure that duplicate entities are not entered into the database
-	if entities, err := sql.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) == 1 {
+	if entities, err := sql.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) > 0 {
 		e := entities[0]
 
 		if input.Asset.AssetType() == e.Asset.AssetType() {

@@ -140,8 +140,10 @@ func (c *Cache) DeleteEntity(id string) error {
 		return err
 	}
 
-	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-		_ = c.db.DeleteEntity(e[0].ID)
+	if ents, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(ents) > 0 {
+		for _, e := range ents {
+			_ = c.db.DeleteEntity(e.ID)
+		}
 	}
 
 	return nil
