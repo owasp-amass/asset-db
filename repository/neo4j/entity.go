@@ -270,9 +270,9 @@ func (neo *neoRepository) DeleteEntity(id string) error {
 	defer cancel()
 
 	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
-		"MATCH (n:Entity {entity_id: $entity_id}) DETACH DELETE n",
+		"MATCH (n:Entity {entity_id: $eid}) DETACH DELETE n",
 		map[string]interface{}{
-			"entity_id": id,
+			"eid": id,
 		},
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),

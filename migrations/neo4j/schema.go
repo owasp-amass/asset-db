@@ -19,12 +19,22 @@ func InitializeSchema(driver neo4jdb.DriverWithContext, dbname string) error {
 		return err
 	}
 
+	err = executeQuery(driver, dbname, "CREATE INDEX entities_range_index_etype IF NOT EXISTS FOR (n:Entity) ON (n.etype)")
+	if err != nil {
+		return err
+	}
+
 	err = executeQuery(driver, dbname, "CREATE INDEX entities_range_index_updated_at IF NOT EXISTS FOR (n:Entity) ON (n.updated_at)")
 	if err != nil {
 		return err
 	}
 
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_enttag_tag_id IF NOT EXISTS FOR (n:EntityTag) REQUIRE n.tag_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE INDEX enttag_range_index_ttype IF NOT EXISTS FOR (n:EntityTag) ON (n.ttype)")
 	if err != nil {
 		return err
 	}
@@ -40,6 +50,11 @@ func InitializeSchema(driver neo4jdb.DriverWithContext, dbname string) error {
 	}
 
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_edgetag_tag_id IF NOT EXISTS FOR (n:EdgeTag) REQUIRE n.tag_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE INDEX edgetag_range_index_ttype IF NOT EXISTS FOR (n:EdgeTag) ON (n.ttype)")
 	if err != nil {
 		return err
 	}

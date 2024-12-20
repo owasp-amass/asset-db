@@ -5,111 +5,170 @@
 package neo4j
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
+	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"gorm.io/gorm"
 )
 
 // CreateEntityTag creates a new entity tag in the database.
 // It takes an EntityTag as input and persists it in the database.
 // The property is serialized to JSON and stored in the Content field of the EntityTag struct.
 // Returns the created entity tag as a types.EntityTag or an error if the creation fails.
-func (sql *sqlRepository) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*types.EntityTag, error) {
-	entityid, err := strconv.ParseUint(entity.ID, 10, 64)
-	if err != nil {
-		return nil, err
-	}
+func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*types.EntityTag, error) {
+	var tag *types.EntityTag
 
-	jsonContent, err := input.Property.JSON()
-	if err != nil {
-		return nil, err
+	if input == nil {
+		return nil, errors.New("the input entity is nil")
 	}
+	// ensure that duplicate entities are not entered into the database
+	if tags, err := neo.FindEntityTagsByContent(input.Property, time.Time{}); err == nil && len(tags) == 1 {
+		t := tags[0]
 
-	tag := EntityTag{
-		Type:     string(input.Property.PropertyType()),
-		Content:  jsonContent,
-		EntityID: entityid,
-	}
+		if input.Property.PropertyType() != t.Property.PropertyType() {
+			return nil, errors.New("the property type does not match the existing tag")
+		}
 
-	// ensure that duplicate entity tags are not entered into the database
-	if tags, err := sql.GetEntityTags(entity, time.Time{}, input.Property.Name()); err == nil && len(tags) > 0 {
-		for _, t := range tags {
-			if input.Property.PropertyType() == t.Property.PropertyType() && input.Property.Value() == t.Property.Value() {
-				if id, err := strconv.ParseUint(t.ID, 10, 64); err == nil {
-					tag.ID = id
-					tag.CreatedAt = t.CreatedAt
-					tag.UpdatedAt = time.Now().UTC()
-					break
-				}
-			}
+		qnode, err := queryNodeByPropertyKeyValue("p", "EntityTag", t.Property)
+		if err != nil {
+			return nil, err
+		}
+
+		t.LastSeen = time.Now()
+		props, err := entityTagPropsMap(t)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+			"MATCH "+qnode+" SET p = $props RETURN p",
+			map[string]interface{}{"props": props},
+			neo4jdb.EagerResultTransformer,
+			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if len(result.Records) == 0 {
+			return nil, errors.New("no records returned from the query")
+		}
+
+		node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "p")
+		if err != nil {
+			return nil, err
+		}
+		if isnil {
+			return nil, errors.New("the record value for the node is nil")
+		}
+
+		if extracted, err := nodeToEntityTag(node); err == nil && extracted != nil {
+			tag = extracted
 		}
 	} else {
+		if input.ID == "" {
+			input.ID = neo.uniqueEntityTagID()
+		}
 		if input.CreatedAt.IsZero() {
-			tag.CreatedAt = time.Now().UTC()
-		} else {
-			tag.CreatedAt = input.CreatedAt.UTC()
+			input.CreatedAt = time.Now()
 		}
-
 		if input.LastSeen.IsZero() {
-			tag.UpdatedAt = time.Now().UTC()
-		} else {
-			tag.UpdatedAt = input.LastSeen.UTC()
+			input.LastSeen = time.Now()
+		}
+
+		props, err := entityTagPropsMap(input)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		query := fmt.Sprintf("CREATE (p:EntityTag:%s $props) RETURN p", input.Property.PropertyType())
+		result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+			map[string]interface{}{"props": props},
+			neo4jdb.EagerResultTransformer,
+			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if len(result.Records) == 0 {
+			return nil, errors.New("no records returned from the query")
+		}
+
+		node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "p")
+		if err != nil {
+			return nil, err
+		}
+		if isnil {
+			return nil, errors.New("the record value for the node is nil")
+		}
+
+		if t, err := nodeToEntityTag(node); err == nil && t != nil {
+			tag = t
 		}
 	}
 
-	result := sql.db.Save(&tag)
-	if err := result.Error; err != nil {
-		return nil, err
+	if tag == nil {
+		return nil, errors.New("failed to create the entity tag")
 	}
-
-	return &types.EntityTag{
-		ID:        strconv.FormatUint(tag.ID, 10),
-		CreatedAt: tag.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  tag.UpdatedAt.In(time.UTC).Local(),
-		Property:  input.Property,
-		Entity:    entity,
-	}, nil
+	return tag, nil
 }
 
 // CreateEntityProperty creates a new entity tag in the database.
 // It takes an oam.Property as input and persists it in the database.
 // The property is serialized to JSON and stored in the Content field of the EntityTag struct.
 // Returns the created entity tag as a types.EntityTag or an error if the creation fails.
-func (sql *sqlRepository) CreateEntityProperty(entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
-	return sql.CreateEntityTag(entity, &types.EntityTag{Property: prop})
+func (neo *neoRepository) CreateEntityProperty(entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
+	return neo.CreateEntityTag(entity, &types.EntityTag{Property: prop})
+}
+
+func (neo *neoRepository) uniqueEntityTagID() string {
+	for {
+		id := uuid.New().String()
+		if _, err := neo.FindEntityTagById(id); err != nil {
+			return id
+		}
+	}
 }
 
 // FindEntityTagById finds an entity tag in the database by the ID.
 // It takes a string representing the entity tag ID and retrieves the corresponding tag from the database.
 // Returns the discovered tag as a types.EntityTag or an error if the asset is not found.
-func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error) {
-	tagId, err := strconv.ParseUint(id, 10, 64)
+func (neo *neoRepository) FindEntityTagById(id string) (*types.EntityTag, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+		"MATCH (p:EntityTag {tag_id: $tid}) RETURN p",
+		map[string]interface{}{"tid": id},
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	tag := EntityTag{ID: tagId}
-	result := sql.db.First(&tag)
-	if err := result.Error; err != nil {
-		return nil, err
+	if len(result.Records) == 0 {
+		return nil, fmt.Errorf("the entity tag with ID %s was not found", id)
 	}
 
-	data, err := tag.Parse()
+	node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "p")
 	if err != nil {
 		return nil, err
 	}
-
-	return &types.EntityTag{
-		ID:        strconv.FormatUint(tag.ID, 10),
-		CreatedAt: tag.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  tag.UpdatedAt.In(time.UTC).Local(),
-		Property:  data,
-		Entity:    &types.Entity{ID: strconv.FormatUint(tag.EntityID, 10)},
-	}, nil
+	if isnil {
+		return nil, errors.New("the record value for the node is nil")
+	}
+	return nodeToEntityTag(node)
 }
 
 // FindEntityTagsByContent finds entity tags in the database that match the provided property data and updated_at after the since parameter.
@@ -117,76 +176,82 @@ func (sql *sqlRepository) FindEntityTagById(id string) (*types.EntityTag, error)
 // If since.IsZero(), the parameter will be ignored.
 // The property data is serialized to JSON and compared against the Content field of the EntityTag struct.
 // Returns a slice of matching entity tags as []*types.EntityTag or an error if the search fails.
-func (sql *sqlRepository) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
-	jsonContent, err := prop.JSON()
+func (neo *neoRepository) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
+	qnode, err := queryNodeByPropertyKeyValue("p", "EntityTag", prop)
 	if err != nil {
 		return nil, err
 	}
 
-	tag := EntityTag{
-		Type:    string(prop.PropertyType()),
-		Content: jsonContent,
-	}
-
-	nameQuery, err := tag.NameJSONQuery()
-	if err != nil {
-		return nil, err
-	}
-
-	valueQuery, err := tag.ValueJSONQuery()
-	if err != nil {
-		return nil, err
-	}
-
-	tx := sql.db.Where("ttype = ?", tag.Type)
+	query := "MATCH " + qnode + " RETURN p"
 	if !since.IsZero() {
-		tx = tx.Where("updated_at >= ?", since.UTC())
+		query = fmt.Sprintf("MATCH %s WHERE p.updated_at >= localDateTime('%s') RETURN p", qnode, timeToNeo4jTime(since))
 	}
 
-	var tags []EntityTag
-	tx = tx.Where(nameQuery).Where(valueQuery).Find(&tags)
-	if err := tx.Error; err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
+	if err != nil {
 		return nil, err
 	}
-
-	var results []*types.EntityTag
-	for _, t := range tags {
-		if propData, err := t.Parse(); err == nil {
-			results = append(results, &types.EntityTag{
-				ID:        strconv.FormatUint(t.ID, 10),
-				CreatedAt: t.CreatedAt.In(time.UTC).Local(),
-				LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
-				Property:  propData,
-				Entity:    &types.Entity{ID: strconv.FormatUint(t.EntityID, 10)},
-			})
-		}
+	if len(result.Records) == 0 {
+		return nil, errors.New("no entity tags found")
 	}
 
-	if len(results) == 0 {
-		return nil, errors.New("zero entity tags found")
+	node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "p")
+	if err != nil {
+		return nil, err
 	}
-	return results, nil
+	if isnil {
+		return nil, errors.New("the record value for the node is nil")
+	}
+
+	tag, err := nodeToEntityTag(node)
+	if err != nil {
+		return nil, err
+	}
+	return []*types.EntityTag{tag}, nil
 }
 
 // GetEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no names are specified, all tags for the specified entity are returned.
-func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
-	entityId, err := strconv.ParseInt(entity.ID, 10, 64)
+func (neo *neoRepository) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+	query := fmt.Sprintf("MATCH (p:EntityTag {entity_id: '%s'}) RETURN p", entity.ID)
+	if !since.IsZero() {
+		query = fmt.Sprintf("MATCH (p:EntityTag {entity_id: '%s'}) WHERE p.updated_at >= localDateTime('%s') RETURN p", entity.ID, timeToNeo4jTime(since))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	var tags []EntityTag
-	var result *gorm.DB
-	if since.IsZero() {
-		result = sql.db.Where("entity_id = ?", entityId).Find(&tags)
-	} else {
-		result = sql.db.Where("entity_id = ? AND updated_at >= ?", entityId, since.UTC()).Find(&tags)
+	if len(result.Records) == 0 {
+		return nil, errors.New("no entity tags found")
 	}
-	if err := result.Error; err != nil {
+
+	node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "p")
+	if err != nil {
 		return nil, err
 	}
+	if isnil {
+		return nil, errors.New("the record value for the node is nil")
+	}
+
+	tag, err := nodeToEntityTag(node)
+	if err != nil {
+		return nil, err
+	}
+	return []*types.EntityTag{tag}, nil
 
 	var results []*types.EntityTag
 	for _, tag := range tags {
@@ -228,16 +293,18 @@ func (sql *sqlRepository) GetEntityTags(entity *types.Entity, since time.Time, n
 // DeleteEntityTag removes an entity tag in the database by its ID.
 // It takes a string representing the entity tag ID and removes the corresponding tag from the database.
 // Returns an error if the tag is not found.
-func (sql *sqlRepository) DeleteEntityTag(id string) error {
-	tagId, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return err
-	}
+func (neo *neoRepository) DeleteEntityTag(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	tag := EntityTag{ID: tagId}
-	result := sql.db.Delete(&tag)
-	if err := result.Error; err != nil {
-		return err
-	}
-	return nil
+	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+		"MATCH (n:EntityTag {tag_id: $tid}) DETACH DELETE n",
+		map[string]interface{}{
+			"tid": id,
+		},
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
+
+	return err
 }
