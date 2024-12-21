@@ -49,7 +49,7 @@ func TestCreateEdge(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntityByContent(edge.FromEntity.Asset, before)
+	dbents, err := c.db.FindEntitiesByContent(edge.FromEntity.Asset, before)
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -169,7 +169,7 @@ func TestIncomingEdges(t *testing.T) {
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	dbfrom, err := c.db.FindEntityByContent(from.Asset, time.Time{})
+	dbfrom, err := c.db.FindEntitiesByContent(from.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	set1 := stringset.New()
@@ -239,7 +239,7 @@ func TestIncomingEdges(t *testing.T) {
 
 	var rentity *types.Entity
 	for _, entity := range entities1 {
-		e, err := c.FindEntityByContent(entity.Asset, time.Time{})
+		e, err := c.FindEntitiesByContent(entity.Asset, time.Time{})
 		assert.NoError(t, err)
 		rentity = e[0]
 		edges, err := c.IncomingEdges(rentity, before, "node")
@@ -292,7 +292,7 @@ func TestOutgoingEdges(t *testing.T) {
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	dbfrom, err := c.db.FindEntityByContent(from.Asset, time.Time{})
+	dbfrom, err := c.db.FindEntitiesByContent(from.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	set1 := stringset.New()
@@ -416,7 +416,7 @@ func TestDeleteEdge(t *testing.T) {
 	assert.Error(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	dbent, err := c.db.FindEntityByContent(edge.FromEntity.Asset, time.Time{})
+	dbent, err := c.db.FindEntitiesByContent(edge.FromEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 	_, err = c.db.OutgoingEdges(dbent[0], before, edge.Relation.Label())
 	assert.Error(t, err)

@@ -34,12 +34,12 @@ func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 		}
 		_ = c.createCacheEdgeTag(e, "cache_create_edge", time.Now())
 
-		s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+		s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
 		if err != nil || len(s) != 1 {
 			return nil, err
 		}
 
-		o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+		o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
 		if err != nil || len(o) != 1 {
 			return nil, err
 		}
@@ -79,7 +79,7 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 		var dberr error
 		var dbedges []*types.Edge
 
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 			dbedges, dberr = c.db.IncomingEdges(e[0], since)
 
 			for i, edge := range dbedges {
@@ -131,7 +131,7 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 		var dberr error
 		var dbedges []*types.Edge
 
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 			dbedges, dberr = c.db.OutgoingEdges(e[0], since)
 
 			for i, edge := range dbedges {
@@ -186,12 +186,12 @@ func (c *Cache) DeleteEdge(id string) error {
 		return err
 	}
 
-	s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+	s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
 	if err != nil || len(s) != 1 {
 		return err
 	}
 
-	o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+	o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
 	if err != nil || len(o) != 1 {
 		return err
 	}

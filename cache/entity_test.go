@@ -52,7 +52,7 @@ func TestCreateEntity(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := db2.FindEntityByContent(entity.Asset, before)
+	dbents, err := db2.FindEntitiesByContent(entity.Asset, before)
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -101,7 +101,7 @@ func TestCreateAsset(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := db2.FindEntityByContent(entity.Asset, now)
+	dbents, err := db2.FindEntitiesByContent(entity.Asset, now)
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -188,10 +188,10 @@ func TestFindEntityByContent(t *testing.T) {
 	assert.NoError(t, err)
 	after := time.Now().Add(2 * time.Second)
 
-	_, err = c.FindEntityByContent(fqdn3, after)
+	_, err = c.FindEntitiesByContent(fqdn3, after)
 	assert.Error(t, err)
 
-	entities, err := c.FindEntityByContent(fqdn3, now)
+	entities, err := c.FindEntitiesByContent(fqdn3, now)
 	assert.NoError(t, err)
 	if len(entities) != 1 {
 		t.Errorf("first request failed to produce the expected number of entities")
@@ -202,10 +202,10 @@ func TestFindEntityByContent(t *testing.T) {
 		t.Errorf("DeepEqual failed for the assets in the two entities")
 	}
 
-	_, err = c.FindEntityByContent(fqdn2, c.StartTime())
+	_, err = c.FindEntitiesByContent(fqdn2, c.StartTime())
 	assert.Error(t, err)
 
-	entities, err = c.FindEntityByContent(fqdn2, cbefore2)
+	entities, err = c.FindEntitiesByContent(fqdn2, cbefore2)
 	assert.NoError(t, err)
 	if len(entities) != 1 {
 		t.Errorf("second request failed to produce the expected number of entities")
@@ -216,10 +216,10 @@ func TestFindEntityByContent(t *testing.T) {
 		t.Errorf("DeepEqual failed for the assets in the two entities")
 	}
 
-	_, err = c.FindEntityByContent(fqdn1, cbefore2)
+	_, err = c.FindEntitiesByContent(fqdn1, cbefore2)
 	assert.Error(t, err)
 
-	entities, err = c.FindEntityByContent(fqdn1, cbefore1)
+	entities, err = c.FindEntitiesByContent(fqdn1, cbefore1)
 	assert.NoError(t, err)
 	if len(entities) != 1 {
 		t.Errorf("third request failed to produce the expected number of entities")
@@ -399,6 +399,6 @@ func TestDeleteEntity(t *testing.T) {
 	assert.Error(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	_, err = db2.FindEntityByContent(entity.Asset, time.Time{})
+	_, err = db2.FindEntitiesByContent(entity.Asset, time.Time{})
 	assert.Error(t, err)
 }

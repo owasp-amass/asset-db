@@ -20,6 +20,7 @@ import (
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	"github.com/owasp-amass/asset-db/repository"
+	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 	migrate "github.com/rubenv/sql-migrate"
 	"gorm.io/driver/postgres"
@@ -51,7 +52,7 @@ func migrateDatabase(dbtype, dsn string) error {
 		return sqlMigrate("sqlite3", sqlite.Open(dsn), sqlitemigrations.Migrations())
 	case sqlrepo.Postgres:
 		return sqlMigrate("postgres", postgres.Open(dsn), pgmigrations.Migrations())
-	case neo4jdb.Neo4j:
+	case neo4j.Neo4j:
 		return neoMigrate(dsn)
 	}
 	return nil

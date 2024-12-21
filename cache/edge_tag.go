@@ -43,12 +43,12 @@ func (c *Cache) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.Ed
 		return nil, err
 	}
 
-	s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+	s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
 	if err != nil || len(s) != 1 {
 		return nil, err
 	}
 
-	o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+	o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
 	if err != nil || len(o) != 1 {
 		return nil, err
 	}
@@ -103,12 +103,12 @@ func (c *Cache) CreateEdgeProperty(edge *types.Edge, property oam.Property) (*ty
 		return nil, err
 	}
 
-	s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+	s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
 	if err != nil || len(s) != 1 {
 		return nil, err
 	}
 
-	o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+	o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
 	if err != nil || len(o) != 1 {
 		return nil, err
 	}
@@ -233,12 +233,12 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 		var dberr error
 		var dbtags []*types.EdgeTag
 
-		s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+		s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
 		if err != nil || len(s) != 1 {
 			return nil, err
 		}
 
-		o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+		o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
 		if err != nil || len(o) != 1 {
 			return nil, err
 		}
@@ -299,12 +299,12 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 		return err
 	}
 
-	s, err := c.db.FindEntityByContent(sub.Asset, time.Time{})
+	s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
 	if err != nil || len(s) != 1 {
 		return err
 	}
 
-	o, err := c.db.FindEntityByContent(obj.Asset, time.Time{})
+	o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
 	if err != nil || len(o) != 1 {
 		return err
 	}

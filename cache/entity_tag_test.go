@@ -55,7 +55,7 @@ func TestCreateEntityTag(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntityByContent(entity.Asset, before)
+	dbents, err := c.db.FindEntitiesByContent(entity.Asset, before)
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -113,7 +113,7 @@ func TestCreateEntityProperty(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntityByContent(entity.Asset, before)
+	dbents, err := c.db.FindEntitiesByContent(entity.Asset, before)
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -271,7 +271,7 @@ func TestGetEntityTags(t *testing.T) {
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	dbents, err := c.db.FindEntityByContent(entity.Asset, time.Time{})
+	dbents, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -378,7 +378,7 @@ func TestDeleteEntityTag(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntityByContent(entity.Asset, time.Time{})
+	dbents, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{})
 	assert.NoError(t, err)
 	if num := len(dbents); num != 1 {
 		t.Errorf("failed to return the corrent number of entities: %d", num)

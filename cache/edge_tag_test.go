@@ -55,7 +55,7 @@ func TestCreateEdgeTag(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntityByContent(entity.Asset, before)
+	dbents, err := c.db.FindEntitiesByContent(entity.Asset, before)
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -113,10 +113,10 @@ func TestCreateEdgeProperty(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	s, err := c.db.FindEntityByContent(edge.FromEntity.Asset, time.Time{})
+	s, err := c.db.FindEntitiesByContent(edge.FromEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 
-	o, err := c.db.FindEntityByContent(edge.ToEntity.Asset, time.Time{})
+	o, err := c.db.FindEntitiesByContent(edge.ToEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
@@ -272,10 +272,10 @@ func TestGetEdgeTags(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	s, err := c.db.FindEntityByContent(edge.FromEntity.Asset, time.Time{})
+	s, err := c.db.FindEntitiesByContent(edge.FromEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 
-	o, err := c.db.FindEntityByContent(edge.ToEntity.Asset, time.Time{})
+	o, err := c.db.FindEntitiesByContent(edge.ToEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
@@ -388,10 +388,10 @@ func TestDeleteEdgeTag(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	s, err := c.db.FindEntityByContent(edge.FromEntity.Asset, time.Time{})
+	s, err := c.db.FindEntitiesByContent(edge.FromEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 
-	o, err := c.db.FindEntityByContent(edge.ToEntity.Asset, time.Time{})
+	o, err := c.db.FindEntitiesByContent(edge.ToEntity.Asset, time.Time{})
 	assert.NoError(t, err)
 
 	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())

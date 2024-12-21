@@ -27,7 +27,7 @@ func (c *Cache) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*
 		return nil, err
 	}
 
-	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+	if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 		_, _ = c.db.CreateEntityTag(e[0], &types.EntityTag{
 			CreatedAt: input.CreatedAt,
 			LastSeen:  input.LastSeen,
@@ -54,7 +54,7 @@ func (c *Cache) CreateEntityProperty(entity *types.Entity, property oam.Property
 		return nil, err
 	}
 
-	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+	if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 		_, _ = c.db.CreateEntityProperty(e[0], property)
 	}
 
@@ -119,7 +119,7 @@ func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...st
 		var dberr error
 		var dbtags []*types.EntityTag
 
-		if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 			dbtags, dberr = c.db.GetEntityTags(e[0], since)
 		}
 
@@ -153,7 +153,7 @@ func (c *Cache) DeleteEntityTag(id string) error {
 		return err
 	}
 
-	if e, err := c.db.FindEntityByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
+	if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 		if tags, err := c.db.GetEntityTags(e[0], time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
 			for _, t := range tags {
 				if t.Property.Value() == tag.Property.Value() {
