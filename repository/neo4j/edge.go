@@ -9,12 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
+	"strings"
 	"time"
 
+	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"gorm.io/gorm"
 )
 
 // CreateEdge creates an edge between two entities in the database.
@@ -32,50 +32,57 @@ func (neo *neoRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 			edge.FromEntity.Asset.AssetType(), edge.Relation.Label(), edge.ToEntity.Asset.AssetType())
 	}
 
-	var updated time.Time
 	if edge.LastSeen.IsZero() {
-		updated = time.Now().UTC()
-	} else {
-		updated = edge.LastSeen.UTC()
+		edge.LastSeen = time.Now()
 	}
 	// ensure that duplicate relationships are not entered into the database
-	if e, found := neo.isDuplicateEdge(edge, updated); found {
+	if e, found := neo.isDuplicateEdge(edge, edge.LastSeen); found {
 		return e, nil
 	}
 
-	fromEntityId, err := strconv.ParseUint(edge.FromEntity.ID, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	toEntityId, err := strconv.ParseUint(edge.ToEntity.ID, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	jsonContent, err := edge.Relation.JSON()
-	if err != nil {
-		return nil, err
-	}
-
-	r := Edge{
-		Type:         string(edge.Relation.RelationType()),
-		Content:      jsonContent,
-		FromEntityID: fromEntityId,
-		ToEntityID:   toEntityId,
-		UpdatedAt:    updated,
-	}
 	if edge.CreatedAt.IsZero() {
-		r.CreatedAt = time.Now().UTC()
-	} else {
-		r.CreatedAt = edge.CreatedAt.UTC()
+		edge.CreatedAt = time.Now()
 	}
 
-	result := sql.db.Create(&r)
-	if err := result.Error; err != nil {
+	props, err := edgePropsMap(edge)
+	if err != nil {
 		return nil, err
 	}
-	return toEdge(r), nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	from := fmt.Sprintf("MATCH (from:Entity {entity_id: '%s'})", edge.FromEntity.ID)
+	to := fmt.Sprintf("MATCH (to:Entity {entity_id: '%s'})", edge.ToEntity.ID)
+	query := fmt.Sprintf("%s %s CREATE (from)-[r:%s $props]->(to) RETURN r", from, to, strings.ToUpper(edge.Relation.Label()))
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+		map[string]interface{}{"props": props},
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Records) == 0 {
+		return nil, errors.New("no records returned from the query")
+	}
+
+	rel, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Relationship](result.Records[0], "r")
+	if err != nil {
+		return nil, err
+	}
+	if isnil {
+		return nil, errors.New("the record value for the relationship is nil")
+	}
+
+	r, err := relationshipToEdge(rel)
+	if err != nil {
+		return nil, err
+	}
+	r.FromEntity = edge.FromEntity
+	r.ToEntity = edge.ToEntity
+
+	return r, nil
 }
 
 // isDuplicateEdge checks if the relationship between source and dest already exists.
@@ -104,41 +111,15 @@ func (neo *neoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (
 
 // edgeSeen updates the updated_at timestamp for the specified edge.
 func (neo *neoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
-	id, err := strconv.ParseUint(rel.ID, 10, 64)
-	if err != nil {
-		return err
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	jsonContent, err := rel.Relation.JSON()
-	if err != nil {
-		return err
-	}
-
-	fromEntityId, err := strconv.ParseUint(rel.FromEntity.ID, 10, 64)
-	if err != nil {
-		return err
-	}
-
-	toEntityId, err := strconv.ParseUint(rel.ToEntity.ID, 10, 64)
-	if err != nil {
-		return err
-	}
-
-	r := Edge{
-		ID:           id,
-		Type:         string(rel.Relation.RelationType()),
-		Content:      jsonContent,
-		FromEntityID: fromEntityId,
-		ToEntityID:   toEntityId,
-		CreatedAt:    rel.CreatedAt,
-		UpdatedAt:    updated,
-	}
-
-	result := sql.db.Save(&r)
-	if err := result.Error; err != nil {
-		return err
-	}
-	return nil
+	query := fmt.Sprintf("MATCH ()-[r]->() WHERE r.elementId = '%s' SET r.updated_at = localDateTime('%s')", rel.ID, timeToNeo4jTime(updated))
+	_, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
+	return err
 }
 
 func (neo *neoRepository) FindEdgeById(id string) (*types.Edge, error) {
@@ -198,88 +179,136 @@ func (neo *neoRepository) FindEdgeById(id string) (*types.Edge, error) {
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all incoming eges are returned.
 func (neo *neoRepository) IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
-	entityId, err := strconv.ParseInt(entity.ID, 10, 64)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	query := fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})<-[r]-(from:Entity) RETURN r, from.entity_id AS fid", entity.ID)
+	if !since.IsZero() {
+		query = fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})<-[r]-(from:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, from.entity_id AS fid", entity.ID, timeToNeo4jTime(since))
+	}
+
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	var edges []Edge
-	var result *gorm.DB
-	if since.IsZero() {
-		result = sql.db.Where("to_entity_id = ?", entityId).Find(&edges)
-	} else {
-		result = sql.db.Where("to_entity_id = ? AND updated_at >= ?", entityId, since.UTC()).Find(&edges)
-	}
-	if err := result.Error; err != nil {
-		return nil, err
-	}
+	var results []*types.Edge
+	for _, record := range result.Records {
+		r, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Relationship](record, "r")
+		if err != nil {
+			continue
+		}
+		if isnil {
+			continue
+		}
 
-	var results []Edge
-	if len(labels) > 0 {
-		for _, edge := range edges {
-			e := &edge
+		if len(labels) > 0 {
+			var found bool
 
-			if rel, err := e.Parse(); err == nil {
-				for _, label := range labels {
-					if label == rel.Label() {
-						results = append(results, edge)
-						break
-					}
+			for _, label := range labels {
+				if strings.EqualFold(label, r.Type) {
+					found = true
+					break
 				}
 			}
+
+			if !found {
+				continue
+			}
 		}
-	} else {
-		results = edges
+
+		fid, isnil, err := neo4jdb.GetRecordValue[string](record, "fid")
+		if err != nil {
+			continue
+		}
+		if isnil {
+			continue
+		}
+
+		edge, err := relationshipToEdge(r)
+		if err != nil {
+			continue
+		}
+		edge.FromEntity = &types.Entity{ID: fid}
+		edge.ToEntity = entity
+		results = append(results, edge)
 	}
 
 	if len(results) == 0 {
 		return nil, errors.New("zero edges found")
 	}
-	return toEdges(results), nil
+	return results, nil
 }
 
 // OutgoingEdges finds all edges from the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all outgoing edges are returned.
 func (neo *neoRepository) OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
-	entityId, err := strconv.ParseInt(entity.ID, 10, 64)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	query := fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})-[r]->(to:Entity) RETURN r, to.entity_id AS tid", entity.ID)
+	if !since.IsZero() {
+		query = fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})-[r]->(to:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, to.entity_id AS tid", entity.ID, timeToNeo4jTime(since))
+	}
+
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+		neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	var edges []Edge
-	var result *gorm.DB
-	if since.IsZero() {
-		result = sql.db.Where("from_entity_id = ?", entityId).Find(&edges)
-	} else {
-		result = sql.db.Where("from_entity_id = ? AND updated_at >= ?", entityId, since.UTC()).Find(&edges)
-	}
-	if err := result.Error; err != nil {
-		return nil, err
-	}
+	var results []*types.Edge
+	for _, record := range result.Records {
+		r, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Relationship](record, "r")
+		if err != nil {
+			continue
+		}
+		if isnil {
+			continue
+		}
 
-	var results []Edge
-	if len(labels) > 0 {
-		for _, edge := range edges {
-			e := &edge
+		if len(labels) > 0 {
+			var found bool
 
-			if rel, err := e.Parse(); err == nil {
-				for _, label := range labels {
-					if label == rel.Label() {
-						results = append(results, edge)
-						break
-					}
+			for _, label := range labels {
+				if strings.EqualFold(label, r.Type) {
+					found = true
+					break
 				}
 			}
+
+			if !found {
+				continue
+			}
 		}
-	} else {
-		results = edges
+
+		tid, isnil, err := neo4jdb.GetRecordValue[string](record, "tid")
+		if err != nil {
+			continue
+		}
+		if isnil {
+			continue
+		}
+
+		edge, err := relationshipToEdge(r)
+		if err != nil {
+			continue
+		}
+		edge.FromEntity = entity
+		edge.ToEntity = &types.Entity{ID: tid}
+		results = append(results, edge)
 	}
 
 	if len(results) == 0 {
 		return nil, errors.New("zero edges found")
 	}
-	return toEdges(results), nil
+	return results, nil
 }
 
 // DeleteEdge removes an edge in the database by its ID.

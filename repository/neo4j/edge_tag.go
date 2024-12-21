@@ -27,7 +27,7 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 		return nil, errors.New("the input edge tag is nil")
 	}
 	// ensure that duplicate entities are not entered into the database
-	if tags, err := neo.FindEdgeTagsByContent(input.Property, time.Time{}); err == nil && len(tags) == 1 {
+	if tags, err := neo.FindEdgeTagsByContent(input.Property, time.Time{}); err == nil && len(tags) > 0 {
 		t := tags[0]
 
 		if input.Property.PropertyType() != t.Property.PropertyType() {
@@ -39,6 +39,7 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			return nil, err
 		}
 
+		t.Edge = edge
 		t.LastSeen = time.Now()
 		props, err := edgeTagPropsMap(t)
 		if err != nil {
@@ -83,6 +84,7 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			input.LastSeen = time.Now()
 		}
 
+		input.Edge = edge
 		props, err := edgeTagPropsMap(input)
 		if err != nil {
 			return nil, err

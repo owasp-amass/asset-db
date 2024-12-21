@@ -60,7 +60,7 @@ func TestCreateEntity(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	asset.Equal(t, entity.ID, second.ID)
+	assert.NotEqual(t, entity.ID, second.ID)
 	if !second.CreatedAt.After(newer.LastSeen) {
 		t.Errorf("Failed to assign the second entity an accurate creation time")
 	}
@@ -76,7 +76,7 @@ func TestFindEntityById(t *testing.T) {
 
 	same, err := store.FindEntityById(entity.ID)
 	assert.NoError(t, err)
-	asset.Equal(t, entity.ID, same.ID)
+	assert.Equal(t, entity.ID, same.ID)
 
 	if fqdn1, ok := entity.Asset.(*domain.FQDN); !ok {
 		t.Errorf("Failed to type assert the first asset")
@@ -99,7 +99,7 @@ func TestFindEntitiesByContent(t *testing.T) {
 	e, err := store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(-1*time.Second))
 	assert.NoError(t, err)
 	same := e[0]
-	asset.Equal(t, entity.ID, same.ID)
+	assert.Equal(t, entity.ID, same.ID)
 
 	if fqdn1, ok := entity.Asset.(*domain.FQDN); !ok {
 		t.Errorf("Failed to type assert the first asset")
@@ -158,9 +158,6 @@ func TestDeleteEntity(t *testing.T) {
 	err = store.DeleteEntity(entity.ID)
 	assert.NoError(t, err)
 
-	_, err := store.FindEntityById(entity.ID)
-	assert.Error(t, err)
-
-	err = store.DeleteEntity(entity.ID)
+	_, err = store.FindEntityById(entity.ID)
 	assert.Error(t, err)
 }

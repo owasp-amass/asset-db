@@ -27,7 +27,7 @@ func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 		return nil, errors.New("the input entity tag is nil")
 	}
 	// ensure that duplicate entities are not entered into the database
-	if tags, err := neo.FindEntityTagsByContent(input.Property, time.Time{}); err == nil && len(tags) == 1 {
+	if tags, err := neo.FindEntityTagsByContent(input.Property, time.Time{}); err == nil && len(tags) > 0 {
 		t := tags[0]
 
 		if input.Property.PropertyType() != t.Property.PropertyType() {
@@ -39,6 +39,7 @@ func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			return nil, err
 		}
 
+		t.Entity = entity
 		t.LastSeen = time.Now()
 		props, err := entityTagPropsMap(t)
 		if err != nil {
@@ -83,6 +84,7 @@ func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			input.LastSeen = time.Now()
 		}
 
+		input.Entity = entity
 		props, err := entityTagPropsMap(input)
 		if err != nil {
 			return nil, err
