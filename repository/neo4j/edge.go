@@ -114,8 +114,11 @@ func (neo *neoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	query := fmt.Sprintf("MATCH ()-[r]->() WHERE r.elementId = '%s' SET r.updated_at = localDateTime('%s')", rel.ID, timeToNeo4jTime(updated))
-	_, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+	query := fmt.Sprintf("MATCH ()-[r]->() WHERE elementId(r) = $eid SET r.updated_at = localDateTime('%s')", timeToNeo4jTime(updated))
+	_, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+		map[string]interface{}{
+			"eid": rel.ID,
+		},
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -127,7 +130,7 @@ func (neo *neoRepository) FindEdgeById(id string) (*types.Edge, error) {
 	defer cancel()
 
 	result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
-		"MATCH (from:Entity)-[r]->(to:Entity) WHERE r.elementId = $eid RETURN r, from.entity_id AS fid, to.entity_id AS tid",
+		"MATCH (from:Entity)-[r]->(to:Entity) WHERE elementId(r) = $eid RETURN r, from.entity_id AS fid, to.entity_id AS tid",
 		map[string]interface{}{
 			"eid": id,
 		},
@@ -182,12 +185,15 @@ func (neo *neoRepository) IncomingEdges(entity *types.Entity, since time.Time, l
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	query := fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})<-[r]-(from:Entity) RETURN r, from.entity_id AS fid", entity.ID)
+	query := "MATCH (:Entity {entity_id: $eid})<-[r]-(from:Entity) RETURN r, from.entity_id AS fid"
 	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})<-[r]-(from:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, from.entity_id AS fid", entity.ID, timeToNeo4jTime(since))
+		query = fmt.Sprintf("MATCH (:Entity {entity_id: $eid})<-[r]-(from:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, from.entity_id AS fid", timeToNeo4jTime(since))
 	}
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+		map[string]interface{}{
+			"eid": entity.ID,
+		},
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -250,12 +256,15 @@ func (neo *neoRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	query := fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})-[r]->(to:Entity) RETURN r, to.entity_id AS tid", entity.ID)
+	query := "MATCH (:Entity {entity_id: $eid})-[r]->(to:Entity) RETURN r, to.entity_id AS tid"
 	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH (:Entity {entity_id: '%s'})-[r]->(to:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, to.entity_id AS tid", entity.ID, timeToNeo4jTime(since))
+		query = fmt.Sprintf("MATCH (:Entity {entity_id: $eid})-[r]->(to:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, to.entity_id AS tid", timeToNeo4jTime(since))
 	}
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+		map[string]interface{}{
+			"eid": entity.ID,
+		},
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -319,7 +328,7 @@ func (neo *neoRepository) DeleteEdge(id string) error {
 	defer cancel()
 
 	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
-		"MATCH ()-[r]->() WHERE r.elementId = $eid DELETE r",
+		"MATCH ()-[r]->() WHERE elementId(r) = $eid DELETE r",
 		map[string]interface{}{
 			"eid": id,
 		},
