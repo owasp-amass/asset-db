@@ -84,6 +84,10 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 		asset, err = nodeToPerson(node)
 	case oam.Phone:
 		asset, err = nodeToPhone(node)
+	case oam.Product:
+		asset, err = nodeToProduct(node)
+	case oam.ProductRelease:
+		asset, err = nodeToProductRelease(node)
 	case oam.Service:
 		asset, err = nodeToService(node)
 	case oam.TLSCertificate:
@@ -658,7 +662,22 @@ func nodeToNetblock(node neo4jdb.Node) (*oamnet.Netblock, error) {
 }
 
 func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
+	id, err := neo4jdb.GetProperty[string](node, "unique_id")
+	if err != nil {
+		return nil, err
+	}
+
 	name, err := neo4jdb.GetProperty[string](node, "name")
+	if err != nil {
+		return nil, err
+	}
+
+	lname, err := neo4jdb.GetProperty[string](node, "legal_name")
+	if err != nil {
+		return nil, err
+	}
+
+	date, err := neo4jdb.GetProperty[string](node, "founding_date")
 	if err != nil {
 		return nil, err
 	}
@@ -668,9 +687,31 @@ func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
 		return nil, err
 	}
 
+	active, err := neo4jdb.GetProperty[bool](node, "active")
+	if err != nil {
+		return nil, err
+	}
+
+	nonprofit, err := neo4jdb.GetProperty[bool](node, "non_profit")
+	if err != nil {
+		return nil, err
+	}
+
+	num, err := neo4jdb.GetProperty[int64](node, "num_of_employees")
+	if err != nil {
+		return nil, err
+	}
+	employees := int(num)
+
 	return &org.Organization{
-		Name:     name,
-		Industry: industry,
+		ID:             id,
+		Name:           name,
+		LegalName:      lname,
+		FoundingDate:   date,
+		Industry:       industry,
+		Active:         active,
+		NonProfit:      nonprofit,
+		NumOfEmployees: employees,
 	}, nil
 }
 
@@ -695,11 +736,23 @@ func nodeToPerson(node neo4jdb.Node) (*people.Person, error) {
 		return nil, err
 	}
 
+	birth, err := neo4jdb.GetProperty[string](node, "birth_date")
+	if err != nil {
+		return nil, err
+	}
+
+	gender, err := neo4jdb.GetProperty[string](node, "gender")
+	if err != nil {
+		return nil, err
+	}
+
 	return &people.Person{
 		FullName:   full,
 		FirstName:  first,
 		MiddleName: middle,
 		FamilyName: family,
+		BirthDate:  birth,
+		Gender:     gender,
 	}, nil
 }
 
@@ -742,6 +795,64 @@ func nodeToPhone(node neo4jdb.Node) (*contact.Phone, error) {
 		CountryAbbrev: abbrev,
 		CountryCode:   cc,
 		Ext:           ext,
+	}, nil
+}
+
+func nodeToProduct(node neo4jdb.Node) (*platform.Product, error) {
+	ident, err := neo4jdb.GetProperty[string](node, "unique_id")
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := neo4jdb.GetProperty[string](node, "product_name")
+	if err != nil {
+		return nil, err
+	}
+
+	ptype, err := neo4jdb.GetProperty[string](node, "product_type")
+	if err != nil {
+		return nil, err
+	}
+
+	category, err := neo4jdb.GetProperty[string](node, "category")
+	if err != nil {
+		return nil, err
+	}
+
+	desc, err := neo4jdb.GetProperty[string](node, "description")
+	if err != nil {
+		return nil, err
+	}
+
+	country, err := neo4jdb.GetProperty[string](node, "country_of_origin")
+	if err != nil {
+		return nil, err
+	}
+
+	return &platform.Product{
+		ID:              ident,
+		Name:            name,
+		Type:            ptype,
+		Category:        category,
+		Description:     desc,
+		CountryOfOrigin: country,
+	}, nil
+}
+
+func nodeToProductRelease(node neo4jdb.Node) (*platform.ProductRelease, error) {
+	name, err := neo4jdb.GetProperty[string](node, "name")
+	if err != nil {
+		return nil, err
+	}
+
+	date, err := neo4jdb.GetProperty[string](node, "release_date")
+	if err != nil {
+		return nil, err
+	}
+
+	return &platform.ProductRelease{
+		Name:        name,
+		ReleaseDate: date,
 	}, nil
 }
 

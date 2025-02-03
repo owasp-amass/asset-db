@@ -73,7 +73,12 @@ func InitializeSchema(driver neo4jdb.DriverWithContext, dbname string) error {
 }
 
 func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) error {
-	err := executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_autnum_content_handle IF NOT EXISTS FOR (n:AutnumRecord) REQUIRE n.handle IS UNIQUE")
+	err := executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_account_content_unique_id IF NOT EXISTS FOR (n:Account) REQUIRE n.unique_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_autnum_content_handle IF NOT EXISTS FOR (n:AutnumRecord) REQUIRE n.handle IS UNIQUE")
 	if err != nil {
 		return err
 	}
@@ -93,12 +98,22 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
-	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_email_content_address IF NOT EXISTS FOR (n:EmailAddress) REQUIRE n.address IS UNIQUE")
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_file_content_url IF NOT EXISTS FOR (n:File) REQUIRE n.url IS UNIQUE")
 	if err != nil {
 		return err
 	}
 
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_fqdn_content_name IF NOT EXISTS FOR (n:FQDN) REQUIRE n.name IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_ft_content_unique_id IF NOT EXISTS FOR (n:FundsTransfer) REQUIRE n.unique_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_identifier_content_id IF NOT EXISTS FOR (n:Identifier) REQUIRE n.id IS UNIQUE")
 	if err != nil {
 		return err
 	}
@@ -118,17 +133,52 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_location_content_name IF NOT EXISTS FOR (n:Location) REQUIRE n.address IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_netblock_content_cidr IF NOT EXISTS FOR (n:Netblock) REQUIRE n.cidr IS UNIQUE")
 	if err != nil {
 		return err
 	}
 
-	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_org_content_name IF NOT EXISTS FOR (n:Organization) REQUIRE n.name IS UNIQUE")
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_org_content_id IF NOT EXISTS FOR (n:Organization) REQUIRE n.unique_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE INDEX org_range_index_name IF NOT EXISTS FOR (n:Organization) ON (n.name)")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_org_content_legal_name IF NOT EXISTS FOR (n:Organization) REQUIRE n.legal_name IS UNIQUE")
 	if err != nil {
 		return err
 	}
 
 	err = executeQuery(driver, dbname, "CREATE INDEX person_range_index_full_name IF NOT EXISTS FOR (n:Person) ON (n.full_name)")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_phone_content_raw IF NOT EXISTS FOR (n:Phone) REQUIRE n.raw IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_product_content_id IF NOT EXISTS FOR (n:Product) REQUIRE n.unique_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_productrelease_content_name IF NOT EXISTS FOR (n:ProductRelease) REQUIRE n.name IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_service_content_id IF NOT EXISTS FOR (n:Service) REQUIRE n.unique_id IS UNIQUE")
 	if err != nil {
 		return err
 	}
