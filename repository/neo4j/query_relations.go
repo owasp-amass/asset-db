@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,7 +8,8 @@ import (
 	"errors"
 
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/relation"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 func edgePropsMap(edge *types.Edge) (map[string]interface{}, error) {
@@ -27,20 +28,20 @@ func edgePropsMap(edge *types.Edge) (map[string]interface{}, error) {
 
 	// Add the properties of the relation
 	switch v := edge.Relation.(type) {
-	case *relation.BasicDNSRelation:
+	case *dns.BasicDNSRelation:
 		m["header_rrtype"] = v.Header.RRType
 		m["header_class"] = v.Header.Class
 		m["header_ttl"] = v.Header.TTL
-	case *relation.PortRelation:
+	case *general.PortRelation:
 		m["port_number"] = v.PortNumber
 		m["protocol"] = v.Protocol
-	case *relation.PrefDNSRelation:
+	case *dns.PrefDNSRelation:
 		m["header_rrtype"] = v.Header.RRType
 		m["header_class"] = v.Header.Class
 		m["header_ttl"] = v.Header.TTL
 		m["preference"] = v.Preference
-	case *relation.SimpleRelation:
-	case *relation.SRVDNSRelation:
+	case *general.SimpleRelation:
+	case *dns.SRVDNSRelation:
 		m["header_rrtype"] = v.Header.RRType
 		m["header_class"] = v.Header.Class
 		m["header_ttl"] = v.Header.TTL

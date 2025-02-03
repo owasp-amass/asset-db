@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,8 +12,8 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,12 +34,12 @@ func TestCreateEntityTag(t *testing.T) {
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
 	after := ctime.Add(2 * time.Second)
-	entity, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 	tag, err := c.CreateEntityTag(entity, &types.EntityTag{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Property: &property.SimpleProperty{
+		Property: &general.SimpleProperty{
 			PropertyName:  "test",
 			PropertyValue: "foobar",
 		},
@@ -96,9 +96,9 @@ func TestCreateEntityProperty(t *testing.T) {
 
 	now := time.Now()
 	before := now.Add(-2 * time.Second)
-	entity, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
-	tag, err := c.CreateEntityProperty(entity, &property.SimpleProperty{
+	tag, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})
@@ -152,9 +152,9 @@ func TestFindEntityTagById(t *testing.T) {
 	assert.NoError(t, err)
 	defer c.Close()
 
-	entity, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
-	tag, err := c.CreateEntityProperty(entity, &property.SimpleProperty{
+	tag, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})
@@ -183,13 +183,13 @@ func TestFindEntityTagsByContent(t *testing.T) {
 
 	// add some really old stuff to the database
 	now := time.Now()
-	prop := &property.SimpleProperty{
+	prop := &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	}
 	ctime1 := now.Add(-24 * time.Hour)
 	cbefore1 := ctime1.Add(-20 * time.Second)
-	fqdn1 := &domain.FQDN{Name: "owasp.org"}
+	fqdn1 := &dns.FQDN{Name: "owasp.org"}
 	entity1, err := c.db.CreateEntity(&types.Entity{
 		CreatedAt: ctime1,
 		LastSeen:  ctime1,
@@ -205,7 +205,7 @@ func TestFindEntityTagsByContent(t *testing.T) {
 	// add some not so old stuff to the database
 	ctime2 := now.Add(-8 * time.Hour)
 	cbefore2 := ctime2.Add(-20 * time.Second)
-	fqdn2 := &domain.FQDN{Name: "utica.edu"}
+	fqdn2 := &dns.FQDN{Name: "utica.edu"}
 	entity2, err := c.db.CreateEntity(&types.Entity{
 		CreatedAt: ctime2,
 		LastSeen:  ctime2,
@@ -219,7 +219,7 @@ func TestFindEntityTagsByContent(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	// add new entities to the database
-	entity3, err := c.CreateAsset(&domain.FQDN{Name: "sunypoly.edu"})
+	entity3, err := c.CreateAsset(&dns.FQDN{Name: "sunypoly.edu"})
 	assert.NoError(t, err)
 	_, err = c.CreateEntityProperty(entity3, prop)
 	assert.NoError(t, err)
@@ -266,7 +266,7 @@ func TestGetEntityTags(t *testing.T) {
 	entity, err := c.CreateEntity(&types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "caffix.com"},
+		Asset:     &dns.FQDN{Name: "caffix.com"},
 	})
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
@@ -288,7 +288,7 @@ func TestGetEntityTags(t *testing.T) {
 		_, err := c.db.CreateEntityTag(dbent, &types.EntityTag{
 			CreatedAt: ctime,
 			LastSeen:  ctime,
-			Property: &property.SimpleProperty{
+			Property: &general.SimpleProperty{
 				PropertyName:  "test",
 				PropertyValue: name,
 			},
@@ -301,7 +301,7 @@ func TestGetEntityTags(t *testing.T) {
 	// add some new stuff to the database
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		_, err := c.CreateEntityProperty(entity, &property.SimpleProperty{
+		_, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
 			PropertyName:  "test",
 			PropertyValue: name,
 		})
@@ -374,7 +374,7 @@ func TestDeleteEntityTag(t *testing.T) {
 	assert.NoError(t, err)
 	defer c.Close()
 
-	entity, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
 	time.Sleep(250 * time.Millisecond)
@@ -385,7 +385,7 @@ func TestDeleteEntityTag(t *testing.T) {
 	}
 	dbent := dbents[0]
 
-	tag, err := c.CreateEntityProperty(entity, &property.SimpleProperty{
+	tag, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})

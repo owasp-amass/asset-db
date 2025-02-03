@@ -1,6 +1,6 @@
 //go:build integration
 
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,7 +14,7 @@ import (
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +22,7 @@ import (
 
 func TestCreateEntity(t *testing.T) {
 	entity, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "create1.entity",
 		},
 	})
@@ -30,7 +30,7 @@ func TestCreateEntity(t *testing.T) {
 
 	time.Sleep(250 * time.Millisecond)
 	newer, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "create1.entity",
 		},
 	})
@@ -39,9 +39,9 @@ func TestCreateEntity(t *testing.T) {
 	if entity.ID != newer.ID || entity.Asset.AssetType() != newer.Asset.AssetType() {
 		t.Errorf("Failed to prevent duplicate entities from being created")
 	}
-	if fqdn1, ok := entity.Asset.(*domain.FQDN); !ok {
+	if fqdn1, ok := entity.Asset.(*dns.FQDN); !ok {
 		t.Errorf("Failed to type assert the first asset")
-	} else if fqdn2, ok := newer.Asset.(*domain.FQDN); !ok {
+	} else if fqdn2, ok := newer.Asset.(*dns.FQDN); !ok {
 		t.Errorf("Failed to type assert the second asset")
 	} else if fqdn1.Name != fqdn2.Name {
 		t.Errorf("Failed to keep the asset the same")
@@ -54,7 +54,7 @@ func TestCreateEntity(t *testing.T) {
 
 	time.Sleep(250 * time.Millisecond)
 	second, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "create2.entity",
 		},
 	})
@@ -68,7 +68,7 @@ func TestCreateEntity(t *testing.T) {
 
 func TestFindEntityById(t *testing.T) {
 	entity, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "find1.entity",
 		},
 	})
@@ -78,9 +78,9 @@ func TestFindEntityById(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, entity.ID, same.ID)
 
-	if fqdn1, ok := entity.Asset.(*domain.FQDN); !ok {
+	if fqdn1, ok := entity.Asset.(*dns.FQDN); !ok {
 		t.Errorf("Failed to type assert the first asset")
-	} else if fqdn2, ok := same.Asset.(*domain.FQDN); !ok {
+	} else if fqdn2, ok := same.Asset.(*dns.FQDN); !ok {
 		t.Errorf("Failed to type assert the second asset")
 	} else if fqdn1.Name != fqdn2.Name {
 		t.Errorf("Failed to return an entity with the correct name")
@@ -88,7 +88,7 @@ func TestFindEntityById(t *testing.T) {
 }
 
 func TestFindEntitiesByContent(t *testing.T) {
-	fqdn := &domain.FQDN{Name: "findcontent.entity"}
+	fqdn := &dns.FQDN{Name: "findcontent.entity"}
 
 	_, err := store.FindEntitiesByContent(fqdn, time.Time{})
 	assert.Error(t, err)
@@ -101,9 +101,9 @@ func TestFindEntitiesByContent(t *testing.T) {
 	same := e[0]
 	assert.Equal(t, entity.ID, same.ID)
 
-	if fqdn1, ok := entity.Asset.(*domain.FQDN); !ok {
+	if fqdn1, ok := entity.Asset.(*dns.FQDN); !ok {
 		t.Errorf("Failed to type assert the first asset")
-	} else if fqdn2, ok := same.Asset.(*domain.FQDN); !ok {
+	} else if fqdn2, ok := same.Asset.(*dns.FQDN); !ok {
 		t.Errorf("Failed to type assert the second asset")
 	} else if fqdn1.Name != fqdn2.Name {
 		t.Errorf("Failed to return an entity with the correct name")
@@ -149,7 +149,7 @@ func TestFindEntitiesByType(t *testing.T) {
 
 func TestDeleteEntity(t *testing.T) {
 	entity, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "delete.entity",
 		},
 	})

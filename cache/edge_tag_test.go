@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,8 +12,8 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,12 +34,12 @@ func TestCreateEdgeTag(t *testing.T) {
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
 	after := ctime.Add(2 * time.Second)
-	entity, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 	tag, err := c.CreateEntityTag(entity, &types.EntityTag{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Property: &property.SimpleProperty{
+		Property: &general.SimpleProperty{
 			PropertyName:  "test",
 			PropertyValue: "foobar",
 		},
@@ -98,7 +98,7 @@ func TestCreateEdgeProperty(t *testing.T) {
 	before := now.Add(-2 * time.Second)
 	edge, err := createTestEdge(c, now)
 	assert.NoError(t, err)
-	tag, err := c.CreateEdgeProperty(edge, &property.SimpleProperty{
+	tag, err := c.CreateEdgeProperty(edge, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})
@@ -163,7 +163,7 @@ func TestFindEdgeTagById(t *testing.T) {
 
 	edge, err := createTestEdge(c, time.Now())
 	assert.NoError(t, err)
-	tag, err := c.CreateEdgeProperty(edge, &property.SimpleProperty{
+	tag, err := c.CreateEdgeProperty(edge, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})
@@ -196,7 +196,7 @@ func TestFindEdgeTagsByContent(t *testing.T) {
 	cbefore1 := ctime1.Add(-20 * time.Second)
 	edge, err := createTestEdge(c, ctime1)
 	assert.NoError(t, err)
-	prop1 := &property.SimpleProperty{
+	prop1 := &general.SimpleProperty{
 		PropertyName:  "test1",
 		PropertyValue: "foobar",
 	}
@@ -210,7 +210,7 @@ func TestFindEdgeTagsByContent(t *testing.T) {
 	// add some not so old stuff to the database
 	ctime2 := now.Add(-8 * time.Hour)
 	cbefore2 := ctime2.Add(-20 * time.Second)
-	prop2 := &property.SimpleProperty{
+	prop2 := &general.SimpleProperty{
 		PropertyName:  "test2",
 		PropertyValue: "foobar",
 	}
@@ -222,7 +222,7 @@ func TestFindEdgeTagsByContent(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	// add new entities to the database
-	prop3 := &property.SimpleProperty{
+	prop3 := &general.SimpleProperty{
 		PropertyName:  "test3",
 		PropertyValue: "foobar",
 	}
@@ -298,7 +298,7 @@ func TestGetEdgeTags(t *testing.T) {
 		_, err := c.db.CreateEdgeTag(target, &types.EdgeTag{
 			CreatedAt: ctime,
 			LastSeen:  ctime,
-			Property: &property.SimpleProperty{
+			Property: &general.SimpleProperty{
 				PropertyName:  "test",
 				PropertyValue: name,
 			},
@@ -311,7 +311,7 @@ func TestGetEdgeTags(t *testing.T) {
 	// add some new stuff to the database
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		_, err := c.CreateEdgeProperty(edge, &property.SimpleProperty{
+		_, err := c.CreateEdgeProperty(edge, &general.SimpleProperty{
 			PropertyName:  "test",
 			PropertyValue: name,
 		})
@@ -405,7 +405,7 @@ func TestDeleteEdgeTag(t *testing.T) {
 		}
 	}
 
-	tag, err := c.CreateEdgeProperty(edge, &property.SimpleProperty{
+	tag, err := c.CreateEdgeProperty(edge, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})

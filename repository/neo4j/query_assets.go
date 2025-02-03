@@ -10,13 +10,18 @@ import (
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/account"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
+	"github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/file"
+	"github.com/owasp-amass/open-asset-model/financial"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/service"
 	"github.com/owasp-amass/open-asset-model/url"
@@ -38,6 +43,13 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 	m["updated_at"] = timeToNeo4jTime(entity.LastSeen)
 
 	switch v := entity.Asset.(type) {
+	case *account.Account:
+		m["unique_id"] = v.ID
+		m["account_type"] = v.Type
+		m["username"] = v.Username
+		m["account_number"] = v.Number
+		m["balance"] = v.Balance
+		m["active"] = v.Active
 	case *oamreg.AutnumRecord:
 		m["raw"] = v.Raw
 		m["number"] = int64(v.Number)
@@ -64,16 +76,28 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["expiration_date"] = v.ExpirationDate
 		m["status"] = v.Status
 		m["dnssec"] = v.DNSSEC
-	case *contact.EmailAddress:
-		m["address"] = v.Address
-		m["username"] = v.Username
-		m["domain"] = v.Domain
 	case *file.File:
 		m["url"] = v.URL
 		m["name"] = v.Name
 		m["type"] = v.Type
-	case *domain.FQDN:
+	case *dns.FQDN:
 		m["name"] = v.Name
+	case *financial.FundsTransfer:
+		m["unique_id"] = v.ID
+		m["amount"] = v.Amount
+		m["reference_number"] = v.ReferenceNumber
+		m["currency"] = v.Currency
+		m["transfer_method"] = v.Method
+		m["exchange_date"] = v.ExchangeDate
+		m["exchange_rate"] = v.ExchangeRate
+	case *general.Identifier:
+		m["id"] = v.ID
+		m["id_type"] = v.Type
+		m["category"] = v.Category
+		m["creation_date"] = v.CreationDate
+		m["update_date"] = v.UpdatedDate
+		m["expiration_date"] = v.ExpirationDate
+		m["status"] = v.Status
 	case *oamnet.IPAddress:
 		m["address"] = v.Address.String()
 		m["type"] = v.Type
@@ -108,13 +132,21 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["cidr"] = v.CIDR.String()
 		m["type"] = v.Type
 	case *org.Organization:
+		m["unique_id"] = v.ID
 		m["name"] = v.Name
+		m["legal_name"] = v.LegalName
+		m["founding_date"] = v.FoundingDate
 		m["industry"] = v.Industry
+		m["active"] = v.Active
+		m["non_profit"] = v.NonProfit
+		m["num_of_employees"] = int64(v.NumOfEmployees)
 	case *people.Person:
 		m["full_name"] = v.FullName
 		m["first_name"] = v.FirstName
 		m["middle_name"] = v.MiddleName
 		m["family_name"] = v.FamilyName
+		m["birth_date"] = v.BirthDate
+		m["gender"] = v.Gender
 	case *contact.Phone:
 		m["type"] = v.Type
 		m["raw"] = v.Raw
@@ -122,11 +154,22 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["country_abbrev"] = v.CountryAbbrev
 		m["country_code"] = int64(v.CountryCode)
 		m["ext"] = v.Ext
-	case *service.Service:
-		m["identifier"] = v.Identifier
-		m["banner"] = v.Banner
-		m["banner_length"] = int64(v.BannerLen)
-		m["headers"] = v.Headers
+	case *platform.Product:
+		m["unique_id"] = v.ID
+		m["product_name"] = v.Name
+		m["product_type"] = v.Type
+		m["category"] = v.Category
+		m["description"] = v.Description
+		m["country_of_origin"] = v.CountryOfOrigin
+	case *platform.ProductRelease:
+		m["name"] = v.Name
+		m["release_date"] = v.ReleaseDate
+	case *platform.Service:
+		m["unique_id"] = v.ID
+		m["service_type"] = v.Type
+		m["output"] = v.Output
+		m["output_length"] = int64(v.OutputLen)
+		m["attributes"] = v.Attributes
 	case *oamcert.TLSCertificate:
 		m["version"] = v.Version
 		m["serial_number"] = v.SerialNumber

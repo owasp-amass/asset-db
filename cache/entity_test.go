@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,7 +13,7 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,7 +37,7 @@ func TestCreateEntity(t *testing.T) {
 	entity, err := c.CreateEntity(&types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "owasp.org"},
+		Asset:     &dns.FQDN{Name: "owasp.org"},
 	})
 	assert.NoError(t, err)
 
@@ -87,7 +87,7 @@ func TestCreateAsset(t *testing.T) {
 	now := time.Now()
 	before := now.Add(-2 * time.Second)
 	after := now.Add(2 * time.Second)
-	entity, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
 	if entity.CreatedAt.Before(before) || entity.CreatedAt.After(after) {
@@ -133,7 +133,7 @@ func TestFindEntityById(t *testing.T) {
 	assert.NoError(t, err)
 	defer c.Close()
 
-	entity1, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity1, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
 	entity2, err := c.FindEntityById(entity1.ID)
@@ -161,7 +161,7 @@ func TestFindEntityByContent(t *testing.T) {
 	now := time.Now()
 	ctime1 := now.Add(-24 * time.Hour)
 	cbefore1 := ctime1.Add(-20 * time.Second)
-	fqdn1 := &domain.FQDN{Name: "owasp.org"}
+	fqdn1 := &dns.FQDN{Name: "owasp.org"}
 	entity1, err := c.db.CreateEntity(&types.Entity{
 		CreatedAt: ctime1,
 		LastSeen:  ctime1,
@@ -171,7 +171,7 @@ func TestFindEntityByContent(t *testing.T) {
 	// add some not so old stuff to the database
 	ctime2 := now.Add(-8 * time.Hour)
 	cbefore2 := ctime2.Add(-20 * time.Second)
-	fqdn2 := &domain.FQDN{Name: "utica.edu"}
+	fqdn2 := &dns.FQDN{Name: "utica.edu"}
 	entity2, err := c.db.CreateEntity(&types.Entity{
 		CreatedAt: ctime2,
 		LastSeen:  ctime2,
@@ -179,7 +179,7 @@ func TestFindEntityByContent(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	// add new entities to the database
-	fqdn3 := &domain.FQDN{Name: "sunypoly.edu"}
+	fqdn3 := &dns.FQDN{Name: "sunypoly.edu"}
 	entity3, err := c.CreateEntity(&types.Entity{
 		CreatedAt: now,
 		LastSeen:  now,
@@ -256,7 +256,7 @@ func TestFindEntitiesByType(t *testing.T) {
 		_, err := c.db.CreateEntity(&types.Entity{
 			CreatedAt: ctime1,
 			LastSeen:  ctime1,
-			Asset:     &domain.FQDN{Name: name},
+			Asset:     &dns.FQDN{Name: name},
 		})
 		assert.NoError(t, err)
 	}
@@ -272,7 +272,7 @@ func TestFindEntitiesByType(t *testing.T) {
 		_, err := c.db.CreateEntity(&types.Entity{
 			CreatedAt: ctime2,
 			LastSeen:  ctime2,
-			Asset:     &domain.FQDN{Name: name},
+			Asset:     &dns.FQDN{Name: name},
 		})
 		assert.NoError(t, err)
 	}
@@ -283,7 +283,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	after := now.Add(20 * time.Second)
 	for _, name := range []string{"ns1.owasp.org", "ns1.utica.edu", "ns1.sunypoly.edu"} {
 		set3.Insert(name)
-		_, err := c.CreateAsset(&domain.FQDN{Name: name})
+		_, err := c.CreateAsset(&dns.FQDN{Name: name})
 		assert.NoError(t, err)
 	}
 
@@ -298,7 +298,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	}
 
 	for _, entity := range entities {
-		if fqdn, ok := entity.Asset.(*domain.FQDN); ok {
+		if fqdn, ok := entity.Asset.(*dns.FQDN); ok {
 			set1.Remove(fqdn.Name)
 			set2.Remove(fqdn.Name)
 			set3.Remove(fqdn.Name)
@@ -320,7 +320,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	}
 
 	for _, entity := range entities {
-		if fqdn, ok := entity.Asset.(*domain.FQDN); ok {
+		if fqdn, ok := entity.Asset.(*dns.FQDN); ok {
 			set1.Remove(fqdn.Name)
 			set2.Remove(fqdn.Name)
 			set3.Remove(fqdn.Name)
@@ -351,7 +351,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	}
 
 	for _, entity := range entities {
-		if fqdn, ok := entity.Asset.(*domain.FQDN); ok {
+		if fqdn, ok := entity.Asset.(*dns.FQDN); ok {
 			set1.Remove(fqdn.Name)
 			set2.Remove(fqdn.Name)
 			set3.Remove(fqdn.Name)
@@ -389,7 +389,7 @@ func TestDeleteEntity(t *testing.T) {
 	assert.NoError(t, err)
 	defer c.Close()
 
-	entity, err := c.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
 	err = c.DeleteEntity(entity.ID)

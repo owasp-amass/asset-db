@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,17 +10,18 @@ import (
 	"time"
 
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/account"
 	oamtls "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
 	oamfile "github.com/owasp-amass/open-asset-model/file"
+	"github.com/owasp-amass/open-asset-model/financial"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
-	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
-	"github.com/owasp-amass/open-asset-model/service"
 	"github.com/owasp-amass/open-asset-model/url"
 	"gorm.io/datatypes"
 )
@@ -74,41 +75,71 @@ func (e *Entity) Parse() (oam.Asset, error) {
 	var asset oam.Asset
 
 	switch e.Type {
-	case string(oam.FQDN):
-		var fqdn domain.FQDN
+	case string(oam.Account):
+		var a account.Account
 
-		err = json.Unmarshal(e.Content, &fqdn)
-		asset = &fqdn
-	case string(oam.IPAddress):
-		var ip network.IPAddress
-
-		err = json.Unmarshal(e.Content, &ip)
-		asset = &ip
-	case string(oam.AutonomousSystem):
-		var as network.AutonomousSystem
-
-		err = json.Unmarshal(e.Content, &as)
-		asset = &as
+		err = json.Unmarshal(e.Content, &a)
+		asset = &a
 	case string(oam.AutnumRecord):
 		var ar oamreg.AutnumRecord
 
 		err = json.Unmarshal(e.Content, &ar)
 		asset = &ar
-	case string(oam.Netblock):
-		var netblock network.Netblock
+	case string(oam.AutonomousSystem):
+		var as network.AutonomousSystem
 
-		err = json.Unmarshal(e.Content, &netblock)
-		asset = &netblock
-	case string(oam.IPNetRecord):
-		var ipnetrec oamreg.IPNetRecord
+		err = json.Unmarshal(e.Content, &as)
+		asset = &as
+	case string(oam.ContactRecord):
+		var cr contact.ContactRecord
 
-		err = json.Unmarshal(e.Content, &ipnetrec)
-		asset = &ipnetrec
+		err = json.Unmarshal(e.Content, &cr)
+		asset = &cr
 	case string(oam.DomainRecord):
 		var dr oamreg.DomainRecord
 
 		err = json.Unmarshal(e.Content, &dr)
 		asset = &dr
+	case string(oam.File):
+		var f oamfile.File
+
+		err = json.Unmarshal(e.Content, &f)
+		asset = &f
+	case string(oam.FQDN):
+		var fqdn dns.FQDN
+
+		err = json.Unmarshal(e.Content, &fqdn)
+		asset = &fqdn
+	case string(oam.FundsTransfer):
+		var ft financial.FundsTransfer
+
+		err = json.Unmarshal(e.Content, &ft)
+		asset = &ft
+	case string(oam.Identifier):
+		var id general.Identifier
+
+		err = json.Unmarshal(e.Content, &id)
+		asset = &id
+	case string(oam.IPAddress):
+		var ip network.IPAddress
+
+		err = json.Unmarshal(e.Content, &ip)
+		asset = &ip
+	case string(oam.IPNetRecord):
+		var ipnetrec oamreg.IPNetRecord
+
+		err = json.Unmarshal(e.Content, &ipnetrec)
+		asset = &ipnetrec
+	case string(oam.Location):
+		var location contact.Location
+
+		err = json.Unmarshal(e.Content, &location)
+		asset = &location
+	case string(oam.Netblock):
+		var netblock network.Netblock
+
+		err = json.Unmarshal(e.Content, &netblock)
+		asset = &netblock
 	case string(oam.Organization):
 		var organization org.Organization
 
@@ -124,21 +155,21 @@ func (e *Entity) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(e.Content, &phone)
 		asset = &phone
-	case string(oam.EmailAddress):
-		var emailAddress contact.EmailAddress
+	case string(oam.Product):
+		var p platform.Product
 
-		err = json.Unmarshal(e.Content, &emailAddress)
-		asset = &emailAddress
-	case string(oam.Location):
-		var location contact.Location
+		err = json.Unmarshal(e.Content, &p)
+		asset = &p
+	case string(oam.ProductRelease):
+		var pr platform.ProductRelease
 
-		err = json.Unmarshal(e.Content, &location)
-		asset = &location
-	case string(oam.ContactRecord):
-		var cr contact.ContactRecord
+		err = json.Unmarshal(e.Content, &pr)
+		asset = &pr
+	case string(oam.Service):
+		var serv platform.Service
 
-		err = json.Unmarshal(e.Content, &cr)
-		asset = &cr
+		err = json.Unmarshal(e.Content, &serv)
+		asset = &serv
 	case string(oam.TLSCertificate):
 		var tlsCertificate oamtls.TLSCertificate
 
@@ -149,16 +180,6 @@ func (e *Entity) Parse() (oam.Asset, error) {
 
 		err = json.Unmarshal(e.Content, &url)
 		asset = &url
-	case string(oam.Service):
-		var serv service.Service
-
-		err = json.Unmarshal(e.Content, &serv)
-		asset = &serv
-	case string(oam.File):
-		var f oamfile.File
-
-		err = json.Unmarshal(e.Content, &f)
-		asset = &f
 	default:
 		return nil, fmt.Errorf("unknown asset type: %s", e.Type)
 	}
@@ -176,40 +197,48 @@ func (e *Entity) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 
 	jsonQuery := datatypes.JSONQuery("content")
 	switch v := asset.(type) {
-	case *domain.FQDN:
-		return jsonQuery.Equals(v.Name, "name"), nil
-	case *network.IPAddress:
-		return jsonQuery.Equals(v.Address.String(), "address"), nil
-	case *network.AutonomousSystem:
-		return jsonQuery.Equals(v.Number, "number"), nil
-	case *network.Netblock:
-		return jsonQuery.Equals(v.CIDR.String(), "cidr"), nil
-	case *oamreg.IPNetRecord:
-		return jsonQuery.Equals(v.Handle, "handle"), nil
+	case *account.Account:
+		return jsonQuery.Equals(v.ID, "unique_id"), nil
 	case *oamreg.AutnumRecord:
 		return jsonQuery.Equals(v.Handle, "handle"), nil
+	case *network.AutonomousSystem:
+		return jsonQuery.Equals(v.Number, "number"), nil
+	case *contact.ContactRecord:
+		return jsonQuery.Equals(v.DiscoveredAt, "discovered_at"), nil
 	case *oamreg.DomainRecord:
 		return jsonQuery.Equals(v.Domain, "domain"), nil
-	case *org.Organization:
+	case *oamfile.File:
+		return jsonQuery.Equals(v.URL, "url"), nil
+	case *dns.FQDN:
 		return jsonQuery.Equals(v.Name, "name"), nil
+	case *financial.FundsTransfer:
+		return jsonQuery.Equals(v.ID, "unique_id"), nil
+	case *general.Identifier:
+		return jsonQuery.Equals(v.ID, "id"), nil
+	case *network.IPAddress:
+		return jsonQuery.Equals(v.Address.String(), "address"), nil
+	case *oamreg.IPNetRecord:
+		return jsonQuery.Equals(v.Handle, "handle"), nil
+	case *contact.Location:
+		return jsonQuery.Equals(v.Address, "address"), nil
+	case *network.Netblock:
+		return jsonQuery.Equals(v.CIDR.String(), "cidr"), nil
+	case *org.Organization:
+		return jsonQuery.Equals(v.ID, "unique_id"), nil
 	case *people.Person:
 		return jsonQuery.Equals(v.FullName, "full_name"), nil
 	case *contact.Phone:
 		return jsonQuery.Equals(v.Raw, "raw"), nil
-	case *contact.EmailAddress:
-		return jsonQuery.Equals(v.Address, "address"), nil
-	case *contact.Location:
-		return jsonQuery.Equals(v.Address, "address"), nil
-	case *contact.ContactRecord:
-		return jsonQuery.Equals(v.DiscoveredAt, "discovered_at"), nil
+	case *platform.Product:
+		return jsonQuery.Equals(v.ID, "unique_id"), nil
+	case *platform.ProductRelease:
+		return jsonQuery.Equals(v.Name, "name"), nil
+	case *platform.Service:
+		return jsonQuery.Equals(v.ID, "unique_id"), nil
 	case *oamtls.TLSCertificate:
 		return jsonQuery.Equals(v.SerialNumber, "serial_number"), nil
 	case *url.URL:
 		return jsonQuery.Equals(v.Raw, "url"), nil
-	case *service.Service:
-		return jsonQuery.Equals(v.Identifier, "identifier"), nil
-	case *oamfile.File:
-		return jsonQuery.Equals(v.URL, "url"), nil
 	}
 
 	return nil, fmt.Errorf("unknown asset type: %s", e.Type)
@@ -223,27 +252,27 @@ func (e *Edge) Parse() (oam.Relation, error) {
 
 	switch e.Type {
 	case string(oam.BasicDNSRelation):
-		var bdr relation.BasicDNSRelation
+		var bdr dns.BasicDNSRelation
 
 		err = json.Unmarshal(e.Content, &bdr)
 		rel = &bdr
 	case string(oam.PortRelation):
-		var pr relation.PortRelation
+		var pr general.PortRelation
 
 		err = json.Unmarshal(e.Content, &pr)
 		rel = &pr
 	case string(oam.PrefDNSRelation):
-		var pdr relation.PrefDNSRelation
+		var pdr dns.PrefDNSRelation
 
 		err = json.Unmarshal(e.Content, &pdr)
 		rel = &pdr
 	case string(oam.SimpleRelation):
-		var sr relation.SimpleRelation
+		var sr general.SimpleRelation
 
 		err = json.Unmarshal(e.Content, &sr)
 		rel = &sr
 	case string(oam.SRVDNSRelation):
-		var sdr relation.SRVDNSRelation
+		var sdr dns.SRVDNSRelation
 
 		err = json.Unmarshal(e.Content, &sdr)
 		rel = &sdr
@@ -271,18 +300,23 @@ func parseProperty(ptype string, content datatypes.JSON) (oam.Property, error) {
 	var prop oam.Property
 
 	switch ptype {
+	case string(oam.DNSRecordProperty):
+		var dp dns.DNSRecordProperty
+
+		err = json.Unmarshal(content, &dp)
+		prop = &dp
 	case string(oam.SimpleProperty):
-		var sp property.SimpleProperty
+		var sp general.SimpleProperty
 
 		err = json.Unmarshal(content, &sp)
 		prop = &sp
 	case string(oam.SourceProperty):
-		var sp property.SourceProperty
+		var sp general.SourceProperty
 
 		err = json.Unmarshal(content, &sp)
 		prop = &sp
 	case string(oam.VulnProperty):
-		var vp property.VulnProperty
+		var vp platform.VulnProperty
 
 		err = json.Unmarshal(content, &vp)
 		prop = &vp
@@ -319,11 +353,13 @@ func propertyNameJSONQuery(prop oam.Property) (*datatypes.JSONQueryExpression, e
 	jsonQuery := datatypes.JSONQuery("content")
 
 	switch v := prop.(type) {
-	case *property.SimpleProperty:
+	case *dns.DNSRecordProperty:
 		return jsonQuery.Equals(v.PropertyName, "property_name"), nil
-	case *property.SourceProperty:
+	case *general.SimpleProperty:
+		return jsonQuery.Equals(v.PropertyName, "property_name"), nil
+	case *general.SourceProperty:
 		return jsonQuery.Equals(v.Source, "name"), nil
-	case *property.VulnProperty:
+	case *platform.VulnProperty:
 		return jsonQuery.Equals(v.ID, "id"), nil
 	}
 
@@ -356,11 +392,13 @@ func propertyValueJSONQuery(prop oam.Property) (*datatypes.JSONQueryExpression, 
 	jsonQuery := datatypes.JSONQuery("content")
 
 	switch v := prop.(type) {
-	case *property.SimpleProperty:
+	case *dns.DNSRecordProperty:
+		return jsonQuery.Equals(v.Data, "data"), nil
+	case *general.SimpleProperty:
 		return jsonQuery.Equals(v.PropertyValue, "property_value"), nil
-	case *property.SourceProperty:
+	case *general.SourceProperty:
 		return jsonQuery.Equals(v.Confidence, "confidence"), nil
-	case *property.VulnProperty:
+	case *platform.VulnProperty:
 		return jsonQuery.Equals(v.Description, "desc"), nil
 	}
 

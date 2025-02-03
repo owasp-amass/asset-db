@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -17,10 +17,10 @@ import (
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
 	migrate "github.com/rubenv/sql-migrate"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/postgres"
@@ -210,33 +210,33 @@ func TestRepository(t *testing.T) {
 	}{
 		{
 			description:      "create an FQDN and link it with another FQDN",
-			sourceAsset:      &domain.FQDN{Name: "www.example.com"},
-			destinationAsset: &domain.FQDN{Name: "www.example.subdomain.com"},
-			relation:         relation.BasicDNSRelation{Name: "dns_record"},
+			sourceAsset:      &dns.FQDN{Name: "www.example.com"},
+			destinationAsset: &dns.FQDN{Name: "www.example.subdomain.com"},
+			relation:         general.BasicDNSRelation{Name: "dns_record"},
 		},
 		{
 			description:      "create an Autonomous System and link it with an RIR organization",
 			sourceAsset:      &network.AutonomousSystem{Number: 1},
 			destinationAsset: &oamreg.AutnumRecord{Number: 1, Handle: "AS1", Name: "GOGL"},
-			relation:         relation.SimpleRelation{Name: "registration"},
+			relation:         general.SimpleRelation{Name: "registration"},
 		},
 		{
 			description:      "create a Netblock and link it with an IP address",
 			sourceAsset:      &network.Netblock{CIDR: cidr, Type: "IPv4"},
 			destinationAsset: &network.IPAddress{Address: ip, Type: "IPv4"},
-			relation:         relation.SimpleRelation{Name: "contains"},
+			relation:         general.SimpleRelation{Name: "contains"},
 		},
 		{
 			description:      "create an FQDN and link it with an IP address",
-			sourceAsset:      &domain.FQDN{Name: "www.domain.com"},
+			sourceAsset:      &dns.FQDN{Name: "www.domain.com"},
 			destinationAsset: &network.IPAddress{Address: ip2, Type: "IPv4"},
-			relation:         relation.BasicDNSRelation{Name: "dns_record"},
+			relation:         dns.BasicDNSRelation{Name: "dns_record"},
 		},
 		{
 			description:      "create an Autonomous System and link it with a Netblock",
 			sourceAsset:      &network.AutonomousSystem{Number: 2},
 			destinationAsset: &network.Netblock{CIDR: cidr2, Type: "IPv4"},
-			relation:         relation.SimpleRelation{Name: "announces"},
+			relation:         general.SimpleRelation{Name: "announces"},
 		},
 	}
 

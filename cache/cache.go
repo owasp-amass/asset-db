@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,7 +9,7 @@ import (
 
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type Cache struct {
@@ -46,7 +46,7 @@ func (c *Cache) GetDBType() string {
 }
 
 func (c *Cache) createCacheEntityTag(entity *types.Entity, name string, since time.Time) error {
-	_, err := c.cache.CreateEntityProperty(entity, &property.SimpleProperty{
+	_, err := c.cache.CreateEntityProperty(entity, &general.SimpleProperty{
 		PropertyName:  name,
 		PropertyValue: since.Format(time.RFC3339Nano),
 	})
@@ -63,7 +63,7 @@ func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.E
 }
 
 func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string, since time.Time) error {
-	_, err := c.cache.CreateEdgeProperty(edge, &property.SimpleProperty{
+	_, err := c.cache.CreateEdgeProperty(edge, &general.SimpleProperty{
 		PropertyName:  name,
 		PropertyValue: since.Format(time.RFC3339Nano),
 	})

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,7 +11,8 @@ import (
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/relation"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 func relationshipToEdge(rel neo4jdb.Relationship) (*types.Edge, error) {
@@ -61,7 +62,7 @@ func relationshipToEdge(rel neo4jdb.Relationship) (*types.Edge, error) {
 	}, nil
 }
 
-func relationshipToBasicDNSRelation(rel neo4jdb.Relationship) (*relation.BasicDNSRelation, error) {
+func relationshipToBasicDNSRelation(rel neo4jdb.Relationship) (*dns.BasicDNSRelation, error) {
 	num, err := neo4jdb.GetProperty[int64](rel, "header_rrtype")
 	if err != nil {
 		return nil, err
@@ -80,9 +81,9 @@ func relationshipToBasicDNSRelation(rel neo4jdb.Relationship) (*relation.BasicDN
 	}
 	ttl := int(num)
 
-	return &relation.BasicDNSRelation{
+	return &dns.BasicDNSRelation{
 		Name: strings.ToLower(rel.Type),
-		Header: relation.RRHeader{
+		Header: dns.RRHeader{
 			RRType: rrtype,
 			Class:  class,
 			TTL:    ttl,
@@ -90,7 +91,7 @@ func relationshipToBasicDNSRelation(rel neo4jdb.Relationship) (*relation.BasicDN
 	}, nil
 }
 
-func relationshipToPortRelation(rel neo4jdb.Relationship) (*relation.PortRelation, error) {
+func relationshipToPortRelation(rel neo4jdb.Relationship) (*general.PortRelation, error) {
 	num, err := neo4jdb.GetProperty[int64](rel, "port_number")
 	if err != nil {
 		return nil, err
@@ -102,14 +103,14 @@ func relationshipToPortRelation(rel neo4jdb.Relationship) (*relation.PortRelatio
 		return nil, err
 	}
 
-	return &relation.PortRelation{
+	return &general.PortRelation{
 		Name:       strings.ToLower(rel.Type),
 		PortNumber: port,
 		Protocol:   protocol,
 	}, nil
 }
 
-func relationshipToPrefDNSRelation(rel neo4jdb.Relationship) (*relation.PrefDNSRelation, error) {
+func relationshipToPrefDNSRelation(rel neo4jdb.Relationship) (*dns.PrefDNSRelation, error) {
 	num, err := neo4jdb.GetProperty[int64](rel, "header_rrtype")
 	if err != nil {
 		return nil, err
@@ -134,9 +135,9 @@ func relationshipToPrefDNSRelation(rel neo4jdb.Relationship) (*relation.PrefDNSR
 	}
 	pref := int(num)
 
-	return &relation.PrefDNSRelation{
+	return &dns.PrefDNSRelation{
 		Name: strings.ToLower(rel.Type),
-		Header: relation.RRHeader{
+		Header: dns.RRHeader{
 			RRType: rrtype,
 			Class:  class,
 			TTL:    ttl,
@@ -145,13 +146,13 @@ func relationshipToPrefDNSRelation(rel neo4jdb.Relationship) (*relation.PrefDNSR
 	}, nil
 }
 
-func relationshipToSimpleRelation(rel neo4jdb.Relationship) (*relation.SimpleRelation, error) {
-	return &relation.SimpleRelation{
+func relationshipToSimpleRelation(rel neo4jdb.Relationship) (*general.SimpleRelation, error) {
+	return &general.SimpleRelation{
 		Name: strings.ToLower(rel.Type),
 	}, nil
 }
 
-func relationshipToSRVDNSRelation(rel neo4jdb.Relationship) (*relation.SRVDNSRelation, error) {
+func relationshipToSRVDNSRelation(rel neo4jdb.Relationship) (*dns.SRVDNSRelation, error) {
 	num, err := neo4jdb.GetProperty[int64](rel, "header_rrtype")
 	if err != nil {
 		return nil, err
@@ -188,9 +189,9 @@ func relationshipToSRVDNSRelation(rel neo4jdb.Relationship) (*relation.SRVDNSRel
 	}
 	port := int(num)
 
-	return &relation.SRVDNSRelation{
+	return &dns.SRVDNSRelation{
 		Name: strings.ToLower(rel.Type),
-		Header: relation.RRHeader{
+		Header: dns.RRHeader{
 			RRType: rrtype,
 			Class:  class,
 			TTL:    ttl,

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,7 +10,9 @@ import (
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/platform"
 )
 
 func entityTagPropsMap(tag *types.EntityTag) (map[string]interface{}, error) {
@@ -76,13 +78,19 @@ func propertyPropsMap(prop oam.Property) (map[string]interface{}, error) {
 
 	// begin populating the map of parameters
 	switch v := prop.(type) {
-	case *property.SimpleProperty:
+	case *dns.DNSRecordProperty:
+		m["property_name"] = v.PropertyName
+		m["header_rrtype"] = v.Header.RRType
+		m["header_class"] = v.Header.Class
+		m["header_ttl"] = v.Header.TTL
+		m["data"] = v.Data
+	case *general.SimpleProperty:
 		m["property_name"] = v.PropertyName
 		m["property_value"] = v.PropertyValue
-	case *property.SourceProperty:
+	case *general.SourceProperty:
 		m["name"] = v.Source
 		m["confidence"] = v.Confidence
-	case *property.VulnProperty:
+	case *platform.VulnProperty:
 		m["vuln_id"] = v.ID
 		m["desc"] = v.Description
 		m["category"] = v.Category
@@ -102,11 +110,13 @@ func queryNodeByPropertyKeyValue(varname, label string, prop oam.Property) (stri
 
 	var node string
 	switch v := prop.(type) {
-	case *property.SimpleProperty:
+	case *dns.DNSRecordProperty:
+		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %d})", varname, label, "property_name", v.PropertyName, "data", v.Data)
+	case *general.SimpleProperty:
 		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: '%s'})", varname, label, "property_name", v.PropertyName, "property_value", v.PropertyValue)
-	case *property.SourceProperty:
+	case *general.SourceProperty:
 		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %d})", varname, label, "name", v.Source, "confidence", v.Confidence)
-	case *property.VulnProperty:
+	case *platform.VulnProperty:
 		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: '%s'})", varname, label, "vuln_id", v.ID, "desc", v.Description)
 	}
 	if node == "" {

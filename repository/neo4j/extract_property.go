@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,7 +9,9 @@ import (
 
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/platform"
 )
 
 func nodeToProperty(node neo4jdb.Node, ptype oam.PropertyType) (oam.Property, error) {
@@ -17,6 +19,8 @@ func nodeToProperty(node neo4jdb.Node, ptype oam.PropertyType) (oam.Property, er
 	var prop oam.Property
 
 	switch ptype {
+	case oam.DNSRecordProperty:
+		prop, err = nodeToDNSRecordProperty(node)
 	case oam.SimpleProperty:
 		prop, err = nodeToSimpleProperty(node)
 	case oam.SourceProperty:
@@ -34,7 +38,47 @@ func nodeToProperty(node neo4jdb.Node, ptype oam.PropertyType) (oam.Property, er
 	return prop, nil
 }
 
-func nodeToSimpleProperty(node neo4jdb.Node) (*property.SimpleProperty, error) {
+func nodeToDNSRecordProperty(node neo4jdb.Node) (*dns.DNSRecordProperty, error) {
+	name, err := neo4jdb.GetProperty[string](node, "property_name")
+	if err != nil {
+		return nil, err
+	}
+
+	num, err := neo4jdb.GetProperty[int64](node, "header_rrtype")
+	if err != nil {
+		return nil, err
+	}
+	rrtype := int(num)
+
+	num, err = neo4jdb.GetProperty[int64](node, "header_class")
+	if err != nil {
+		return nil, err
+	}
+	class := int(num)
+
+	num, err = neo4jdb.GetProperty[int64](node, "header_ttl")
+	if err != nil {
+		return nil, err
+	}
+	ttl := int(num)
+
+	data, err := neo4jdb.GetProperty[string](node, "data")
+	if err != nil {
+		return nil, err
+	}
+
+	return &dns.DNSRecordProperty{
+		PropertyName: name,
+		Header: dns.RRHeader{
+			RRType: rrtype,
+			Class:  class,
+			TTL:    ttl,
+		},
+		Data: data,
+	}, nil
+}
+
+func nodeToSimpleProperty(node neo4jdb.Node) (*general.SimpleProperty, error) {
 	name, err := neo4jdb.GetProperty[string](node, "property_name")
 	if err != nil {
 		return nil, err
@@ -45,13 +89,13 @@ func nodeToSimpleProperty(node neo4jdb.Node) (*property.SimpleProperty, error) {
 		return nil, err
 	}
 
-	return &property.SimpleProperty{
+	return &general.SimpleProperty{
 		PropertyName:  name,
 		PropertyValue: value,
 	}, nil
 }
 
-func nodeToSourceProperty(node neo4jdb.Node) (*property.SourceProperty, error) {
+func nodeToSourceProperty(node neo4jdb.Node) (*general.SourceProperty, error) {
 	name, err := neo4jdb.GetProperty[string](node, "name")
 	if err != nil {
 		return nil, err
@@ -63,13 +107,13 @@ func nodeToSourceProperty(node neo4jdb.Node) (*property.SourceProperty, error) {
 	}
 	conf := int(num)
 
-	return &property.SourceProperty{
+	return &general.SourceProperty{
 		Source:     name,
 		Confidence: conf,
 	}, nil
 }
 
-func nodeToVulnProperty(node neo4jdb.Node) (*property.VulnProperty, error) {
+func nodeToVulnProperty(node neo4jdb.Node) (*platform.VulnProperty, error) {
 	vid, err := neo4jdb.GetProperty[string](node, "vuln_id")
 	if err != nil {
 		return nil, err
@@ -100,7 +144,7 @@ func nodeToVulnProperty(node neo4jdb.Node) (*property.VulnProperty, error) {
 		return nil, err
 	}
 
-	return &property.VulnProperty{
+	return &platform.VulnProperty{
 		ID:          vid,
 		Description: desc,
 		Source:      source,

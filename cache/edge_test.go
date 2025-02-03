@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,8 +12,8 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/relation"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -80,7 +80,7 @@ func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
 	entity1, err := cache.CreateEntity(&types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "owasp.org"},
+		Asset:     &dns.FQDN{Name: "owasp.org"},
 	})
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
 	entity2, err := cache.CreateEntity(&types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "www.owasp.org"},
+		Asset:     &dns.FQDN{Name: "www.owasp.org"},
 	})
 	if err != nil {
 		return nil, err
@@ -98,9 +98,9 @@ func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
 	edge, err := cache.CreateEdge(&types.Edge{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Relation: &relation.BasicDNSRelation{
+		Relation: &dns.BasicDNSRelation{
 			Name: "dns_record",
-			Header: relation.RRHeader{
+			Header: dns.RRHeader{
 				RRType: 5,
 				Class:  1,
 				TTL:    3600,
@@ -164,7 +164,7 @@ func TestIncomingEdges(t *testing.T) {
 	from, err := c.CreateEntity(&types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "caffix.com"},
+		Asset:     &dns.FQDN{Name: "caffix.com"},
 	})
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
@@ -181,13 +181,13 @@ func TestIncomingEdges(t *testing.T) {
 		e, err := c.db.CreateEntity(&types.Entity{
 			CreatedAt: ctime,
 			LastSeen:  ctime,
-			Asset:     &domain.FQDN{Name: name},
+			Asset:     &dns.FQDN{Name: name},
 		})
 		assert.NoError(t, err)
 		_, err = c.db.CreateEdge(&types.Edge{
 			CreatedAt:  ctime,
 			LastSeen:   ctime,
-			Relation:   relation.SimpleRelation{Name: "node"},
+			Relation:   general.SimpleRelation{Name: "node"},
 			FromEntity: dbfrom[0],
 			ToEntity:   e,
 		})
@@ -201,10 +201,10 @@ func TestIncomingEdges(t *testing.T) {
 	var entities2 []*types.Entity
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		e, err := c.CreateAsset(&domain.FQDN{Name: name})
+		e, err := c.CreateAsset(&dns.FQDN{Name: name})
 		assert.NoError(t, err)
 		_, err = c.CreateEdge(&types.Edge{
-			Relation:   relation.SimpleRelation{Name: "node"},
+			Relation:   general.SimpleRelation{Name: "node"},
 			FromEntity: from,
 			ToEntity:   e,
 		})
@@ -287,7 +287,7 @@ func TestOutgoingEdges(t *testing.T) {
 	from, err := c.CreateEntity(&types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
-		Asset:     &domain.FQDN{Name: "caffix.com"},
+		Asset:     &dns.FQDN{Name: "caffix.com"},
 	})
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
@@ -303,13 +303,13 @@ func TestOutgoingEdges(t *testing.T) {
 		e, err := c.db.CreateEntity(&types.Entity{
 			CreatedAt: ctime,
 			LastSeen:  ctime,
-			Asset:     &domain.FQDN{Name: name},
+			Asset:     &dns.FQDN{Name: name},
 		})
 		assert.NoError(t, err)
 		_, err = c.db.CreateEdge(&types.Edge{
 			CreatedAt:  ctime,
 			LastSeen:   ctime,
-			Relation:   relation.SimpleRelation{Name: "node"},
+			Relation:   general.SimpleRelation{Name: "node"},
 			FromEntity: dbfrom[0],
 			ToEntity:   e,
 		})
@@ -321,10 +321,10 @@ func TestOutgoingEdges(t *testing.T) {
 	// add some new stuff to the database
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		e, err := c.CreateAsset(&domain.FQDN{Name: name})
+		e, err := c.CreateAsset(&dns.FQDN{Name: name})
 		assert.NoError(t, err)
 		_, err = c.CreateEdge(&types.Edge{
-			Relation:   relation.SimpleRelation{Name: "node"},
+			Relation:   general.SimpleRelation{Name: "node"},
 			FromEntity: from,
 			ToEntity:   e,
 		})

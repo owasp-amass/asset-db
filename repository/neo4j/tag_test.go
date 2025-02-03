@@ -1,6 +1,6 @@
 //go:build integration
 
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,18 +12,17 @@ import (
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestEntityTag(t *testing.T) {
-	entity, err := store.CreateAsset(&domain.FQDN{Name: "utica.edu"})
+	entity, err := store.CreateAsset(&dns.FQDN{Name: "utica.edu"})
 	assert.NoError(t, err)
 
 	now := time.Now().Truncate(time.Second)
-	prop := &property.SimpleProperty{
+	prop := &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foo",
 	}
@@ -86,16 +85,16 @@ func TestEntityTag(t *testing.T) {
 }
 
 func TestEdgeTag(t *testing.T) {
-	e1, err := store.CreateAsset(&domain.FQDN{Name: "owasp.org"})
+	e1, err := store.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
-	e2, err := store.CreateAsset(&domain.FQDN{Name: "www.owasp.org"})
+	e2, err := store.CreateAsset(&dns.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err)
 
 	edge, err := store.CreateEdge(&types.Edge{
-		Relation: &relation.BasicDNSRelation{
+		Relation: &dns.BasicDNSRelation{
 			Name:   "dns_record",
-			Header: relation.RRHeader{RRType: 5},
+			Header: dns.RRHeader{RRType: 5},
 		},
 		FromEntity: e1,
 		ToEntity:   e2,
@@ -103,7 +102,7 @@ func TestEdgeTag(t *testing.T) {
 	assert.NoError(t, err)
 
 	now := time.Now().Truncate(time.Second)
-	prop := &property.SimpleProperty{
+	prop := &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foo",
 	}

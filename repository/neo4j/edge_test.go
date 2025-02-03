@@ -1,6 +1,6 @@
 //go:build integration
 
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,35 +11,35 @@ import (
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/relation"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateEdge(t *testing.T) {
 	from, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "create1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	to, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "create2.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	_, err = store.CreateEdge(&types.Edge{
-		Relation:   &relation.SimpleRelation{Name: "invalid_label"},
+		Relation:   &general.SimpleRelation{Name: "invalid_label"},
 		FromEntity: from,
 		ToEntity:   to,
 	})
 	assert.Error(t, err)
 
 	first, err := store.CreateEdge(&types.Edge{
-		Relation:   &relation.SimpleRelation{Name: "node"},
+		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
 	})
@@ -47,7 +47,7 @@ func TestCreateEdge(t *testing.T) {
 
 	time.Sleep(250 * time.Millisecond)
 	second, err := store.CreateEdge(&types.Edge{
-		Relation:   &relation.SimpleRelation{Name: "node"},
+		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
 	})
@@ -63,21 +63,21 @@ func TestFindEdgeById(t *testing.T) {
 	assert.Error(t, err)
 
 	from, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "find1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	to, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "find2.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	first, err := store.CreateEdge(&types.Edge{
-		Relation:   &relation.SimpleRelation{Name: "node"},
+		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
 	})
@@ -92,14 +92,14 @@ func TestFindEdgeById(t *testing.T) {
 
 func TestIncomingEdges(t *testing.T) {
 	from, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "incoming1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	to, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "incoming2.edge",
 		},
 	})
@@ -112,9 +112,9 @@ func TestIncomingEdges(t *testing.T) {
 		_, err := store.CreateEdge(&types.Edge{
 			CreatedAt: created,
 			LastSeen:  created,
-			Relation: &relation.BasicDNSRelation{
+			Relation: &dns.BasicDNSRelation{
 				Name: "dns_record",
-				Header: relation.RRHeader{
+				Header: dns.RRHeader{
 					RRType: 5,
 					Class:  0,
 					TTL:    i,
@@ -144,14 +144,14 @@ func TestIncomingEdges(t *testing.T) {
 
 func TestOutgoingEdges(t *testing.T) {
 	from, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "outgoing1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	to, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "outgoing2.edge",
 		},
 	})
@@ -164,9 +164,9 @@ func TestOutgoingEdges(t *testing.T) {
 		_, err := store.CreateEdge(&types.Edge{
 			CreatedAt: created,
 			LastSeen:  created,
-			Relation: &relation.BasicDNSRelation{
+			Relation: &dns.BasicDNSRelation{
 				Name: "dns_record",
-				Header: relation.RRHeader{
+				Header: dns.RRHeader{
 					RRType: 5,
 					Class:  0,
 					TTL:    i,
@@ -196,21 +196,21 @@ func TestOutgoingEdges(t *testing.T) {
 
 func TestDeleteEdge(t *testing.T) {
 	from, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "delete1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	to, err := store.CreateEntity(&types.Entity{
-		Asset: &domain.FQDN{
+		Asset: &dns.FQDN{
 			Name: "delete2.edge",
 		},
 	})
 	assert.NoError(t, err)
 
 	edge, err := store.CreateEdge(&types.Edge{
-		Relation:   &relation.SimpleRelation{Name: "node"},
+		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
 	})

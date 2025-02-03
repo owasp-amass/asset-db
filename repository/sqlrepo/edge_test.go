@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,15 +10,14 @@ import (
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUnfilteredRelations(t *testing.T) {
-	source := domain.FQDN{Name: "owasp.com"}
-	dest1 := domain.FQDN{Name: "www.example.owasp.org"}
+	source := dns.FQDN{Name: "owasp.com"}
+	dest1 := dns.FQDN{Name: "www.example.owasp.org"}
 
 	sourceEntity, err := store.CreateAsset(source)
 	if err != nil {
@@ -31,9 +30,9 @@ func TestUnfilteredRelations(t *testing.T) {
 	}
 
 	edge1 := &types.Edge{
-		Relation: relation.BasicDNSRelation{
+		Relation: dns.BasicDNSRelation{
 			Name: "dns_record",
-			Header: relation.RRHeader{
+			Header: dns.RRHeader{
 				RRType: 5,
 				Class:  1,
 				TTL:    86400,
@@ -52,9 +51,9 @@ func TestUnfilteredRelations(t *testing.T) {
 	}
 
 	edge2 := &types.Edge{
-		Relation: relation.BasicDNSRelation{
+		Relation: dns.BasicDNSRelation{
 			Name: "dns_record",
-			Header: relation.RRHeader{
+			Header: dns.RRHeader{
 				RRType: 1,
 				Class:  1,
 				TTL:    86400,
