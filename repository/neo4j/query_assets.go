@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,7 +14,6 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/file"
 	"github.com/owasp-amass/open-asset-model/financial"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -23,7 +22,6 @@ import (
 	"github.com/owasp-amass/open-asset-model/people"
 	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/service"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -209,6 +207,8 @@ func queryNodeByAssetKey(varname string, asset oam.Asset) (string, error) {
 
 	var node string
 	switch v := asset.(type) {
+	case *account.Account:
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Account, "unique_id", v.ID)
 	case *oamreg.AutnumRecord:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.AutnumRecord, "handle", v.Handle)
 	case *oamnet.AutonomousSystem:
@@ -217,12 +217,14 @@ func queryNodeByAssetKey(varname string, asset oam.Asset) (string, error) {
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.ContactRecord, "discovered_at", v.DiscoveredAt)
 	case *oamreg.DomainRecord:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.DomainRecord, "domain", v.Domain)
-	case *contact.EmailAddress:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.EmailAddress, "address", v.Address)
 	case *file.File:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.File, "url", v.URL)
-	case *domain.FQDN:
+	case *dns.FQDN:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.FQDN, "name", v.Name)
+	case *financial.FundsTransfer:
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.FundsTransfer, "unique_id", v.ID)
+	case *general.Identifier:
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Identifier, "id", v.ID)
 	case *oamnet.IPAddress:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.IPAddress, "address", v.Address.String())
 	case *oamreg.IPNetRecord:
@@ -232,13 +234,17 @@ func queryNodeByAssetKey(varname string, asset oam.Asset) (string, error) {
 	case *oamnet.Netblock:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Netblock, "cidr", v.CIDR.String())
 	case *org.Organization:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Organization, "name", v.Name)
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Organization, "unique_id", v.ID)
 	case *people.Person:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Person, "full_name", v.FullName)
 	case *contact.Phone:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Phone, "raw", v.Raw)
-	case *service.Service:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Service, "identifier", v.Identifier)
+	case *platform.Product:
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Product, "unique_id", v.ID)
+	case *platform.ProductRelease:
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.ProductRelease, "name", v.Name)
+	case *platform.Service:
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Service, "unique_id", v.ID)
 	case *oamcert.TLSCertificate:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.TLSCertificate, "serial_number", v.SerialNumber)
 	case *url.URL:

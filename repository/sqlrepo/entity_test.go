@@ -1,3 +1,5 @@
+//go:build integration
+
 // Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
@@ -212,7 +214,7 @@ func TestRepository(t *testing.T) {
 			description:      "create an FQDN and link it with another FQDN",
 			sourceAsset:      &dns.FQDN{Name: "www.example.com"},
 			destinationAsset: &dns.FQDN{Name: "www.example.subdomain.com"},
-			relation:         general.BasicDNSRelation{Name: "dns_record"},
+			relation:         dns.BasicDNSRelation{Name: "dns_record"},
 		},
 		{
 			description:      "create an Autonomous System and link it with an RIR organization",

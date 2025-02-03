@@ -111,7 +111,7 @@ func queryNodeByPropertyKeyValue(varname, label string, prop oam.Property) (stri
 	var node string
 	switch v := prop.(type) {
 	case *dns.DNSRecordProperty:
-		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %d})", varname, label, "property_name", v.PropertyName, "data", v.Data)
+		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %s})", varname, label, "property_name", v.PropertyName, "data", v.Data)
 	case *general.SimpleProperty:
 		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: '%s'})", varname, label, "property_name", v.PropertyName, "property_value", v.PropertyValue)
 	case *general.SourceProperty:

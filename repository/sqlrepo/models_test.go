@@ -60,7 +60,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse file",
-				asset:       &file.File{Path: "/tmp/test.txt"},
+				asset:       &file.File{URL: "http://localhost/test.txt"},
 			},
 			{
 				description: "parse fqdn",
@@ -108,11 +108,11 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse product release",
-				asset:       &platform.ProductRelease{Version: "1.0.0"},
+				asset:       &platform.ProductRelease{Name: "Example Product 1.0.0"},
 			},
 			{
 				description: "parse service",
-				asset:       &platform.Service{Identifier: "12345"},
+				asset:       &platform.Service{ID: "12345"},
 			},
 			{
 				description: "parse tls certificate",
@@ -179,8 +179,8 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for file",
-				asset:         &file.File{Path: "/tmp/test.txt"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("/tmp/test.txt", "path"),
+				asset:         &file.File{URL: "http://localhost/test.txt"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("http://localhost/test.txt", "url"),
 			},
 			{
 				description:   "json query for fqdn",
@@ -189,8 +189,8 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for funds transfer",
-				asset:         &financial.FundsTransfer{Amount: 100.00},
-				expectedQuery: datatypes.JSONQuery("content").Equals(100.00, "amount"),
+				asset:         &financial.FundsTransfer{ID: "222333444"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("222333444", "unique_id"),
 			},
 			{
 				description:   "json query for identifier",
@@ -219,8 +219,8 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for organization",
-				asset:         &org.Organization{Name: "Example, Inc."},
-				expectedQuery: datatypes.JSONQuery("content").Equals("Example, Inc.", "name"),
+				asset:         &org.Organization{ID: "222333444"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("222333444", "unique_id"),
 			},
 			{
 				description:   "json query for person",
@@ -234,18 +234,18 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for product",
-				asset:         &platform.Product{Name: "Example Product"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("Example Product", "name"),
+				asset:         &platform.Product{ID: "Example Product"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("Example Product", "unique_id"),
 			},
 			{
 				description:   "json query for product release",
-				asset:         &platform.ProductRelease{Version: "1.0.0"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("1.0.0", "version"),
+				asset:         &platform.ProductRelease{Name: "Example Product 1.0.0"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("Example Product 1.0.0", "name"),
 			},
 			{
 				description:   "json query for service",
-				asset:         &platform.Service{Identifier: "12345"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("12345", "identifier"),
+				asset:         &platform.Service{ID: "12345"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("12345", "unique_id"),
 			},
 			{
 				description:   "json query for tls certificate",

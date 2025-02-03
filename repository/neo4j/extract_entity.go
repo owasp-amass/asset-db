@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,15 +11,18 @@ import (
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/account"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/file"
+	"github.com/owasp-amass/open-asset-model/financial"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/service"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -49,6 +52,8 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 
 	var asset oam.Asset
 	switch atype {
+	case oam.Account:
+		asset, err = nodeToAccount(node)
 	case oam.AutnumRecord:
 		asset, err = nodeToAutnumRecord(node)
 	case oam.AutonomousSystem:
@@ -57,12 +62,14 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 		asset, err = nodeToContactRecord(node)
 	case oam.DomainRecord:
 		asset, err = nodeToDomainRecord(node)
-	case oam.EmailAddress:
-		asset, err = nodeToEmailAddress(node)
 	case oam.File:
 		asset, err = nodeToFile(node)
 	case oam.FQDN:
 		asset, err = nodeToFQDN(node)
+	case oam.FundsTransfer:
+		asset, err = nodeToFundsTransfer(node)
+	case oam.Identifier:
+		asset, err = nodeToIdentifier(node)
 	case oam.IPAddress:
 		asset, err = nodeToIPAddress(node)
 	case oam.IPNetRecord:
@@ -96,6 +103,47 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 		CreatedAt: created,
 		LastSeen:  updated,
 		Asset:     asset,
+	}, nil
+}
+
+func nodeToAccount(node neo4jdb.Node) (*account.Account, error) {
+	id, err := neo4jdb.GetProperty[string](node, "unique_id")
+	if err != nil {
+		return nil, err
+	}
+
+	atype, err := neo4jdb.GetProperty[string](node, "account_type")
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := neo4jdb.GetProperty[string](node, "username")
+	if err != nil {
+		return nil, err
+	}
+
+	number, err := neo4jdb.GetProperty[string](node, "account_number")
+	if err != nil {
+		return nil, err
+	}
+
+	balance, err := neo4jdb.GetProperty[float64](node, "balance")
+	if err != nil {
+		return nil, err
+	}
+
+	active, err := neo4jdb.GetProperty[bool](node, "active")
+	if err != nil {
+		return nil, err
+	}
+
+	return &account.Account{
+		ID:       id,
+		Type:     atype,
+		Username: user,
+		Number:   number,
+		Balance:  balance,
+		Active:   active,
 	}, nil
 }
 
@@ -259,29 +307,6 @@ func nodeToDomainRecord(node neo4jdb.Node) (*oamreg.DomainRecord, error) {
 	}, nil
 }
 
-func nodeToEmailAddress(node neo4jdb.Node) (*contact.EmailAddress, error) {
-	address, err := neo4jdb.GetProperty[string](node, "address")
-	if err != nil {
-		return nil, err
-	}
-
-	username, err := neo4jdb.GetProperty[string](node, "username")
-	if err != nil {
-		return nil, err
-	}
-
-	domain, err := neo4jdb.GetProperty[string](node, "domain")
-	if err != nil {
-		return nil, err
-	}
-
-	return &contact.EmailAddress{
-		Address:  address,
-		Username: username,
-		Domain:   domain,
-	}, nil
-}
-
 func nodeToFile(node neo4jdb.Node) (*file.File, error) {
 	url, err := neo4jdb.GetProperty[string](node, "url")
 	if err != nil {
@@ -305,13 +330,107 @@ func nodeToFile(node neo4jdb.Node) (*file.File, error) {
 	}, nil
 }
 
-func nodeToFQDN(node neo4jdb.Node) (*domain.FQDN, error) {
+func nodeToFQDN(node neo4jdb.Node) (*dns.FQDN, error) {
 	name, err := neo4jdb.GetProperty[string](node, "name")
 	if err != nil {
 		return nil, err
 	}
 
-	return &domain.FQDN{Name: name}, nil
+	return &dns.FQDN{Name: name}, nil
+}
+
+func nodeToFundsTransfer(node neo4jdb.Node) (*financial.FundsTransfer, error) {
+	id, err := neo4jdb.GetProperty[string](node, "unique_id")
+	if err != nil {
+		return nil, err
+	}
+
+	amount, err := neo4jdb.GetProperty[float64](node, "amount")
+	if err != nil {
+		return nil, err
+	}
+
+	ref, err := neo4jdb.GetProperty[string](node, "reference_number")
+	if err != nil {
+		return nil, err
+	}
+
+	currency, err := neo4jdb.GetProperty[string](node, "currency")
+	if err != nil {
+		return nil, err
+	}
+
+	method, err := neo4jdb.GetProperty[string](node, "transfer_method")
+	if err != nil {
+		return nil, err
+	}
+
+	date, err := neo4jdb.GetProperty[string](node, "exchange_date")
+	if err != nil {
+		return nil, err
+	}
+
+	rate, err := neo4jdb.GetProperty[float64](node, "exchange_rate")
+	if err != nil {
+		return nil, err
+	}
+
+	return &financial.FundsTransfer{
+		ID:              id,
+		Amount:          amount,
+		ReferenceNumber: ref,
+		Currency:        currency,
+		Method:          method,
+		ExchangeDate:    date,
+		ExchangeRate:    rate,
+	}, nil
+}
+
+func nodeToIdentifier(node neo4jdb.Node) (*general.Identifier, error) {
+	id, err := neo4jdb.GetProperty[string](node, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	idtype, err := neo4jdb.GetProperty[string](node, "id_type")
+	if err != nil {
+		return nil, err
+	}
+
+	category, err := neo4jdb.GetProperty[string](node, "category")
+	if err != nil {
+		return nil, err
+	}
+
+	cd, err := neo4jdb.GetProperty[string](node, "creation_date")
+	if err != nil {
+		return nil, err
+	}
+
+	ud, err := neo4jdb.GetProperty[string](node, "update_date")
+	if err != nil {
+		return nil, err
+	}
+
+	ed, err := neo4jdb.GetProperty[string](node, "expiration_date")
+	if err != nil {
+		return nil, err
+	}
+
+	status, err := neo4jdb.GetProperty[string](node, "status")
+	if err != nil {
+		return nil, err
+	}
+
+	return &general.Identifier{
+		ID:             id,
+		Type:           idtype,
+		Category:       category,
+		CreationDate:   cd,
+		UpdatedDate:    ud,
+		ExpirationDate: ed,
+		Status:         status,
+	}, nil
 }
 
 func nodeToIPAddress(node neo4jdb.Node) (*oamnet.IPAddress, error) {
@@ -626,27 +745,33 @@ func nodeToPhone(node neo4jdb.Node) (*contact.Phone, error) {
 	}, nil
 }
 
-func nodeToService(node neo4jdb.Node) (*service.Service, error) {
-	ident, err := neo4jdb.GetProperty[string](node, "identifier")
+func nodeToService(node neo4jdb.Node) (*platform.Service, error) {
+	ident, err := neo4jdb.GetProperty[string](node, "unique_id")
 	if err != nil {
 		return nil, err
 	}
 
-	banner, err := neo4jdb.GetProperty[string](node, "banner")
+	stype, err := neo4jdb.GetProperty[string](node, "service_type")
 	if err != nil {
 		return nil, err
 	}
 
-	l, err := neo4jdb.GetProperty[int64](node, "banner_length")
+	output, err := neo4jdb.GetProperty[string](node, "output")
 	if err != nil {
 		return nil, err
 	}
-	blen := int(l)
 
-	return &service.Service{
-		Identifier: ident,
-		Banner:     banner,
-		BannerLen:  blen,
+	l, err := neo4jdb.GetProperty[int64](node, "output_length")
+	if err != nil {
+		return nil, err
+	}
+	olen := int(l)
+
+	return &platform.Service{
+		ID:        ident,
+		Type:      stype,
+		Output:    output,
+		OutputLen: olen,
 	}, nil
 }
 
