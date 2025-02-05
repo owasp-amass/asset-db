@@ -214,7 +214,7 @@ func (e *Entity) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	case *financial.FundsTransfer:
 		return jsonQuery.Equals(v.ID, "unique_id"), nil
 	case *general.Identifier:
-		return jsonQuery.Equals(v.ID, "id"), nil
+		return jsonQuery.Equals(v.UniqueID, "unique_id"), nil
 	case *network.IPAddress:
 		return jsonQuery.Equals(v.Address.String(), "address"), nil
 	case *oamreg.IPNetRecord:
@@ -226,7 +226,7 @@ func (e *Entity) JSONQuery() (*datatypes.JSONQueryExpression, error) {
 	case *org.Organization:
 		return jsonQuery.Equals(v.ID, "unique_id"), nil
 	case *people.Person:
-		return jsonQuery.Equals(v.FullName, "full_name"), nil
+		return jsonQuery.Equals(v.ID, "unique_id"), nil
 	case *contact.Phone:
 		return jsonQuery.Equals(v.Raw, "raw"), nil
 	case *platform.Product:

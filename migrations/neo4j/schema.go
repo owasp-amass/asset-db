@@ -93,6 +93,11 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_contact_record_content_discovered_at IF NOT EXISTS FOR (n:ContactRecord) REQUIRE n.discovered_at IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_domainrec_content_domain IF NOT EXISTS FOR (n:DomainRecord) REQUIRE n.domain IS UNIQUE")
 	if err != nil {
 		return err
@@ -113,7 +118,7 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
-	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_identifier_content_id IF NOT EXISTS FOR (n:Identifier) REQUIRE n.id IS UNIQUE")
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_identifier_content_unique_id IF NOT EXISTS FOR (n:Identifier) REQUIRE n.unique_id IS UNIQUE")
 	if err != nil {
 		return err
 	}
@@ -123,7 +128,7 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
-	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_ipnetrec_content_cidr IF NOT EXISTS FOR (n:IPNetRecord) REQUIRE n.cidr IS UNIQUE")
+	err = executeQuery(driver, dbname, "CREATE INDEX ipnetrec_range_index_cidr IF NOT EXISTS FOR (n:IPNetRecord) ON (n.cidr)")
 	if err != nil {
 		return err
 	}
@@ -153,12 +158,22 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
-	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_org_content_legal_name IF NOT EXISTS FOR (n:Organization) REQUIRE n.legal_name IS UNIQUE")
+	err = executeQuery(driver, dbname, "CREATE INDEX org_range_index_legal_name IF NOT EXISTS FOR (n:Organization) ON (n.legal_name)")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_person_content_id IF NOT EXISTS FOR (n:Person) REQUIRE n.unique_id IS UNIQUE")
 	if err != nil {
 		return err
 	}
 
 	err = executeQuery(driver, dbname, "CREATE INDEX person_range_index_full_name IF NOT EXISTS FOR (n:Person) ON (n.full_name)")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_phone_content_e164 IF NOT EXISTS FOR (n:Phone) REQUIRE n.e164 IS UNIQUE")
 	if err != nil {
 		return err
 	}
@@ -169,6 +184,11 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 	}
 
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_product_content_id IF NOT EXISTS FOR (n:Product) REQUIRE n.unique_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE INDEX product_range_index_name IF NOT EXISTS FOR (n:Product) ON (n.product_name)")
 	if err != nil {
 		return err
 	}

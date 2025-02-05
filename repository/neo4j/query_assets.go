@@ -89,7 +89,8 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["exchange_date"] = v.ExchangeDate
 		m["exchange_rate"] = v.ExchangeRate
 	case *general.Identifier:
-		m["id"] = v.ID
+		m["unique_id"] = v.UniqueID
+		m["entity_id"] = v.EntityID
 		m["id_type"] = v.Type
 		m["category"] = v.Category
 		m["creation_date"] = v.CreationDate
@@ -139,6 +140,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["non_profit"] = v.NonProfit
 		m["num_of_employees"] = int64(v.NumOfEmployees)
 	case *people.Person:
+		m["unique_id"] = v.ID
 		m["full_name"] = v.FullName
 		m["first_name"] = v.FirstName
 		m["middle_name"] = v.MiddleName
@@ -224,7 +226,7 @@ func queryNodeByAssetKey(varname string, asset oam.Asset) (string, error) {
 	case *financial.FundsTransfer:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.FundsTransfer, "unique_id", v.ID)
 	case *general.Identifier:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Identifier, "id", v.ID)
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Identifier, "unique_id", v.UniqueID)
 	case *oamnet.IPAddress:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.IPAddress, "address", v.Address.String())
 	case *oamreg.IPNetRecord:
@@ -236,7 +238,7 @@ func queryNodeByAssetKey(varname string, asset oam.Asset) (string, error) {
 	case *org.Organization:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Organization, "unique_id", v.ID)
 	case *people.Person:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Person, "full_name", v.FullName)
+		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Person, "unique_id", v.ID)
 	case *contact.Phone:
 		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Phone, "raw", v.Raw)
 	case *platform.Product:

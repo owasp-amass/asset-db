@@ -391,7 +391,12 @@ func nodeToFundsTransfer(node neo4jdb.Node) (*financial.FundsTransfer, error) {
 }
 
 func nodeToIdentifier(node neo4jdb.Node) (*general.Identifier, error) {
-	id, err := neo4jdb.GetProperty[string](node, "id")
+	uid, err := neo4jdb.GetProperty[string](node, "unique_id")
+	if err != nil {
+		return nil, err
+	}
+
+	eid, err := neo4jdb.GetProperty[string](node, "entity_id")
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +432,8 @@ func nodeToIdentifier(node neo4jdb.Node) (*general.Identifier, error) {
 	}
 
 	return &general.Identifier{
-		ID:             id,
+		UniqueID:       uid,
+		EntityID:       eid,
 		Type:           idtype,
 		Category:       category,
 		CreationDate:   cd,
@@ -716,6 +722,11 @@ func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
 }
 
 func nodeToPerson(node neo4jdb.Node) (*people.Person, error) {
+	id, err := neo4jdb.GetProperty[string](node, "unique_id")
+	if err != nil {
+		return nil, err
+	}
+
 	full, err := neo4jdb.GetProperty[string](node, "full_name")
 	if err != nil {
 		return nil, err
@@ -747,6 +758,7 @@ func nodeToPerson(node neo4jdb.Node) (*people.Person, error) {
 	}
 
 	return &people.Person{
+		ID:         id,
 		FullName:   full,
 		FirstName:  first,
 		MiddleName: middle,

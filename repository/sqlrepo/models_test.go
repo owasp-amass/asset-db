@@ -68,11 +68,11 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse funds transfer",
-				asset:       &financial.FundsTransfer{Amount: 100.00},
+				asset:       &financial.FundsTransfer{ID: "222333444", Amount: 100.00},
 			},
 			{
 				description: "parse identifier",
-				asset:       &general.Identifier{ID: "12345"},
+				asset:       &general.Identifier{UniqueID: "222333444", EntityID: "12345", Type: general.BankIDCode},
 			},
 			{
 				description: "parse ip address",
@@ -92,11 +92,11 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse organization",
-				asset:       &org.Organization{Name: "Example, Inc."},
+				asset:       &org.Organization{ID: "222333444", Name: "Example, Inc."},
 			},
 			{
 				description: "parse person",
-				asset:       &people.Person{FullName: "John Doe"},
+				asset:       &people.Person{ID: "222333444", FullName: "John Doe"},
 			},
 			{
 				description: "parse phone",
@@ -104,7 +104,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse product",
-				asset:       &platform.Product{Name: "Example Product"},
+				asset:       &platform.Product{ID: "222333444", Name: "Example Product"},
 			},
 			{
 				description: "parse product release",
@@ -194,8 +194,8 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for identifier",
-				asset:         &general.Identifier{ID: "12345"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("12345", "id"),
+				asset:         &general.Identifier{UniqueID: "222333444", EntityID: "12345", Type: general.BankIDCode},
+				expectedQuery: datatypes.JSONQuery("content").Equals("222333444", "unique_id"),
 			},
 			{
 				description:   "json query for ip address",
@@ -219,13 +219,13 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for organization",
-				asset:         &org.Organization{ID: "222333444"},
+				asset:         &org.Organization{ID: "222333444", Name: "Example, Inc."},
 				expectedQuery: datatypes.JSONQuery("content").Equals("222333444", "unique_id"),
 			},
 			{
 				description:   "json query for person",
-				asset:         &people.Person{FullName: "John Doe"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("John Doe", "full_name"),
+				asset:         &people.Person{ID: "222333444", FullName: "John Doe"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("222333444", "unique_id"),
 			},
 			{
 				description:   "json query for phone",
@@ -234,8 +234,8 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for product",
-				asset:         &platform.Product{ID: "Example Product"},
-				expectedQuery: datatypes.JSONQuery("content").Equals("Example Product", "unique_id"),
+				asset:         &platform.Product{ID: "222333444", Name: "Example Product"},
+				expectedQuery: datatypes.JSONQuery("content").Equals("222333444", "unique_id"),
 			},
 			{
 				description:   "json query for product release",
