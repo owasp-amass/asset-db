@@ -7,7 +7,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.6.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.27.0
-	github.com/owasp-amass/open-asset-model v0.13.7
+	github.com/owasp-amass/open-asset-model v0.13.8
 	github.com/rubenv/sql-migrate v1.7.1
 	github.com/stretchr/testify v1.9.0
 	gorm.io/datatypes v1.2.5
