@@ -5,6 +5,7 @@
 package neo4j
 
 import (
+	"encoding/json"
 	"errors"
 	"net/netip"
 
@@ -903,11 +904,24 @@ func nodeToService(node neo4jdb.Node) (*platform.Service, error) {
 	}
 	olen := int(l)
 
+	attrs, err := neo4jdb.GetProperty[string](node, "attributes")
+	if err != nil {
+		return nil, err
+	}
+
+	var m map[string][]string
+	if attrs != "" {
+		if err := json.Unmarshal([]byte(attrs), &m); err != nil {
+			return nil, err
+		}
+	}
+
 	return &platform.Service{
-		ID:        ident,
-		Type:      stype,
-		Output:    output,
-		OutputLen: olen,
+		ID:         ident,
+		Type:       stype,
+		Output:     output,
+		OutputLen:  olen,
+		Attributes: m,
 	}, nil
 }
 

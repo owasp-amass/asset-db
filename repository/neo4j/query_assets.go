@@ -5,6 +5,7 @@
 package neo4j
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -170,7 +171,14 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["service_type"] = v.Type
 		m["output"] = v.Output
 		m["output_length"] = int64(v.OutputLen)
-		m["attributes"] = v.Attributes
+		m["attributes"] = ""
+		if v.Attributes != nil {
+			attrs, err := json.Marshal(v.Attributes)
+			if err != nil {
+				return nil, err
+			}
+			m["attributes"] = string(attrs)
+		}
 	case *oamcert.TLSCertificate:
 		m["version"] = v.Version
 		m["serial_number"] = v.SerialNumber
