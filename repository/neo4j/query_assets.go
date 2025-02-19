@@ -92,7 +92,6 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["unique_id"] = v.UniqueID
 		m["entity_id"] = v.EntityID
 		m["id_type"] = v.Type
-		m["category"] = v.Category
 		m["creation_date"] = v.CreationDate
 		m["update_date"] = v.UpdatedDate
 		m["expiration_date"] = v.ExpirationDate
@@ -135,6 +134,8 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["name"] = v.Name
 		m["legal_name"] = v.LegalName
 		m["founding_date"] = v.FoundingDate
+		m["jurisdiction"] = v.Jurisdiction
+		m["registration_id"] = v.RegistrationID
 		m["industry"] = v.Industry
 		m["active"] = v.Active
 		m["non_profit"] = v.NonProfit

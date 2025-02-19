@@ -406,11 +406,6 @@ func nodeToIdentifier(node neo4jdb.Node) (*general.Identifier, error) {
 		return nil, err
 	}
 
-	category, err := neo4jdb.GetProperty[string](node, "category")
-	if err != nil {
-		return nil, err
-	}
-
 	cd, err := neo4jdb.GetProperty[string](node, "creation_date")
 	if err != nil {
 		return nil, err
@@ -435,7 +430,6 @@ func nodeToIdentifier(node neo4jdb.Node) (*general.Identifier, error) {
 		UniqueID:       uid,
 		EntityID:       eid,
 		Type:           idtype,
-		Category:       category,
 		CreationDate:   cd,
 		UpdatedDate:    ud,
 		ExpirationDate: ed,
@@ -630,6 +624,12 @@ func nodeToLocation(node neo4jdb.Node) (*contact.Location, error) {
 		return nil, err
 	}
 
+	num, err := neo4jdb.GetProperty[int64](node, "gln")
+	if err != nil {
+		return nil, err
+	}
+	gln := int(num)
+
 	return &contact.Location{
 		Address:        addr,
 		Building:       building,
@@ -642,6 +642,7 @@ func nodeToLocation(node neo4jdb.Node) (*contact.Location, error) {
 		Province:       province,
 		Country:        country,
 		PostalCode:     postal,
+		GLN:            gln,
 	}, nil
 }
 
@@ -688,6 +689,16 @@ func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
 		return nil, err
 	}
 
+	juris, err := neo4jdb.GetProperty[string](node, "jurisdiction")
+	if err != nil {
+		return nil, err
+	}
+
+	regid, err := neo4jdb.GetProperty[string](node, "registration_id")
+	if err != nil {
+		return nil, err
+	}
+
 	industry, err := neo4jdb.GetProperty[string](node, "industry")
 	if err != nil {
 		return nil, err
@@ -714,6 +725,8 @@ func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
 		Name:           name,
 		LegalName:      lname,
 		FoundingDate:   date,
+		Jurisdiction:   juris,
+		RegistrationID: regid,
 		Industry:       industry,
 		Active:         active,
 		NonProfit:      nonprofit,
