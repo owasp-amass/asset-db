@@ -18,7 +18,6 @@ import (
 
 // CreateEntity creates a new entity in the database.
 // It takes an Entity as input and persists it in the database.
-// The asset is serialized to JSON and stored in the Content field of the Entity struct.
 // Returns the created entity as a types.Entity or an error if the creation fails.
 func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, error) {
 	var entity *types.Entity

@@ -67,6 +67,7 @@ func (c *Cache) FindEntityTagById(id string) (*types.EntityTag, error) {
 }
 
 // FindEntityTagsByContent implements the Repository interface.
+// TODO: Consider adding a check for the last time the cache was updated
 func (c *Cache) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
 	if since.IsZero() || since.Before(c.start) {
 		var dbentities []*types.Entity
@@ -106,12 +107,8 @@ func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...st
 	var dbquery bool
 
 	if since.IsZero() || since.Before(c.start) {
-		if tag, last, found := c.checkCacheEntityTag(entity, "cache_get_entity_tags"); !found || since.Before(last) {
+		if _, last, found := c.checkCacheEntityTag(entity, "cache_get_entity_tags"); !found || since.Before(last) {
 			dbquery = true
-			if found {
-				_ = c.cache.DeleteEntityTag(tag.ID)
-			}
-			_ = c.createCacheEntityTag(entity, "cache_get_entity_tags", since)
 		}
 	}
 
@@ -121,6 +118,7 @@ func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...st
 
 		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 			dbtags, dberr = c.db.GetEntityTags(e[0], since)
+			_ = c.createCacheEntityTag(entity, "cache_get_entity_tags", since)
 		}
 
 		if dberr == nil && len(dbtags) > 0 {

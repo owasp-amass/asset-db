@@ -18,21 +18,16 @@ func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 		return nil, err
 	}
 
-	sub, err := c.cache.FindEntityById(e.FromEntity.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	obj, err := c.cache.FindEntityById(e.ToEntity.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if tag, last, found := c.checkCacheEdgeTag(edge, "cache_create_edge"); !found || last.Add(c.freq).Before(time.Now()) {
-		if found {
-			_ = c.cache.DeleteEntityTag(tag.ID)
+	if _, last, found := c.checkCacheEdgeTag(edge, "cache_create_edge"); !found || last.Add(c.freq).Before(time.Now()) {
+		sub, err := c.cache.FindEntityById(e.FromEntity.ID)
+		if err != nil {
+			return nil, err
 		}
-		_ = c.createCacheEdgeTag(e, "cache_create_edge", time.Now())
+
+		obj, err := c.cache.FindEntityById(e.ToEntity.ID)
+		if err != nil {
+			return nil, err
+		}
 
 		s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
 		if err != nil || len(s) != 1 {
@@ -44,13 +39,17 @@ func (c *Cache) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 			return nil, err
 		}
 
-		_, _ = c.db.CreateEdge(&types.Edge{
+		if _, err = c.db.CreateEdge(&types.Edge{
 			CreatedAt:  edge.CreatedAt,
 			LastSeen:   edge.LastSeen,
 			Relation:   e.Relation,
 			FromEntity: s[0],
 			ToEntity:   o[0],
-		})
+		}); err != nil {
+			return nil, err
+		}
+
+		_ = c.createCacheEdgeTag(e, "cache_create_edge", time.Now())
 	}
 
 	return e, err
@@ -66,12 +65,8 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 	var dbquery bool
 
 	if since.IsZero() || since.Before(c.start) {
-		if tag, last, found := c.checkCacheEntityTag(entity, "cache_incoming_edges"); !found || since.Before(last) {
+		if _, last, found := c.checkCacheEntityTag(entity, "cache_incoming_edges"); !found || since.Before(last) {
 			dbquery = true
-			if found {
-				_ = c.cache.DeleteEntityTag(tag.ID)
-			}
-			_ = c.createCacheEntityTag(entity, "cache_incoming_edges", since)
 		}
 	}
 
@@ -81,6 +76,7 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 
 		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 			dbedges, dberr = c.db.IncomingEdges(e[0], since)
+			_ = c.createCacheEntityTag(entity, "cache_incoming_edges", since)
 
 			for i, edge := range dbedges {
 				if e, err := c.db.FindEntityById(edge.ToEntity.ID); err == nil && e != nil {
@@ -118,12 +114,8 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 	var dbquery bool
 
 	if since.IsZero() || since.Before(c.start) {
-		if tag, last, found := c.checkCacheEntityTag(entity, "cache_outgoing_edges"); !found || since.Before(last) {
+		if _, last, found := c.checkCacheEntityTag(entity, "cache_outgoing_edges"); !found || since.Before(last) {
 			dbquery = true
-			if found {
-				_ = c.cache.DeleteEntityTag(tag.ID)
-			}
-			_ = c.createCacheEntityTag(entity, "cache_outgoing_edges", since)
 		}
 	}
 
@@ -133,6 +125,7 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 
 		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
 			dbedges, dberr = c.db.OutgoingEdges(e[0], since)
+			_ = c.createCacheEntityTag(entity, "cache_outgoing_edges", since)
 
 			for i, edge := range dbedges {
 				if e, err := c.db.FindEntityById(edge.ToEntity.ID); err == nil && e != nil {

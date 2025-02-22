@@ -138,6 +138,7 @@ func (c *Cache) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 }
 
 // FindEdgeTagsByContent implements the Repository interface.
+// TODO: Consider adding a check for the last time the cache was updated
 func (c *Cache) FindEdgeTagsByContent(prop oam.Property, since time.Time) ([]*types.EdgeTag, error) {
 	if since.IsZero() || since.Before(c.start) {
 		var dbedges []*types.Edge
@@ -210,12 +211,8 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 	var dbquery bool
 
 	if since.IsZero() || since.Before(c.start) {
-		if tag, last, found := c.checkCacheEdgeTag(edge, "cache_get_edge_tags"); !found || since.Before(last) {
+		if _, last, found := c.checkCacheEdgeTag(edge, "cache_get_edge_tags"); !found || since.Before(last) {
 			dbquery = true
-			if found {
-				_ = c.cache.DeleteEntityTag(tag.ID)
-			}
-			_ = c.createCacheEdgeTag(edge, "cache_get_edge_tags", since)
 		}
 	}
 
@@ -257,6 +254,7 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 		}
 		if target != nil {
 			dbtags, dberr = c.db.GetEdgeTags(target, since)
+			_ = c.createCacheEdgeTag(edge, "cache_get_edge_tags", since)
 		}
 
 		if dberr == nil && len(dbtags) > 0 {

@@ -19,17 +19,17 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if tag, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
-		if found {
-			_ = c.cache.DeleteEntityTag(tag.ID)
-		}
-		_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
-
+	if _, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
 		_, err = c.db.CreateEntity(&types.Entity{
 			CreatedAt: input.CreatedAt,
 			LastSeen:  input.LastSeen,
 			Asset:     input.Asset,
 		})
+		if err != nil {
+			return nil, err
+		}
+
+		_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
 	}
 
 	return entity, err
@@ -42,13 +42,13 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if tag, last, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found || last.Add(c.freq).Before(time.Now()) {
-		if found {
-			_ = c.cache.DeleteEntityTag(tag.ID)
-		}
-		_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
-
+	if _, last, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found || last.Add(c.freq).Before(time.Now()) {
 		_, err = c.db.CreateAsset(asset)
+		if err != nil {
+			return nil, err
+		}
+
+		_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
 	}
 
 	return entity, err
@@ -106,7 +106,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 
 	dbentities, dberr := c.db.FindEntitiesByType(atype, since)
 	if dberr != nil {
-		return entities, err
+		return dbentities, dberr
 	}
 
 	var results []*types.Entity
@@ -117,11 +117,6 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 			Asset:     entity.Asset,
 		}); err == nil {
 			results = append(results, e)
-			if tags, err := c.cache.GetEntityTags(entity, c.start, "cache_find_entities_by_type"); err == nil && len(tags) > 0 {
-				for _, tag := range tags {
-					_ = c.cache.DeleteEntityTag(tag.ID)
-				}
-			}
 			_ = c.createCacheEntityTag(entity, "cache_find_entities_by_type", since)
 		}
 	}
