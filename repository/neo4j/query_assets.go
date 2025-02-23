@@ -127,6 +127,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["province"] = v.Province
 		m["country"] = v.Country
 		m["postal_code"] = v.PostalCode
+		m["gln"] = int64(v.GLN)
 	case *oamnet.Netblock:
 		m["cidr"] = v.CIDR.String()
 		m["type"] = v.Type

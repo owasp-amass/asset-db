@@ -521,7 +521,7 @@ func nodeToIPNetRecord(node neo4jdb.Node) (*oamreg.IPNetRecord, error) {
 		return nil, err
 	}
 
-	parent, err := neo4jdb.GetProperty[string](node, "parent")
+	parent, err := neo4jdb.GetProperty[string](node, "parent_handle")
 	if err != nil {
 		return nil, err
 	}
