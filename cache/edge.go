@@ -71,36 +71,32 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 	}
 
 	if dbquery {
-		var dberr error
-		var dbedges []*types.Edge
-
 		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			dbedges, dberr = c.db.IncomingEdges(e[0], since)
 			_ = c.createCacheEntityTag(entity, "cache_incoming_edges", since)
 
-			for i, edge := range dbedges {
-				if e, err := c.db.FindEntityById(edge.ToEntity.ID); err == nil && e != nil {
-					dbedges[i].ToEntity = e
-				}
-			}
-		}
+			if dbedges, dberr := c.db.IncomingEdges(e[0], since); dberr == nil && len(dbedges) > 0 {
+				for _, edge := range dbedges {
+					e, err := c.db.FindEntityById(edge.ToEntity.ID)
+					if err != nil || e == nil {
+						continue
+					}
+					edge.FromEntity = e
 
-		if dberr == nil && len(dbedges) > 0 {
-			for _, edge := range dbedges {
-				e, err := c.cache.CreateEntity(&types.Entity{
-					CreatedAt: edge.ToEntity.CreatedAt,
-					LastSeen:  edge.ToEntity.LastSeen,
-					Asset:     edge.ToEntity.Asset,
-				})
-
-				if err == nil && e != nil {
-					_, _ = c.cache.CreateEdge(&types.Edge{
-						CreatedAt:  edge.CreatedAt,
-						LastSeen:   edge.LastSeen,
-						Relation:   edge.Relation,
-						FromEntity: entity,
-						ToEntity:   e,
+					e, err = c.cache.CreateEntity(&types.Entity{
+						CreatedAt: edge.FromEntity.CreatedAt,
+						LastSeen:  edge.FromEntity.LastSeen,
+						Asset:     edge.FromEntity.Asset,
 					})
+
+					if err == nil && e != nil {
+						_, _ = c.cache.CreateEdge(&types.Edge{
+							CreatedAt:  edge.CreatedAt,
+							LastSeen:   edge.LastSeen,
+							Relation:   edge.Relation,
+							FromEntity: e,
+							ToEntity:   entity,
+						})
+					}
 				}
 			}
 		}
@@ -120,36 +116,32 @@ func (c *Cache) OutgoingEdges(entity *types.Entity, since time.Time, labels ...s
 	}
 
 	if dbquery {
-		var dberr error
-		var dbedges []*types.Edge
-
 		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			dbedges, dberr = c.db.OutgoingEdges(e[0], since)
 			_ = c.createCacheEntityTag(entity, "cache_outgoing_edges", since)
 
-			for i, edge := range dbedges {
-				if e, err := c.db.FindEntityById(edge.ToEntity.ID); err == nil && e != nil {
-					dbedges[i].ToEntity = e
-				}
-			}
-		}
+			if dbedges, dberr := c.db.OutgoingEdges(e[0], since); dberr == nil && len(dbedges) > 0 {
+				for _, edge := range dbedges {
+					e, err := c.db.FindEntityById(edge.ToEntity.ID)
+					if err != nil || e == nil {
+						continue
+					}
+					edge.ToEntity = e
 
-		if dberr == nil && len(dbedges) > 0 {
-			for _, edge := range dbedges {
-				e, err := c.cache.CreateEntity(&types.Entity{
-					CreatedAt: edge.ToEntity.CreatedAt,
-					LastSeen:  edge.ToEntity.LastSeen,
-					Asset:     edge.ToEntity.Asset,
-				})
-
-				if err == nil && e != nil {
-					_, _ = c.cache.CreateEdge(&types.Edge{
-						CreatedAt:  edge.CreatedAt,
-						LastSeen:   edge.LastSeen,
-						Relation:   edge.Relation,
-						FromEntity: entity,
-						ToEntity:   e,
+					e, err = c.cache.CreateEntity(&types.Entity{
+						CreatedAt: edge.ToEntity.CreatedAt,
+						LastSeen:  edge.ToEntity.LastSeen,
+						Asset:     edge.ToEntity.Asset,
 					})
+
+					if err == nil && e != nil {
+						_, _ = c.cache.CreateEdge(&types.Edge{
+							CreatedAt:  edge.CreatedAt,
+							LastSeen:   edge.LastSeen,
+							Relation:   edge.Relation,
+							FromEntity: entity,
+							ToEntity:   e,
+						})
+					}
 				}
 			}
 		}
