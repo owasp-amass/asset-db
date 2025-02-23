@@ -72,7 +72,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description: "parse identifier",
-				asset:       &general.Identifier{UniqueID: "222333444", EntityID: "12345", Type: general.BankIDCode},
+				asset:       &general.Identifier{UniqueID: "222333444", ID: "12345", Type: general.BankIDCode},
 			},
 			{
 				description: "parse ip address",
@@ -194,7 +194,7 @@ func TestModels(t *testing.T) {
 			},
 			{
 				description:   "json query for identifier",
-				asset:         &general.Identifier{UniqueID: "222333444", EntityID: "12345", Type: general.BankIDCode},
+				asset:         &general.Identifier{UniqueID: "222333444", ID: "12345", Type: general.BankIDCode},
 				expectedQuery: datatypes.JSONQuery("content").Equals("222333444", "unique_id"),
 			},
 			{

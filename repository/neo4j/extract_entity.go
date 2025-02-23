@@ -397,7 +397,7 @@ func nodeToIdentifier(node neo4jdb.Node) (*general.Identifier, error) {
 		return nil, err
 	}
 
-	eid, err := neo4jdb.GetProperty[string](node, "entity_id")
+	eid, err := neo4jdb.GetProperty[string](node, "id")
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +429,7 @@ func nodeToIdentifier(node neo4jdb.Node) (*general.Identifier, error) {
 
 	return &general.Identifier{
 		UniqueID:       uid,
-		EntityID:       eid,
+		ID:             eid,
 		Type:           idtype,
 		CreationDate:   cd,
 		UpdatedDate:    ud,

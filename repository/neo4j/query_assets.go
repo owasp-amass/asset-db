@@ -91,7 +91,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["exchange_rate"] = v.ExchangeRate
 	case *general.Identifier:
 		m["unique_id"] = v.UniqueID
-		m["entity_id"] = v.EntityID
+		m["id"] = v.ID
 		m["id_type"] = v.Type
 		m["creation_date"] = v.CreationDate
 		m["update_date"] = v.UpdatedDate
