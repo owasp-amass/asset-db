@@ -106,7 +106,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 
 	dbentities, dberr := c.db.FindEntitiesByType(atype, since)
 	if dberr != nil {
-		return dbentities, dberr
+		return entities, err
 	}
 
 	var results []*types.Entity
