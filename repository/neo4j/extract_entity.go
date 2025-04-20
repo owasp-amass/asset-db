@@ -715,7 +715,7 @@ func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
 		return nil, err
 	}
 
-	num, err := neo4jdb.GetProperty[int64](node, "num_of_employees")
+	num, err := neo4jdb.GetProperty[int64](node, "headcount")
 	if err != nil {
 		return nil, err
 	}
@@ -731,7 +731,7 @@ func nodeToOrganization(node neo4jdb.Node) (*org.Organization, error) {
 		Industry:       industry,
 		Active:         active,
 		NonProfit:      nonprofit,
-		NumOfEmployees: employees,
+		Headcount:      employees,
 	}, nil
 }
 

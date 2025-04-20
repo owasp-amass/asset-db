@@ -141,7 +141,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["industry"] = v.Industry
 		m["active"] = v.Active
 		m["non_profit"] = v.NonProfit
-		m["num_of_employees"] = int64(v.NumOfEmployees)
+		m["headcount"] = int64(v.Headcount)
 	case *people.Person:
 		m["unique_id"] = v.ID
 		m["full_name"] = v.FullName
