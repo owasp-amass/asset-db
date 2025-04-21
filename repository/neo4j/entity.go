@@ -25,9 +25,24 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 	if input == nil {
 		return nil, errors.New("the input entity is nil")
 	}
-	// ensure that duplicate entities are not entered into the database
-	if entities, err := neo.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) > 0 {
-		e := entities[0]
+
+	if input.ID != "" {
+		// If the entity ID is set, it means that the entity was previously created
+		// in the database, and we need to update that entity in the database
+		entity = &types.Entity{
+			ID:        input.ID,
+			CreatedAt: input.CreatedAt,
+			LastSeen:  time.Now(),
+			Asset:     input.Asset,
+		}
+	} else if entities, err := neo.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) > 0 {
+		// ensure that duplicate entities are not entered into the database
+		entity = entities[0]
+	}
+
+	if entity != nil {
+		e := entity
+		entity = nil // Reset entity to nil to avoid overwriting the existing entity
 
 		if input.Asset.AssetType() != e.Asset.AssetType() {
 			return nil, errors.New("the asset type does not match the existing entity")

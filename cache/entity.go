@@ -19,17 +19,23 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if _, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
+	if input.ID != "" {
+		// If the entity ID is set, it means that the entity was previously created
+		// in the database, and we need to update that entity in the database
 		_, err = c.db.CreateEntity(&types.Entity{
 			CreatedAt: input.CreatedAt,
 			LastSeen:  input.LastSeen,
 			Asset:     input.Asset,
 		})
-		if err != nil {
-			return nil, err
+	} else if _, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
+		_, err = c.db.CreateEntity(&types.Entity{
+			CreatedAt: input.CreatedAt,
+			LastSeen:  input.LastSeen,
+			Asset:     input.Asset,
+		})
+		if err == nil {
+			_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
 		}
-
-		_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
 	}
 
 	return entity, err
@@ -44,11 +50,9 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 
 	if _, last, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found || last.Add(c.freq).Before(time.Now()) {
 		_, err = c.db.CreateAsset(asset)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
 		}
-
-		_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
 	}
 
 	return entity, err
