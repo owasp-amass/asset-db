@@ -41,14 +41,12 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 	}
 
 	if entity != nil {
-		e := entity
-
-		if input.Asset.AssetType() != e.Asset.AssetType() {
+		if input.Asset.AssetType() != entity.Asset.AssetType() {
 			return nil, errors.New("the asset type does not match the existing entity")
 		}
 
-		e.LastSeen = time.Now()
-		props, err := entityPropsMap(e)
+		entity.LastSeen = time.Now()
+		props, err := entityPropsMap(entity)
 		if err != nil {
 			return nil, err
 		}
@@ -58,7 +56,7 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 
 		result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
 			"MATCH (a:Entity {entity_id: $eid}) SET a = $props RETURN a",
-			map[string]interface{}{"eid": e.ID, "props": props},
+			map[string]interface{}{"eid": entity.ID, "props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 		)
@@ -77,6 +75,7 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 			return nil, errors.New("the record value for the node is nil")
 		}
 
+		entity = nil
 		if e, err := nodeToEntity(node); err == nil && e != nil {
 			entity = e
 		}
