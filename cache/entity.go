@@ -19,15 +19,16 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 		return nil, err
 	}
 
+	var create bool
 	if input.ID != "" {
-		// If the entity ID is set, it means that the entity was previously created
-		// in the database, and we need to update that entity in the database
-		_, err = c.db.CreateEntity(&types.Entity{
-			CreatedAt: input.CreatedAt,
-			LastSeen:  input.LastSeen,
-			Asset:     input.Asset,
-		})
+		// If the entity ID is set, it means that the entity was previously created,
+		// and we need to update that entity in the database regardless of frequency
+		create = true
 	} else if _, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
+		create = true
+	}
+
+	if create {
 		_, err = c.db.CreateEntity(&types.Entity{
 			CreatedAt: input.CreatedAt,
 			LastSeen:  input.LastSeen,
