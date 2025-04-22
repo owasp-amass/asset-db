@@ -20,12 +20,11 @@ import (
 // It takes an Entity as input and persists it in the database.
 // Returns the created entity as a types.Entity or an error if the creation fails.
 func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, error) {
-	var entity *types.Entity
-
 	if input == nil {
 		return nil, errors.New("the input entity is nil")
 	}
 
+	var entity *types.Entity
 	if input.ID != "" {
 		// If the entity ID is set, it means that the entity was previously created
 		// in the database, and we need to update that entity in the database
@@ -38,6 +37,7 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 	} else if entities, err := neo.FindEntitiesByContent(input.Asset, time.Time{}); err == nil && len(entities) > 0 {
 		// ensure that duplicate entities are not entered into the database
 		entity = entities[0]
+		entity.LastSeen = time.Now()
 	}
 
 	if entity != nil {
@@ -45,7 +45,6 @@ func (neo *neoRepository) CreateEntity(input *types.Entity) (*types.Entity, erro
 			return nil, errors.New("the asset type does not match the existing entity")
 		}
 
-		entity.LastSeen = time.Now()
 		props, err := entityPropsMap(entity)
 		if err != nil {
 			return nil, err

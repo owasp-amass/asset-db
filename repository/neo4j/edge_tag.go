@@ -21,27 +21,42 @@ import (
 // The property is serialized to JSON and stored in the Content field of the EdgeTag struct.
 // Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
 func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.EdgeTag, error) {
-	var tag *types.EdgeTag
-
 	if input == nil {
 		return nil, errors.New("the input edge tag is nil")
 	}
-	// ensure that duplicate entities are not entered into the database
-	if tags, err := neo.FindEdgeTagsByContent(input.Property, time.Time{}); err == nil && len(tags) > 0 {
-		t := tags[0]
 
-		if input.Property.PropertyType() != t.Property.PropertyType() {
+	var tag *types.EdgeTag
+	if input.ID != "" {
+		// If the edge tag ID is set, it means that the edge tag was previously created
+		// in the database, and we need to update that edge tag in the database
+		tag = &types.EdgeTag{
+			ID:        input.ID,
+			CreatedAt: input.CreatedAt,
+			LastSeen:  time.Now(),
+			Property:  input.Property,
+			Edge:      edge,
+		}
+	} else if tags, err := neo.FindEdgeTagsByContent(input.Property, time.Time{}); err == nil && len(tags) > 0 {
+		// ensure that duplicate entities are not entered into the database
+		for _, t := range tags {
+			if t.Edge.ID == edge.ID {
+				tag = t
+				break
+			}
+		}
+
+		if tag != nil {
+			tag.Edge = edge
+			tag.LastSeen = time.Now()
+		}
+	}
+
+	if tag != nil {
+		if input.Property.PropertyType() != tag.Property.PropertyType() {
 			return nil, errors.New("the property type does not match the existing tag")
 		}
 
-		qnode, err := queryNodeByPropertyKeyValue("p", "EdgeTag", t.Property)
-		if err != nil {
-			return nil, err
-		}
-
-		t.Edge = edge
-		t.LastSeen = time.Now()
-		props, err := edgeTagPropsMap(t)
+		props, err := edgeTagPropsMap(tag)
 		if err != nil {
 			return nil, err
 		}
@@ -50,8 +65,8 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 		defer cancel()
 
 		result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
-			"MATCH "+qnode+" SET p = $props RETURN p",
-			map[string]interface{}{"props": props},
+			"MATCH (n:EdgeTag {tag_id: $tid}) SET p = $props RETURN p",
+			map[string]interface{}{"tid": tag.ID, "props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 		)
@@ -202,19 +217,22 @@ func (neo *neoRepository) FindEdgeTagsByContent(prop oam.Property, since time.Ti
 		return nil, errors.New("no edge tags found")
 	}
 
-	node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "p")
-	if err != nil {
-		return nil, err
-	}
-	if isnil {
-		return nil, errors.New("the record value for the node is nil")
-	}
+	var tags []*types.EdgeTag
+	for _, record := range result.Records {
+		node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](record, "p")
+		if err != nil || isnil {
+			continue
+		}
 
-	tag, err := nodeToEdgeTag(node)
-	if err != nil {
-		return nil, err
+		if tag, err := nodeToEdgeTag(node); err == nil && tag != nil {
+			tags = append(tags, tag)
+		}
 	}
-	return []*types.EdgeTag{tag}, nil
+	// Check if any tags were found
+	if len(tags) == 0 {
+		return nil, errors.New("zero edge tags found")
+	}
+	return tags, nil
 }
 
 // GetEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.
