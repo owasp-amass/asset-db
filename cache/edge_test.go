@@ -21,14 +21,14 @@ func TestCreateEdge(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)
@@ -122,14 +122,14 @@ func TestFindEdgeById(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)
@@ -149,14 +149,14 @@ func TestIncomingEdges(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)
@@ -272,14 +272,14 @@ func TestOutgoingEdges(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)
@@ -393,14 +393,14 @@ func TestDeleteEdge(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)

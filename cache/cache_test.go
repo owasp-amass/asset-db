@@ -28,16 +28,16 @@ func TestStartTime(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	t1 := time.Now()
 	time.Sleep(250 * time.Millisecond)
 	cache, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer cache.Close()
+	defer func() { _ = cache.Close() }()
 	time.Sleep(250 * time.Millisecond)
 	t2 := time.Now()
 
@@ -52,14 +52,14 @@ func TestGetDBType(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	cache, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer cache.Close()
+	defer func() { _ = cache.Close() }()
 
 	if dbtype := cache.GetDBType(); dbtype != sqlrepo.SQLite {
 		t.Errorf("DB type was: %s, expected: %s", dbtype, sqlrepo.SQLite)

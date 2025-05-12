@@ -73,7 +73,7 @@ func sqlMigrate(name string, database gorm.Dialector, fs embed.FS) error {
 	if err != nil {
 		return err
 	}
-	defer sqlDb.Close()
+	defer func() { _ = sqlDb.Close() }()
 
 	_, err = migrate.Exec(sqlDb, name, migrationsSource, migrate.Up)
 	if err != nil {
@@ -113,7 +113,7 @@ func neoMigrate(dsn string) error {
 	if err := driver.VerifyConnectivity(ctx); err != nil {
 		return err
 	}
-	defer driver.Close(context.Background())
+	defer func() { _ = driver.Close(context.Background()) }()
 
 	return neomigrations.InitializeSchema(driver, dbname)
 }

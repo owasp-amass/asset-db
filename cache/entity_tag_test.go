@@ -21,14 +21,14 @@ func TestCreateEntityTag(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)
@@ -85,14 +85,14 @@ func TestCreateEntityProperty(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	before := now.Add(-2 * time.Second)
@@ -143,14 +143,14 @@ func TestFindEntityTagById(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
@@ -172,14 +172,14 @@ func TestFindEntityTagsByContent(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	// add some really old stuff to the database
 	now := time.Now()
@@ -251,14 +251,14 @@ func TestGetEntityTags(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	now := time.Now()
 	ctime := now.Add(-8 * time.Hour)
@@ -365,14 +365,14 @@ func TestDeleteEntityTag(t *testing.T) {
 	db1, db2, dir, err := createTestRepositories()
 	assert.NoError(t, err)
 	defer func() {
-		db1.Close()
-		db2.Close()
-		os.RemoveAll(dir)
+		_ = db1.Close()
+		_ = db2.Close()
+		_ = os.RemoveAll(dir)
 	}()
 
 	c, err := New(db1, db2, time.Minute)
 	assert.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
