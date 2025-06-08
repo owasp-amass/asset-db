@@ -45,9 +45,9 @@ func newDatabase(dbtype, dsn string) (*gorm.DB, error) {
 	case Postgres:
 		return postgresDatabase(dsn)
 	case SQLite:
-		return sqliteDatabase(dsn, 3, 5)
+		return sqliteDatabase(dsn, 1, 1)
 	case SQLiteMemory:
-		return sqliteDatabase(dsn, 50, 100)
+		return sqliteDatabase(dsn, 1, 1)
 	}
 	return nil, errors.New("unknown DB type")
 }
@@ -64,8 +64,8 @@ func postgresDatabase(dsn string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxIdleConns(2)
+	sqlDB.SetMaxOpenConns(5)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
 	return db, nil
