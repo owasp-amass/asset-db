@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/account"
 	oamtls "github.com/owasp-amass/open-asset-model/certificate"
@@ -300,6 +301,11 @@ func parseProperty(ptype string, content datatypes.JSON) (oam.Property, error) {
 	var prop oam.Property
 
 	switch ptype {
+	case string(types.CachePropertyType):
+		var cp types.CacheProperty
+
+		err = json.Unmarshal(content, &cp)
+		prop = &cp
 	case string(oam.DNSRecordProperty):
 		var dp dns.DNSRecordProperty
 
@@ -353,6 +359,8 @@ func propertyNameJSONQuery(prop oam.Property) (*datatypes.JSONQueryExpression, e
 	jsonQuery := datatypes.JSONQuery("content")
 
 	switch v := prop.(type) {
+	case *types.CacheProperty:
+		return jsonQuery.Equals(v.ID, "cache_id"), nil
 	case *dns.DNSRecordProperty:
 		return jsonQuery.Equals(v.PropertyName, "property_name"), nil
 	case *general.SimpleProperty:
@@ -392,6 +400,8 @@ func propertyValueJSONQuery(prop oam.Property) (*datatypes.JSONQueryExpression, 
 	jsonQuery := datatypes.JSONQuery("content")
 
 	switch v := prop.(type) {
+	case *types.CacheProperty:
+		return jsonQuery.Equals(v.RefID, "ref_id"), nil
 	case *dns.DNSRecordProperty:
 		return jsonQuery.Equals(v.Data, "data"), nil
 	case *general.SimpleProperty:

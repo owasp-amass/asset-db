@@ -78,6 +78,10 @@ func propertyPropsMap(prop oam.Property) (map[string]interface{}, error) {
 
 	// begin populating the map of parameters
 	switch v := prop.(type) {
+	case *types.CacheProperty:
+		m["cache_id"] = v.ID
+		m["ref_id"] = v.RefID
+		m["timestamp"] = v.Timestamp
 	case *dns.DNSRecordProperty:
 		m["property_name"] = v.PropertyName
 		m["header_rrtype"] = v.Header.RRType
@@ -110,6 +114,8 @@ func queryNodeByPropertyKeyValue(varname, label string, prop oam.Property) (stri
 
 	var node string
 	switch v := prop.(type) {
+	case *types.CacheProperty:
+		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %s})", varname, label, "cache_id", v.ID, "ref_id", v.RefID)
 	case *dns.DNSRecordProperty:
 		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %s})", varname, label, "property_name", v.PropertyName, "data", v.Data)
 	case *general.SimpleProperty:

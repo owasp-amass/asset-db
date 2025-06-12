@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -19,6 +20,8 @@ func nodeToProperty(node neo4jdb.Node, ptype oam.PropertyType) (oam.Property, er
 	var prop oam.Property
 
 	switch ptype {
+	case types.CachePropertyType:
+		prop, err = nodeToCacheProperty(node)
 	case oam.DNSRecordProperty:
 		prop, err = nodeToDNSRecordProperty(node)
 	case oam.SimpleProperty:
@@ -36,6 +39,29 @@ func nodeToProperty(node neo4jdb.Node, ptype oam.PropertyType) (oam.Property, er
 	}
 
 	return prop, nil
+}
+
+func nodeToCacheProperty(node neo4jdb.Node) (*types.CacheProperty, error) {
+	id, err := neo4jdb.GetProperty[string](node, "cache_id")
+	if err != nil {
+		return nil, err
+	}
+
+	refID, err := neo4jdb.GetProperty[string](node, "ref_id")
+	if err != nil {
+		return nil, err
+	}
+
+	timestamp, err := neo4jdb.GetProperty[string](node, "timestamp")
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.CacheProperty{
+		ID:        id,
+		RefID:     refID,
+		Timestamp: timestamp,
+	}, nil
 }
 
 func nodeToDNSRecordProperty(node neo4jdb.Node) (*dns.DNSRecordProperty, error) {
