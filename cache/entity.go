@@ -48,9 +48,9 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if tag, _, ok := c.checkCacheEntityTag(entity, "cache_create_asset"); tag == nil || ok {
+	if tag, _, ok := c.checkCacheEntityTag(entity, "cache_create_entity"); tag == nil || ok {
 		if e, err := c.db.CreateAsset(asset); err == nil {
-			_ = c.createCacheEntityTag(entity, "cache_create_asset", e.ID, time.Now())
+			_ = c.createCacheEntityTag(entity, "cache_create_entity", e.ID, time.Now())
 		}
 	}
 
@@ -86,6 +86,7 @@ func (c *Cache) FindEntitiesByContent(asset oam.Asset, since time.Time) ([]*type
 			Asset:     entity.Asset,
 		}); err == nil {
 			results = append(results, e)
+			_ = c.createCacheEntityTag(e, "cache_create_entity", entity.ID, time.Now())
 		}
 	}
 
@@ -120,6 +121,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 			Asset:     entity.Asset,
 		}); err == nil {
 			results = append(results, e)
+			_ = c.createCacheEntityTag(e, "cache_create_entity", entity.ID, time.Now())
 			_ = c.createCacheEntityTag(entity, "cache_find_entities_by_type", entity.ID, since)
 		}
 	}
@@ -128,11 +130,11 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 
 // DeleteEntity implements the Repository interface.
 func (c *Cache) DeleteEntity(id string) error {
-	tag, _, _ := c.checkCacheEntityTag(&types.Entity{ID: id}, "cache_create_asset")
+	tag, _, _ := c.checkCacheEntityTag(&types.Entity{ID: id}, "cache_create_entity")
 	if tag == nil {
 		return errors.New("cache entity tag not found")
 	}
-	cp := tag.Property.(CacheProperty)
+	cp := tag.Property.(*types.CacheProperty)
 
 	if err := c.cache.DeleteEntity(id); err != nil {
 		return err

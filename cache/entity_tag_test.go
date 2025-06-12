@@ -46,13 +46,8 @@ func TestCreateEntityTag(t *testing.T) {
 		Entity: entity,
 	})
 	assert.NoError(t, err)
-
-	if tag.CreatedAt.Before(before) || tag.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", tag.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if tag.LastSeen.Before(before) || tag.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", tag.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, tag.CreatedAt, before, after)
+	assert.WithinRange(t, tag.LastSeen, before, after)
 
 	time.Sleep(250 * time.Millisecond)
 	dbents, err := c.db.FindEntitiesByContent(entity.Asset, before)
@@ -73,12 +68,8 @@ func TestCreateEntityTag(t *testing.T) {
 	if !reflect.DeepEqual(tag.Property, dbtag.Property) {
 		t.Errorf("DeepEqual failed for the properties in the two tags")
 	}
-	if dbtag.CreatedAt.Before(before) || dbtag.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbtag.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if dbtag.LastSeen.Before(before) || dbtag.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbtag.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, dbtag.CreatedAt, before, after)
+	assert.WithinRange(t, dbtag.LastSeen, before, after)
 }
 
 func TestCreateEntityProperty(t *testing.T) {
@@ -104,13 +95,8 @@ func TestCreateEntityProperty(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	after := time.Now().Add(250 * time.Millisecond)
-
-	if tag.CreatedAt.Before(before) || tag.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", tag.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if tag.LastSeen.Before(before) || tag.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", tag.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, tag.CreatedAt, before, after)
+	assert.WithinRange(t, tag.LastSeen, before, after)
 
 	time.Sleep(250 * time.Millisecond)
 	dbents, err := c.db.FindEntitiesByContent(entity.Asset, before)
@@ -131,12 +117,8 @@ func TestCreateEntityProperty(t *testing.T) {
 	if !reflect.DeepEqual(tag.Property, dbtag.Property) {
 		t.Errorf("DeepEqual failed for the properties in the two tags")
 	}
-	if dbtag.CreatedAt.Before(before) || dbtag.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbtag.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if dbtag.LastSeen.Before(before) || dbtag.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbtag.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, dbtag.CreatedAt, before, after)
+	assert.WithinRange(t, dbtag.LastSeen, before, after)
 }
 
 func TestFindEntityTagById(t *testing.T) {
@@ -353,12 +335,11 @@ func TestGetEntityTags(t *testing.T) {
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of edge tags")
 	}
+	ts := tags[0].Property.(*types.CacheProperty).Timestamp
 
-	tagtime, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value())
+	tagtime, err := time.Parse(time.RFC3339Nano, ts)
 	assert.NoError(t, err)
-	if tagtime.Before(before) || tagtime.After(after) {
-		t.Errorf("tag time: %s, before time: %s, after time: %s", tagtime.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, tagtime, before, after)
 }
 
 func TestDeleteEntityTag(t *testing.T) {

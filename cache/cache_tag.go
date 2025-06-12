@@ -5,12 +5,20 @@
 package cache
 
 import (
+	"errors"
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
 )
 
 func (c *Cache) createCacheEntityTag(entity *types.Entity, name, refID string, since time.Time) error {
+	if entity == nil {
+		return errors.New("entity cannot be nil")
+	} else if name == "" {
+		return errors.New("tag name cannot be empty")
+	} else if refID == "" {
+		return errors.New("reference ID cannot be empty")
+	}
 	// remove all existing tags with the same name
 	if tags, err := c.cache.GetEntityTags(entity, c.start, name); err == nil {
 		for _, tag := range tags {
@@ -27,6 +35,10 @@ func (c *Cache) createCacheEntityTag(entity *types.Entity, name, refID string, s
 }
 
 func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.EntityTag, time.Time, bool) {
+	if entity == nil || name == "" {
+		return nil, time.Time{}, false
+	}
+
 	if tags, err := c.cache.GetEntityTags(entity, c.start, name); err == nil && len(tags) == 1 {
 		tag := tags[0]
 
@@ -49,6 +61,13 @@ func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.E
 }
 
 func (c *Cache) createCacheEdgeTag(edge *types.Edge, name, refID string, since time.Time) error {
+	if edge == nil {
+		return errors.New("entity cannot be nil")
+	} else if name == "" {
+		return errors.New("tag name cannot be empty")
+	} else if refID == "" {
+		return errors.New("reference ID cannot be empty")
+	}
 	// remove all existing tags with the same name
 	if tags, err := c.cache.GetEdgeTags(edge, c.start, name); err == nil {
 		for _, tag := range tags {
@@ -65,6 +84,10 @@ func (c *Cache) createCacheEdgeTag(edge *types.Edge, name, refID string, since t
 }
 
 func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag, time.Time, bool) {
+	if edge == nil || name == "" {
+		return nil, time.Time{}, false
+	}
+
 	if tags, err := c.cache.GetEdgeTags(edge, c.start, name); err == nil && len(tags) == 1 {
 		tag := tags[0]
 

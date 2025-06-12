@@ -32,7 +32,7 @@ func (c *Cache) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.Ed
 	if ctag == nil {
 		return nil, errors.New("cache edge tag not found")
 	}
-	cp := ctag.Property.(CacheProperty)
+	cp := ctag.Property.(*types.CacheProperty)
 
 	_, err = c.db.CreateEdgeProperty(&types.Edge{ID: cp.RefID}, input.Property)
 	return tag, err
@@ -58,7 +58,7 @@ func (c *Cache) CreateEdgeProperty(edge *types.Edge, property oam.Property) (*ty
 	if ctag == nil {
 		return nil, errors.New("cache edge tag not found")
 	}
-	cp := ctag.Property.(CacheProperty)
+	cp := ctag.Property.(*types.CacheProperty)
 
 	_, err = c.db.CreateEdgeProperty(&types.Edge{ID: cp.RefID}, property)
 	return tag, err
@@ -153,7 +153,7 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 		if ctag == nil {
 			return nil, errors.New("cache edge tag not found")
 		}
-		cp := ctag.Property.(CacheProperty)
+		cp := ctag.Property.(*types.CacheProperty)
 
 		dbtags, dberr := c.db.GetEdgeTags(&types.Edge{ID: cp.RefID}, since)
 		_ = c.createCacheEdgeTag(edge, "cache_get_edge_tags", cp.RefID, since)
@@ -183,7 +183,7 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 	if ctag == nil {
 		return err
 	}
-	cp := ctag.Property.(CacheProperty)
+	cp := ctag.Property.(*types.CacheProperty)
 
 	if err := c.cache.DeleteEdgeTag(id); err != nil {
 		return err

@@ -84,7 +84,7 @@ func TestCreateAsset(t *testing.T) {
 	assert.WithinRange(t, entity.CreatedAt, before, after)
 	assert.WithinRange(t, entity.LastSeen, before, after)
 
-	if tags, err := c.cache.GetEntityTags(entity, now, "cache_create_asset"); err != nil || len(tags) != 1 {
+	if tags, err := c.cache.GetEntityTags(entity, now, "cache_create_entity"); err != nil || len(tags) != 1 {
 		t.Errorf("failed to create the cache tag:")
 	}
 
@@ -321,8 +321,9 @@ func TestFindEntitiesByType(t *testing.T) {
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of entity tags")
 	}
+	ts := tags[0].Property.(*types.CacheProperty).Timestamp
 
-	tagtime, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value())
+	tagtime, err := time.Parse(time.RFC3339Nano, ts)
 	assert.NoError(t, err)
 	assert.WithinRange(t, tagtime, cbefore2, cafter2)
 
@@ -350,8 +351,9 @@ func TestFindEntitiesByType(t *testing.T) {
 	if len(tags) != 1 {
 		t.Errorf("third request failed to produce the expected number of entity tags")
 	}
+	ts = tags[0].Property.(*types.CacheProperty).Timestamp
 
-	tagtime, err = time.Parse(time.RFC3339Nano, tags[0].Property.Value())
+	tagtime, err = time.Parse(time.RFC3339Nano, ts)
 	assert.NoError(t, err)
 	assert.WithinRange(t, tagtime, cbefore1, cafter1)
 }

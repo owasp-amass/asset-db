@@ -28,11 +28,11 @@ func (c *Cache) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*
 		return nil, err
 	}
 
-	ctag, _, _ := c.checkCacheEntityTag(entity, "cache_create_asset")
-	if tag == nil {
+	ctag, _, _ := c.checkCacheEntityTag(entity, "cache_create_entity")
+	if ctag == nil {
 		return nil, errors.New("cache entity tag not found")
 	}
-	cp := ctag.Property.(CacheProperty)
+	cp := ctag.Property.(*types.CacheProperty)
 
 	_, err = c.db.CreateEntityTag(&types.Entity{ID: cp.RefID}, &types.EntityTag{
 		CreatedAt: input.CreatedAt,
@@ -58,11 +58,11 @@ func (c *Cache) CreateEntityProperty(entity *types.Entity, property oam.Property
 		return nil, err
 	}
 
-	ctag, _, _ := c.checkCacheEntityTag(entity, "cache_create_asset")
-	if tag == nil {
+	ctag, _, _ := c.checkCacheEntityTag(entity, "cache_create_entity")
+	if ctag == nil {
 		return nil, errors.New("cache entity tag not found")
 	}
-	cp := ctag.Property.(CacheProperty)
+	cp := ctag.Property.(*types.CacheProperty)
 
 	_, err = c.db.CreateEntityProperty(&types.Entity{ID: cp.RefID}, property)
 	return tag, err
@@ -95,6 +95,7 @@ func (c *Cache) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*
 					LastSeen:  dbentities[i].LastSeen,
 					Asset:     dbentities[i].Asset,
 				}); err == nil && entity != nil {
+					_ = c.createCacheEntityTag(entity, "cache_create_entity", dbentities[i].ID, time.Now())
 					_, _ = c.cache.CreateEntityTag(entity, &types.EntityTag{
 						CreatedAt: tag.CreatedAt,
 						LastSeen:  tag.LastSeen,
@@ -111,22 +112,34 @@ func (c *Cache) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*
 
 // GetEntityTags implements the Repository interface.
 func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
-	var dbquery bool
+	var refID string
+	var dbquery, found bool
 
 	if since.IsZero() || since.Before(c.start) {
-		if _, last, found := c.checkCacheEntityTag(entity, "cache_get_entity_tags"); !found || since.Before(last) {
+		if tag, ts, _ := c.checkCacheEntityTag(entity, "cache_get_entity_tags"); tag == nil {
 			dbquery = true
+		} else if since.Before(ts) {
+			found = true
+			dbquery = true
+			refID = tag.Property.Value()
 		}
 	}
 
 	if dbquery {
-		var dberr error
-		var dbtags []*types.EntityTag
-
-		if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-			dbtags, dberr = c.db.GetEntityTags(e[0], since)
-			_ = c.createCacheEntityTag(entity, "cache_get_entity_tags", since)
+		if !found {
+			ctag, _, _ := c.checkCacheEntityTag(entity, "cache_create_entity")
+			if ctag == nil {
+				return nil, errors.New("cache entity tag not found")
+			}
+			cp := ctag.Property.(*types.CacheProperty)
+			refID = cp.RefID
 		}
+
+		dbtags, dberr := c.db.GetEntityTags(&types.Entity{ID: refID}, since)
+		if dberr != nil {
+			return nil, dberr
+		}
+		_ = c.createCacheEntityTag(entity, "cache_get_entity_tags", refID, since)
 
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
@@ -149,24 +162,15 @@ func (c *Cache) DeleteEntityTag(id string) error {
 		return err
 	}
 
-	entity, err := c.cache.FindEntityById(tag.Entity.ID)
-	if err != nil {
+	ctag, _, _ := c.checkCacheEntityTag(tag.Entity, "cache_create_entity")
+	if ctag == nil {
+		return errors.New("cache entity tag not found")
+	}
+	cp := ctag.Property.(*types.CacheProperty)
+
+	if err := c.db.DeleteEntityTag(cp.RefID); err != nil {
 		return err
 	}
 
-	if err := c.cache.DeleteEntityTag(id); err != nil {
-		return err
-	}
-
-	if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-		if tags, err := c.db.GetEntityTags(e[0], time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
-			for _, t := range tags {
-				if t.Property.Value() == tag.Property.Value() {
-					_ = c.db.DeleteEntityTag(t.ID)
-				}
-			}
-		}
-	}
-
-	return nil
+	return c.cache.DeleteEntityTag(id)
 }

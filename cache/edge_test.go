@@ -37,13 +37,9 @@ func TestCreateEdge(t *testing.T) {
 
 	edge, err := createTestEdge(c, ctime)
 	assert.NoError(t, err)
+	assert.WithinRange(t, edge.CreatedAt, before, after)
+	assert.WithinRange(t, edge.LastSeen, before, after)
 
-	if edge.CreatedAt.Before(before) || edge.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", edge.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if edge.LastSeen.Before(before) || edge.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", edge.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
 	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, "cache_create_edge"); err != nil || len(tags) != 1 {
 		t.Errorf("failed to create the cache tag:")
 	}
@@ -68,12 +64,8 @@ func TestCreateEdge(t *testing.T) {
 	if !reflect.DeepEqual(edge.Relation, dbedge.Relation) {
 		t.Errorf("DeepEqual failed for the relations in the two edges")
 	}
-	if dbedge.CreatedAt.Before(before) || dbedge.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbedge.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if dbedge.LastSeen.Before(before) || dbedge.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbedge.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, dbedge.CreatedAt, before, after)
+	assert.WithinRange(t, dbedge.LastSeen, before, after)
 }
 
 func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
@@ -260,12 +252,11 @@ func TestIncomingEdges(t *testing.T) {
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of entity tags")
 	}
+	ts := tags[0].Property.(*types.CacheProperty).Timestamp
 
-	tagtime, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value())
+	tagtime, err := time.Parse(time.RFC3339Nano, ts)
 	assert.NoError(t, err)
-	if tagtime.Before(before) || tagtime.After(after) {
-		t.Errorf("tag time: %s, before time: %s, after time: %s", tagtime.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, tagtime, before, after)
 }
 
 func TestOutgoingEdges(t *testing.T) {
@@ -381,12 +372,11 @@ func TestOutgoingEdges(t *testing.T) {
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of entity tags")
 	}
+	ts := tags[0].Property.(*types.CacheProperty).Timestamp
 
-	tagtime, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value())
+	tagtime, err := time.Parse(time.RFC3339Nano, ts)
 	assert.NoError(t, err)
-	if tagtime.Before(before) || tagtime.After(after) {
-		t.Errorf("tag time: %s, before time: %s, after time: %s", tagtime.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, tagtime, before, after)
 }
 
 func TestDeleteEdge(t *testing.T) {

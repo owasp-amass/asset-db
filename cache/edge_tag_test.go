@@ -333,6 +333,7 @@ func TestGetEdgeTags(t *testing.T) {
 	if num := len(tags); num != 6 {
 		t.Errorf("incorrect number of edge tags: %d", num)
 	}
+	after = time.Now()
 
 	for _, tag := range tags {
 		set1.Remove(tag.Property.Value())

@@ -105,6 +105,8 @@ func TestCacheEdgeTag(t *testing.T) {
 		FromEntity: db2ent2,
 		ToEntity:   db2ent1,
 	})
+	assert.NoError(t, err)
+	assert.NotNil(t, db2edge)
 
 	tag, _, ok := c.checkCacheEdgeTag(nil, "cache_create_edge")
 	assert.Nil(t, tag)
