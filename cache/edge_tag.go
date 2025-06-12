@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"errors"
 	"reflect"
 	"time"
 
@@ -211,51 +212,20 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 	var dbquery bool
 
 	if since.IsZero() || since.Before(c.start) {
-		if _, last, found := c.checkCacheEdgeTag(edge, "cache_get_edge_tags"); !found || since.Before(last) {
+		if tag, ts, _ := c.checkCacheEdgeTag(edge, "cache_get_edge_tags"); tag == nil || since.Before(ts) {
 			dbquery = true
 		}
 	}
 
 	if dbquery {
-		sub, err := c.cache.FindEntityById(edge.FromEntity.ID)
-		if err != nil {
-			return nil, err
+		ctag, _, _ := c.checkCacheEdgeTag(edge, "cache_create_edge")
+		if ctag == nil {
+			return nil, errors.New("cache edge tag not found")
 		}
+		refID := ctag.Property.Value()
 
-		obj, err := c.cache.FindEntityById(edge.ToEntity.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		var dberr error
-		var dbtags []*types.EdgeTag
-
-		s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
-		if err != nil || len(s) != 1 {
-			return nil, err
-		}
-
-		o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
-		if err != nil || len(o) != 1 {
-			return nil, err
-		}
-
-		edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
-		if err != nil || len(edges) == 0 {
-			return nil, err
-		}
-
-		var target *types.Edge
-		for _, e := range edges {
-			if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge.Relation) {
-				target = e
-				break
-			}
-		}
-		if target != nil {
-			dbtags, dberr = c.db.GetEdgeTags(target, since)
-			_ = c.createCacheEdgeTag(edge, "cache_get_edge_tags", since)
-		}
+		dbtags, dberr := c.db.GetEdgeTags(&types.Edge{ID: refID}, since)
+		_ = c.createCacheEdgeTag(edge, "cache_get_edge_tags", refID, since)
 
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
@@ -278,58 +248,25 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 		return err
 	}
 
-	edge2, err := c.cache.FindEdgeById(tag.Edge.ID)
-	if err != nil {
+	ctag, _, _ := c.checkCacheEdgeTag(tag.Edge, "cache_create_edge")
+	if ctag == nil {
 		return err
 	}
-
-	sub, err := c.cache.FindEntityById(edge2.FromEntity.ID)
-	if err != nil {
-		return err
-	}
-
-	obj, err := c.cache.FindEntityById(edge2.ToEntity.ID)
-	if err != nil {
-		return err
-	}
+	refID := ctag.Property.Value()
 
 	if err := c.cache.DeleteEdgeTag(id); err != nil {
 		return err
 	}
 
-	s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
-	if err != nil || len(s) != 1 {
-		return err
-	}
-
-	o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
-	if err != nil || len(o) != 1 {
-		return err
-	}
-
-	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, tag.Edge.Relation.Label())
-	if err != nil || len(edges) == 0 {
-		return err
-	}
-
-	var target *types.Edge
-	for _, e := range edges {
-		if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
-			target = e
-			break
-		}
-	}
-	if target == nil {
-		return err
-	}
-
-	if tags, err := c.db.GetEdgeTags(target, time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
+	var ferr error
+	if tags, err := c.db.GetEdgeTags(&types.Edge{ID: refID}, time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
 		for _, t := range tags {
 			if tag.Property.Value() == t.Property.Value() {
-				_ = c.db.DeleteEdgeTag(t.ID)
+				if err := c.db.DeleteEdgeTag(t.ID); err != nil {
+					ferr = err
+				}
 			}
 		}
 	}
-
-	return nil
+	return ferr
 }

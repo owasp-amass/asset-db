@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/owasp-amass/asset-db/repository"
-	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type Cache struct {
@@ -41,52 +39,4 @@ func (c *Cache) Close() error {
 // GetDBType implements the Repository interface.
 func (c *Cache) GetDBType() string {
 	return c.db.GetDBType()
-}
-
-func (c *Cache) createCacheEntityTag(entity *types.Entity, name string, since time.Time) error {
-	// remove all existing tags with the same name
-	if tags, err := c.cache.GetEntityTags(entity, c.start, name); err == nil {
-		for _, tag := range tags {
-			_ = c.cache.DeleteEntityTag(tag.ID)
-		}
-	}
-
-	_, err := c.cache.CreateEntityProperty(entity, &general.SimpleProperty{
-		PropertyName:  name,
-		PropertyValue: since.Format(time.RFC3339Nano),
-	})
-	return err
-}
-
-func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.EntityTag, time.Time, bool) {
-	if tags, err := c.cache.GetEntityTags(entity, c.start, name); err == nil && len(tags) == 1 {
-		if t, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value()); err == nil {
-			return tags[0], t, true
-		}
-	}
-	return nil, time.Time{}, false
-}
-
-func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string, since time.Time) error {
-	// remove all existing tags with the same name
-	if tags, err := c.cache.GetEdgeTags(edge, c.start, name); err == nil {
-		for _, tag := range tags {
-			_ = c.cache.DeleteEdgeTag(tag.ID)
-		}
-	}
-
-	_, err := c.cache.CreateEdgeProperty(edge, &general.SimpleProperty{
-		PropertyName:  name,
-		PropertyValue: since.Format(time.RFC3339Nano),
-	})
-	return err
-}
-
-func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag, time.Time, bool) {
-	if tags, err := c.cache.GetEdgeTags(edge, c.start, name); err == nil && len(tags) == 1 {
-		if t, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value()); err == nil {
-			return tags[0], t, true
-		}
-	}
-	return nil, time.Time{}, false
 }
