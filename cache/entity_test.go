@@ -40,13 +40,9 @@ func TestCreateEntity(t *testing.T) {
 		Asset:     &dns.FQDN{Name: "owasp.org"},
 	})
 	assert.NoError(t, err)
+	assert.WithinRange(t, entity.CreatedAt, before, after)
+	assert.WithinRange(t, entity.LastSeen, before, after)
 
-	if entity.CreatedAt.Before(before) || entity.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", entity.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if entity.LastSeen.Before(before) || entity.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", entity.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
 	if tags, err := c.cache.GetEntityTags(entity, now, "cache_create_entity"); err != nil || len(tags) != 1 {
 		t.Errorf("failed to create the cache tag:")
 	}
@@ -63,12 +59,8 @@ func TestCreateEntity(t *testing.T) {
 	if !reflect.DeepEqual(entity.Asset, dbent.Asset) {
 		t.Errorf("DeepEqual failed for the assets in the two entities")
 	}
-	if dbent.CreatedAt.Before(before) || dbent.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbent.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if dbent.LastSeen.Before(before) || dbent.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbent.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, dbent.CreatedAt, before, after)
+	assert.WithinRange(t, dbent.LastSeen, before, after)
 }
 
 func TestCreateAsset(t *testing.T) {
@@ -89,13 +81,9 @@ func TestCreateAsset(t *testing.T) {
 	after := now.Add(2 * time.Second)
 	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
+	assert.WithinRange(t, entity.CreatedAt, before, after)
+	assert.WithinRange(t, entity.LastSeen, before, after)
 
-	if entity.CreatedAt.Before(before) || entity.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", entity.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if entity.LastSeen.Before(before) || entity.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", entity.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
 	if tags, err := c.cache.GetEntityTags(entity, now, "cache_create_asset"); err != nil || len(tags) != 1 {
 		t.Errorf("failed to create the cache tag:")
 	}
@@ -112,12 +100,8 @@ func TestCreateAsset(t *testing.T) {
 	if !reflect.DeepEqual(entity.Asset, dbent.Asset) {
 		t.Errorf("DeepEqual failed for the assets in the two entities")
 	}
-	if dbent.CreatedAt.Before(before) || dbent.CreatedAt.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbent.CreatedAt.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
-	if dbent.LastSeen.Before(before) || dbent.LastSeen.After(after) {
-		t.Errorf("create time: %s, before time: %s, after time: %s", dbent.LastSeen.Format(time.RFC3339Nano), before.Format(time.RFC3339Nano), after.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, dbent.CreatedAt, before, after)
+	assert.WithinRange(t, dbent.LastSeen, before, after)
 }
 
 func TestFindEntityById(t *testing.T) {
@@ -340,9 +324,7 @@ func TestFindEntitiesByType(t *testing.T) {
 
 	tagtime, err := time.Parse(time.RFC3339Nano, tags[0].Property.Value())
 	assert.NoError(t, err)
-	if tagtime.Before(cbefore2) || tagtime.After(cafter2) {
-		t.Errorf("tag time: %s, before time: %s, after time: %s", tagtime.Format(time.RFC3339Nano), cbefore2.Format(time.RFC3339Nano), cafter2.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, tagtime, cbefore2, cafter2)
 
 	entities, err = c.FindEntitiesByType(oam.FQDN, ctime1)
 	assert.NoError(t, err)
@@ -371,9 +353,7 @@ func TestFindEntitiesByType(t *testing.T) {
 
 	tagtime, err = time.Parse(time.RFC3339Nano, tags[0].Property.Value())
 	assert.NoError(t, err)
-	if tagtime.Before(cbefore1) || tagtime.After(cafter1) {
-		t.Errorf("tag time: %s, before time: %s, after time: %s", tagtime.Format(time.RFC3339Nano), cbefore1.Format(time.RFC3339Nano), cafter1.Format(time.RFC3339Nano))
-	}
+	assert.WithinRange(t, tagtime, cbefore1, cafter1)
 }
 
 func TestDeleteEntity(t *testing.T) {

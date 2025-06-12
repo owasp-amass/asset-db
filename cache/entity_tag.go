@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"errors"
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -27,15 +28,18 @@ func (c *Cache) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*
 		return nil, err
 	}
 
-	if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-		_, _ = c.db.CreateEntityTag(e[0], &types.EntityTag{
-			CreatedAt: input.CreatedAt,
-			LastSeen:  input.LastSeen,
-			Property:  input.Property,
-		})
+	ctag, _, _ := c.checkCacheEntityTag(entity, "cache_create_asset")
+	if tag == nil {
+		return nil, errors.New("cache entity tag not found")
 	}
+	cp := ctag.Property.(CacheProperty)
 
-	return tag, nil
+	_, err = c.db.CreateEntityTag(&types.Entity{ID: cp.RefID}, &types.EntityTag{
+		CreatedAt: input.CreatedAt,
+		LastSeen:  input.LastSeen,
+		Property:  input.Property,
+	})
+	return tag, err
 }
 
 // CreateEntityProperty implements the Repository interface.
@@ -54,11 +58,14 @@ func (c *Cache) CreateEntityProperty(entity *types.Entity, property oam.Property
 		return nil, err
 	}
 
-	if e, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(e) == 1 {
-		_, _ = c.db.CreateEntityProperty(e[0], property)
+	ctag, _, _ := c.checkCacheEntityTag(entity, "cache_create_asset")
+	if tag == nil {
+		return nil, errors.New("cache entity tag not found")
 	}
+	cp := ctag.Property.(CacheProperty)
 
-	return tag, nil
+	_, err = c.db.CreateEntityProperty(&types.Entity{ID: cp.RefID}, property)
+	return tag, err
 }
 
 // FindEntityTagById implements the Repository interface.

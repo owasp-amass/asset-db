@@ -24,18 +24,17 @@ func (c *Cache) CreateEntity(input *types.Entity) (*types.Entity, error) {
 		// If the entity ID is set, it means that the entity was previously created,
 		// and we need to update that entity in the database regardless of frequency
 		create = true
-	} else if _, last, found := c.checkCacheEntityTag(entity, "cache_create_entity"); !found || last.Add(c.freq).Before(time.Now()) {
+	} else if tag, _, ok := c.checkCacheEntityTag(entity, "cache_create_entity"); tag == nil || ok {
 		create = true
 	}
 
 	if create {
-		_, err = c.db.CreateEntity(&types.Entity{
+		if e, err := c.db.CreateEntity(&types.Entity{
 			CreatedAt: input.CreatedAt,
 			LastSeen:  input.LastSeen,
 			Asset:     input.Asset,
-		})
-		if err == nil {
-			_ = c.createCacheEntityTag(entity, "cache_create_entity", time.Now())
+		}); err == nil {
+			_ = c.createCacheEntityTag(entity, "cache_create_entity", e.ID, time.Now())
 		}
 	}
 
@@ -49,10 +48,9 @@ func (c *Cache) CreateAsset(asset oam.Asset) (*types.Entity, error) {
 		return nil, err
 	}
 
-	if _, last, found := c.checkCacheEntityTag(entity, "cache_create_asset"); !found || last.Add(c.freq).Before(time.Now()) {
-		_, err = c.db.CreateAsset(asset)
-		if err == nil {
-			_ = c.createCacheEntityTag(entity, "cache_create_asset", time.Now())
+	if tag, _, ok := c.checkCacheEntityTag(entity, "cache_create_asset"); tag == nil || ok {
+		if e, err := c.db.CreateAsset(asset); err == nil {
+			_ = c.createCacheEntityTag(entity, "cache_create_asset", e.ID, time.Now())
 		}
 	}
 
@@ -104,7 +102,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 		if !since.IsZero() && !since.Before(c.start) {
 			return entities, err
 		}
-		if _, last, found := c.checkCacheEntityTag(entities[0], "cache_find_entities_by_type"); found && !since.Before(last) {
+		if tag, ts, _ := c.checkCacheEntityTag(entities[0], "cache_find_entities_by_type"); tag != nil && !since.Before(ts) {
 			return entities, err
 		}
 	}
@@ -122,7 +120,7 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 			Asset:     entity.Asset,
 		}); err == nil {
 			results = append(results, e)
-			_ = c.createCacheEntityTag(entity, "cache_find_entities_by_type", since)
+			_ = c.createCacheEntityTag(entity, "cache_find_entities_by_type", entity.ID, since)
 		}
 	}
 	return results, nil
@@ -130,21 +128,14 @@ func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*typ
 
 // DeleteEntity implements the Repository interface.
 func (c *Cache) DeleteEntity(id string) error {
-	entity, err := c.cache.FindEntityById(id)
-	if err != nil {
+	tag, _, _ := c.checkCacheEntityTag(&types.Entity{ID: id}, "cache_create_asset")
+	if tag == nil {
+		return errors.New("cache entity tag not found")
+	}
+	cp := tag.Property.(CacheProperty)
+
+	if err := c.cache.DeleteEntity(id); err != nil {
 		return err
 	}
-
-	err = c.cache.DeleteEntity(id)
-	if err != nil {
-		return err
-	}
-
-	if ents, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{}); err == nil && len(ents) > 0 {
-		for _, e := range ents {
-			_ = c.db.DeleteEntity(e.ID)
-		}
-	}
-
-	return nil
+	return c.db.DeleteEntity(cp.RefID)
 }

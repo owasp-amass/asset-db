@@ -6,7 +6,6 @@ package cache
 
 import (
 	"errors"
-	"reflect"
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -29,47 +28,13 @@ func (c *Cache) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.Ed
 		return nil, err
 	}
 
-	edge2, err := c.cache.FindEdgeById(tag.Edge.ID)
-	if err != nil {
-		return nil, err
+	ctag, _, _ := c.checkCacheEdgeTag(edge, "cache_create_edge")
+	if ctag == nil {
+		return nil, errors.New("cache edge tag not found")
 	}
+	cp := ctag.Property.(CacheProperty)
 
-	sub, err := c.cache.FindEntityById(edge2.FromEntity.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	obj, err := c.cache.FindEntityById(edge2.ToEntity.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
-	if err != nil || len(s) != 1 {
-		return nil, err
-	}
-
-	o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
-	if err != nil || len(o) != 1 {
-		return nil, err
-	}
-
-	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
-	if err != nil || len(edges) == 0 {
-		return nil, err
-	}
-
-	var target *types.Edge
-	for _, e := range edges {
-		if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
-			target = e
-			break
-		}
-	}
-	if target != nil {
-		_, err = c.db.CreateEdgeProperty(target, input.Property)
-	}
-
+	_, err = c.db.CreateEdgeProperty(&types.Edge{ID: cp.RefID}, input.Property)
 	return tag, err
 }
 
@@ -89,47 +54,13 @@ func (c *Cache) CreateEdgeProperty(edge *types.Edge, property oam.Property) (*ty
 		return nil, err
 	}
 
-	edge2, err := c.cache.FindEdgeById(tag.Edge.ID)
-	if err != nil {
-		return nil, err
+	ctag, _, _ := c.checkCacheEdgeTag(edge, "cache_create_edge")
+	if ctag == nil {
+		return nil, errors.New("cache edge tag not found")
 	}
+	cp := ctag.Property.(CacheProperty)
 
-	sub, err := c.cache.FindEntityById(edge2.FromEntity.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	obj, err := c.cache.FindEntityById(edge2.ToEntity.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	s, err := c.db.FindEntitiesByContent(sub.Asset, time.Time{})
-	if err != nil || len(s) != 1 {
-		return nil, err
-	}
-
-	o, err := c.db.FindEntitiesByContent(obj.Asset, time.Time{})
-	if err != nil || len(o) != 1 {
-		return nil, err
-	}
-
-	edges, err := c.db.OutgoingEdges(s[0], time.Time{}, edge.Relation.Label())
-	if err != nil || len(edges) == 0 {
-		return nil, err
-	}
-
-	var target *types.Edge
-	for _, e := range edges {
-		if e.ID == o[0].ID && reflect.DeepEqual(e.Relation, edge2.Relation) {
-			target = e
-			break
-		}
-	}
-	if target != nil {
-		_, err = c.db.CreateEdgeProperty(target, property)
-	}
-
+	_, err = c.db.CreateEdgeProperty(&types.Edge{ID: cp.RefID}, property)
 	return tag, err
 }
 
@@ -222,10 +153,10 @@ func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) 
 		if ctag == nil {
 			return nil, errors.New("cache edge tag not found")
 		}
-		refID := ctag.Property.Value()
+		cp := ctag.Property.(CacheProperty)
 
-		dbtags, dberr := c.db.GetEdgeTags(&types.Edge{ID: refID}, since)
-		_ = c.createCacheEdgeTag(edge, "cache_get_edge_tags", refID, since)
+		dbtags, dberr := c.db.GetEdgeTags(&types.Edge{ID: cp.RefID}, since)
+		_ = c.createCacheEdgeTag(edge, "cache_get_edge_tags", cp.RefID, since)
 
 		if dberr == nil && len(dbtags) > 0 {
 			for _, tag := range dbtags {
@@ -252,14 +183,15 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 	if ctag == nil {
 		return err
 	}
-	refID := ctag.Property.Value()
+	cp := ctag.Property.(CacheProperty)
 
 	if err := c.cache.DeleteEdgeTag(id); err != nil {
 		return err
 	}
 
 	var ferr error
-	if tags, err := c.db.GetEdgeTags(&types.Edge{ID: refID}, time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
+	if tags, err := c.db.GetEdgeTags(&types.Edge{ID: cp.RefID},
+		time.Time{}, tag.Property.Name()); err == nil && len(tags) > 0 {
 		for _, t := range tags {
 			if tag.Property.Value() == t.Property.Value() {
 				if err := c.db.DeleteEdgeTag(t.ID); err != nil {
