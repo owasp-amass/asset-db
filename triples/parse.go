@@ -20,7 +20,7 @@ const (
 )
 
 type Triple struct {
-	Direction int // 0 for incoming, 1 for outgoing
+	Direction int
 	Subject   *Node
 	Predicate *Predicate
 	Object    *Node
