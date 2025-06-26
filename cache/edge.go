@@ -90,7 +90,7 @@ func (c *Cache) IncomingEdges(entity *types.Entity, since time.Time, labels ...s
 
 		if dbedges, dberr := c.db.IncomingEdges(&types.Entity{ID: refID}, since); dberr == nil && len(dbedges) > 0 {
 			for _, edge := range dbedges {
-				e, err := c.db.FindEntityById(edge.ToEntity.ID)
+				e, err := c.db.FindEntityById(edge.FromEntity.ID)
 				if err != nil || e == nil {
 					continue
 				}
