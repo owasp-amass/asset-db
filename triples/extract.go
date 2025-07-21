@@ -43,7 +43,7 @@ type Vertex struct {
 	LastSeen   string        `json:"last_seen"`
 	Asset      oam.Asset     `json:"asset"`
 	Relations  []*Link       `json:"edges"`
-	Properties []*Prop       `json:"properties"`
+	Properties []*Prop       `json:"tags"`
 }
 
 type Link struct {
@@ -53,7 +53,7 @@ type Link struct {
 	LastSeen   string           `json:"last_seen"`
 	Relation   oam.Relation     `json:"relation"`
 	Node       *Vertex          `json:"entity"`
-	Properties []*Prop          `json:"properties"`
+	Properties []*Prop          `json:"tags"`
 }
 
 type Prop struct {
