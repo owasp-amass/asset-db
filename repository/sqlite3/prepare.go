@@ -123,6 +123,11 @@ func (r *Queries) Close() error {
 	return first
 }
 
+func (r *Queries) prepNamed(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
+	// Reuse existing per-table cache map for simplicity (key namespace differs).
+	return r.getOrPrepare(ctx, key, sqlText)
+}
+
 func (r *Queries) getOrPrepare(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
 	r.mu.RLock()
 	st := r.assetStmts[key]
@@ -364,50 +369,8 @@ func prepareAll(ctx context.Context, db *sql.DB) (*Statements, error) {
 	return st, nil
 }
 
-// --- Small wrappers that return IDs (you can add more as needed) ---
-
-func (s *Statements) EnsureEdge(ctx context.Context, etype string, fromID, toID int64, contentJSON string) (int64, error) {
-	row := s.EnsureEdgeStmt.QueryRowContext(ctx,
-		sql.Named("etype_name", etype),
-		sql.Named("from_entity_id", fromID),
-		sql.Named("to_entity_id", toID),
-		sql.Named("content", contentJSON),
-	)
-	var id int64
-	return id, row.Scan(&id)
-}
-
-func (s *Statements) TagEntity(ctx context.Context, entityID int64, ns, name, value, detailsJSON string) (int64, error) {
-	row := s.TagEntityStmt.QueryRowContext(ctx,
-		sql.Named("entity_id", entityID),
-		sql.Named("namespace", ns),
-		sql.Named("name", name),
-		sql.Named("value", value),
-		sql.Named("details", detailsJSON),
-	)
-	var id int64
-	return id, row.Scan(&id)
-}
-
-func (s *Statements) TagEdge(ctx context.Context, edgeID int64, ns, name, value, detailsJSON string) (int64, error) {
-	row := s.TagEdgeStmt.QueryRowContext(ctx,
-		sql.Named("edge_id", edgeID),
-		sql.Named("namespace", ns),
-		sql.Named("name", name),
-		sql.Named("value", value),
-		sql.Named("details", detailsJSON),
-	)
-	var id int64
-	return id, row.Scan(&id)
-}
-
-// --- All templates (verbatim SQL CTEs) ---
-
 func allTemplates() map[string]string {
-	// Each value is the exact WITH ... SELECT ... statement from your 02_upserts_sqlite.sql.
-	// (To keep this file readable, they are trimmed and grouped. Add or tweak as you need.)
 	return map[string]string{
-		// Assets
 		"upsert_account":          tmplUpsertAccount,
 		"upsert_autnumrecord":     tmplUpsertAutnumRecord,
 		"upsert_autonomoussystem": tmplUpsertAutonomousSystem,
@@ -429,164 +392,9 @@ func allTemplates() map[string]string {
 		"upsert_service":          tmplUpsertService,
 		"upsert_tlscertificate":   tmplUpsertTLSCertificate,
 		"upsert_url":              tmplUpsertURL,
-
-		// Graph / tags
-		"ensure_edge": tmplEnsureEdge,
-		"upsert_tag":  tmplUpsertTag,
-		"tag_entity":  tmplTagEntity,
-		"tag_edge":    tmplTagEdge,
+		"ensure_edge":             tmplEnsureEdge,
+		"upsert_tag":              tmplUpsertTag,
+		"tag_entity":              tmplTagEntity,
+		"tag_edge":                tmplTagEdge,
 	}
 }
-
-// ============================================================================
-// OWASP Amass — UPSERT helpers for SQLite (3.35+ for RETURNING)
-// - Execute snippets ad hoc (prepare/step/finalize) to get ids back.
-// - Bind parameters shown as :named; JSON params may be NULL (treated as '{}').
-// - No-op-aware updates: ON CONFLICT ... DO UPDATE ... WHERE <changed>
-// - Entities: each upsert also registers a row in entities + entity_ref.
-// ============================================================================
-
-// ============================================================================
-// Edge + Tags
-// ============================================================================
-
-// ENSURE EDGE (returns edge_id) ----------------------------------------------
-// Params: :etype_name, :from_entity_id, :to_entity_id, :content(JSON)
-const tmplEnsureEdge = `
-WITH
-  ensure_etype AS (
-    INSERT INTO edge_type_lu(name) VALUES (:etype_name)
-    ON CONFLICT(name) DO NOTHING
-    RETURNING id
-  ),
-  etype_id AS (
-    SELECT id FROM ensure_etype
-    UNION ALL SELECT id FROM edge_type_lu WHERE name=:etype_name LIMIT 1
-  ),
-  edge_try AS (
-    INSERT INTO edges(etype_id, from_entity_id, to_entity_id, content)
-    SELECT (SELECT id FROM etype_id), :from_entity_id, :to_entity_id, coalesce(:content,'{}')
-    ON CONFLICT(etype_id, from_entity_id, to_entity_id) DO UPDATE SET
-      content = CASE
-        WHEN json_patch(edges.content, coalesce(excluded.content,'{}')) IS NOT edges.content
-        THEN json_patch(edges.content, coalesce(excluded.content,'{}'))
-        ELSE edges.content
-      END,
-      updated_at = CASE
-        WHEN json_patch(edges.content, coalesce(excluded.content,'{}')) IS NOT edges.content
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE edges.updated_at END
-    WHERE json_patch(edges.content, coalesce(excluded.content,'{}')) IS NOT edges.content
-    RETURNING edge_id
-  )
-SELECT edge_id FROM edge_try
-UNION ALL
-SELECT edge_id FROM edges
-WHERE etype_id = (SELECT id FROM etype_id)
-  AND from_entity_id = :from_entity_id
-  AND to_entity_id = :to_entity_id
-LIMIT 1;`
-
-// UPSERT TAG DICTIONARY (returns tag_id) -------------------------------------
-// Params: :namespace, :name, :value, :meta(JSON)
-const tmplUpsertTag = `
-WITH
-  t AS (
-    INSERT INTO tags(namespace, name, value, meta)
-    VALUES (coalesce(:namespace,'default'), :name, :value, coalesce(:meta,'{}'))
-    ON CONFLICT(namespace, name, coalesce(value,'∅')) DO UPDATE SET
-      meta = CASE
-        WHEN json_patch(tags.meta, coalesce(excluded.meta,'{}')) IS NOT tags.meta
-        THEN json_patch(tags.meta, coalesce(excluded.meta,'{}'))
-        ELSE tags.meta
-      END,
-      updated_at = CASE
-        WHEN json_patch(tags.meta, coalesce(excluded.meta,'{}')) IS NOT tags.meta
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE tags.updated_at END
-    WHERE json_patch(tags.meta, coalesce(excluded.meta,'{}')) IS NOT tags.meta
-    RETURNING tag_id
-  )
-SELECT tag_id FROM t
-UNION ALL
-SELECT tag_id FROM tags
-WHERE namespace = coalesce(:namespace,'default')
-  AND name = :name
-  AND coalesce(value,'∅') = coalesce(:value,'∅')
-LIMIT 1;`
-
-// TAG ENTITY (returns mapping id) --------------------------------------------
-// Params: :entity_id, :namespace, :name, :value, :details(JSON)
-const tmplTagEntity = `
-WITH
-  tid AS (
-    WITH t AS (
-      INSERT INTO tags(namespace, name, value, meta)
-      VALUES (coalesce(:namespace,'default'), :name, :value, '{}')
-      ON CONFLICT(namespace, name, coalesce(value,'∅')) DO NOTHING
-      RETURNING tag_id
-    )
-    SELECT tag_id FROM t
-    UNION ALL
-    SELECT tag_id FROM tags
-    WHERE namespace = coalesce(:namespace,'default')
-      AND name = :name
-      AND coalesce(value,'∅') = coalesce(:value,'∅')
-    LIMIT 1
-  ),
-  map AS (
-    INSERT INTO entity_tag_map(entity_id, tag_id, details)
-    SELECT :entity_id, (SELECT tag_id FROM tid), coalesce(:details,'{}')
-    ON CONFLICT(entity_id, tag_id) DO UPDATE SET
-      details = CASE
-        WHEN json_patch(entity_tag_map.details, coalesce(excluded.details,'{}')) IS NOT entity_tag_map.details
-        THEN json_patch(entity_tag_map.details, coalesce(excluded.details,'{}'))
-        ELSE entity_tag_map.details
-      END,
-      updated_at = CASE
-        WHEN json_patch(entity_tag_map.details, coalesce(excluded.details,'{}')) IS NOT entity_tag_map.details
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entity_tag_map.updated_at END
-    WHERE json_patch(entity_tag_map.details, coalesce(excluded.details,'{}')) IS NOT entity_tag_map.details
-    RETURNING id
-  )
-SELECT id FROM map
-UNION ALL
-SELECT id FROM entity_tag_map WHERE entity_id = :entity_id AND tag_id = (SELECT tag_id FROM tid)
-LIMIT 1;`
-
-// TAG EDGE (returns mapping id) ----------------------------------------------
-// Params: :edge_id, :namespace, :name, :value, :details(JSON)
-const tmplTagEdge = `
-WITH
-  tid AS (
-    WITH t AS (
-      INSERT INTO tags(namespace, name, value, meta)
-      VALUES (coalesce(:namespace,'default'), :name, :value, '{}')
-      ON CONFLICT(namespace, name, coalesce(value,'∅')) DO NOTHING
-      RETURNING tag_id
-    )
-    SELECT tag_id FROM t
-    UNION ALL
-    SELECT tag_id FROM tags
-    WHERE namespace = coalesce(:namespace,'default')
-      AND name = :name
-      AND coalesce(value,'∅') = coalesce(:value,'∅')
-    LIMIT 1
-  ),
-  map AS (
-    INSERT INTO edge_tag_map(edge_id, tag_id, details)
-    SELECT :edge_id, (SELECT tag_id FROM tid), coalesce(:details,'{}')
-    ON CONFLICT(edge_id, tag_id) DO UPDATE SET
-      details = CASE
-        WHEN json_patch(edge_tag_map.details, coalesce(excluded.details,'{}')) IS NOT edge_tag_map.details
-        THEN json_patch(edge_tag_map.details, coalesce(excluded.details,'{}'))
-        ELSE edge_tag_map.details
-      END,
-      updated_at = CASE
-        WHEN json_patch(edge_tag_map.details, coalesce(excluded.details,'{}')) IS NOT edge_tag_map.details
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE edge_tag_map.updated_at END
-    WHERE json_patch(edge_tag_map.details, coalesce(excluded.details,'{}')) IS NOT edge_tag_map.details
-    RETURNING id
-  )
-SELECT id FROM map
-UNION ALL
-SELECT id FROM edge_tag_map WHERE edge_id = :edge_id AND tag_id = (SELECT tag_id FROM tid)
-LIMIT 1;`
