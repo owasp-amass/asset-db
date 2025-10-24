@@ -20,51 +20,61 @@ const (
 
 // sqliteRepository is a repository implementation.
 type sqliteRepository struct {
-	db     *sql.DB
-	stmts  *Statements
-	dbtype string
+	db      *sql.DB
+	queries *Queries
+	stmts   *Statements
+	dbtype  string
 }
 
 // New creates a new instance of the asset database repository.
 func New(dbtype, dsn string) (*sqliteRepository, error) {
-	db, stmts, err := sqliteDatabase(dsn, 1, 1)
+	repo, err := sqliteDatabase(dsn, 1, 1)
 	if err != nil {
 		return nil, err
 	}
 
-	return &sqliteRepository{
-		db:     db,
-		stmts:  stmts,
-		dbtype: dbtype,
-	}, nil
+	repo.dbtype = dbtype
+	return repo, nil
 }
 
 // sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
-func sqliteDatabase(dsn string, conns, idles int) (*sql.DB, *Statements, error) {
+func sqliteDatabase(dsn string, conns, idles int) (*sqliteRepository, error) {
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	ctx := context.Background()
 	if err := ApplyPragmas(ctx, db); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	stmts, err := SeedAndPrepareAll(ctx, db, SeedOptions{RefreshTemplates: true})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
+	}
+
+	queries, err := NewQueries(db)
+	if err != nil {
+		return nil, err
 	}
 
 	db.SetMaxOpenConns(conns)
 	db.SetMaxIdleConns(idles)
 	db.SetConnMaxLifetime(time.Hour)
 	db.SetConnMaxIdleTime(10 * time.Minute)
-	return db, stmts, nil
+	return &sqliteRepository{
+		db:      db,
+		stmts:   stmts,
+		queries: queries,
+	}, nil
 }
 
 // Close implements the Repository interface.
 func (sql *sqliteRepository) Close() error {
+	if sql.queries != nil {
+		sql.queries.Close()
+	}
 	if sql.stmts != nil {
 		sql.stmts.Close()
 	}
