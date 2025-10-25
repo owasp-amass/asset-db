@@ -358,3 +358,44 @@ WHERE edge_id = ? AND tag_id IN (
 	}
 	return res.RowsAffected()
 }
+
+// DeleteTagByID deletes a tag dictionary row.
+// If onlyIfOrphaned is true, it deletes only when the tag is unused by any entity/edge mapping.
+// Returns affected rows (0 if not deleted).
+func (r *Queries) DeleteTagByID(ctx context.Context, tagID int64, onlyIfOrphaned bool) (int64, error) {
+	if onlyIfOrphaned {
+		const q = `
+DELETE FROM tags
+WHERE tag_id = ?
+  AND NOT EXISTS (SELECT 1 FROM entity_tag_map WHERE tag_id = tags.tag_id)
+  AND NOT EXISTS (SELECT 1 FROM edge_tag_map   WHERE tag_id = tags.tag_id)`
+		res, err := r.db.ExecContext(ctx, q, tagID)
+		if err != nil {
+			return 0, err
+		}
+		return res.RowsAffected()
+	}
+
+	// Unconditional delete (FK CASCADE should clean maps if configured; else do it manually)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM entity_tag_map WHERE tag_id = ?`, tagID); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM edge_tag_map WHERE tag_id = ?`, tagID); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE tag_id = ?`, tagID)
+	if err != nil {
+		return 0, err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return 0, sql.ErrNoRows
+	}
+	return aff, tx.Commit()
+}

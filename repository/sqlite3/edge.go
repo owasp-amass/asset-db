@@ -233,3 +233,74 @@ WHERE `)
 	}
 	return out, rows.Err()
 }
+
+// DeleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).
+func (r *Queries) DeleteEdgeByID(ctx context.Context, edgeID int64) error {
+	const key = "del.edge.byID"
+	const q = `DELETE FROM edges WHERE edge_id = ?`
+	st, err := r.getOrPrepare(ctx, key, q)
+	if err != nil {
+		return err
+	}
+	res, err := st.ExecContext(ctx, edgeID) // direct exec is fine; same q
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// DeleteEdgesBetween deletes edges from a->b; if bothDir is true, also b->a.
+// If etype is non-empty, limits deletion to that edge type.
+// Returns the number of rows deleted.
+func (r *Queries) DeleteEdgesBetween(ctx context.Context, a, b int64, bothDir bool, etype string) (int64, error) {
+	args := []any{a, b}
+	sb := strings.Builder{}
+	sb.WriteString(`DELETE FROM edges WHERE (from_entity_id=? AND to_entity_id=?)`)
+	if bothDir {
+		sb.WriteString(` OR (from_entity_id=? AND to_entity_id=?)`)
+		args = append(args, b, a)
+	}
+	if etype != "" {
+		// Restrict by edge type name through a subquery match on etype_id.
+		sb.WriteString(` AND etype_id = (SELECT id FROM edge_type_lu WHERE name = ?)`)
+		args = append(args, etype)
+	}
+	q := sb.String()
+	res, err := r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// DeleteEdgesForEntity deletes incident edges to/from an entity.
+// dir="out","in","" (both). Optional etype filter. Returns deleted count.
+func (r *Queries) DeleteEdgesForEntity(ctx context.Context, entityID int64, dir string, etype string) (int64, error) {
+	var cond string
+	args := []any{entityID}
+	switch strings.ToLower(strings.TrimSpace(dir)) {
+	case "out":
+		cond = "from_entity_id = ?"
+	case "in":
+		cond = "to_entity_id = ?"
+	default:
+		cond = "(from_entity_id = ? OR to_entity_id = ?)"
+		args = append(args, entityID)
+	}
+	sb := strings.Builder{}
+	sb.WriteString(`DELETE FROM edges WHERE ` + cond)
+	if etype != "" {
+		sb.WriteString(` AND etype_id = (SELECT id FROM edge_type_lu WHERE name = ?)`)
+		args = append(args, etype)
+	}
+	q := sb.String()
+	res, err := r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
