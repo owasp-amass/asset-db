@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/open-asset-model/contact"
 )
 
 // CONTACTRECORD --------------------------------------------------------------
@@ -50,23 +54,16 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type ContactRecord struct {
-	ID           int64      `json:"id"`
-	CreatedAt    *time.Time `json:"created_at,omitempty"`
-	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
-	DiscoveredAt string     `json:"discovered_at"`
-}
-
-func (s *Statements) UpsertContactRecord(ctx context.Context, discoveredAt, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertContactRecord(ctx context.Context, a *contact.ContactRecord) (int64, error) {
 	row := s.UpsertContactRecordStmt.QueryRowContext(ctx,
-		sql.Named("discovered_at", discoveredAt),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("discovered_at", a.DiscoveredAt),
+		sql.Named("attrs", ""),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchContactRecordByRowID(ctx context.Context, rowID int64) (*ContactRecord, error) {
+func (r *Queries) fetchContactRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, discovered_at FROM contactrecord WHERE id = ?`
 
 	st, err := r.getOrPrepare(ctx, "contactrecord", query)
@@ -74,13 +71,23 @@ func (r *Queries) fetchContactRecordByRowID(ctx context.Context, rowID int64) (*
 		return nil, err
 	}
 
+	var id int64
 	var c, u *string
-	var a ContactRecord
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.DiscoveredAt); err != nil {
+	var disat string
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &disat); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset:     &contact.ContactRecord{DiscoveredAt: disat},
+	}, nil
 }

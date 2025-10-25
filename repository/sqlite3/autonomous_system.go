@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
 // AUTONOMOUS SYSTEM ----------------------------------------------------------
@@ -53,23 +57,16 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type AutonomousSystem struct {
-	ID        int64      `json:"id"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	ASN       int64      `json:"asn"`
-}
-
-func (s *Statements) UpsertAutonomousSystem(ctx context.Context, asn int64, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertAutonomousSystem(ctx context.Context, a *oamnet.AutonomousSystem) (int64, error) {
 	row := s.UpsertAutonomousSystemStmt.QueryRowContext(ctx,
-		sql.Named("asn", asn),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("asn", a.Number),
+		sql.Named("attrs", ""),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchAutonomousSystemByRowID(ctx context.Context, rowID int64) (*AutonomousSystem, error) {
+func (r *Queries) fetchAutonomousSystemByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, asn FROM autonomoussystem WHERE id = ?`
 
 	st, err := r.getOrPrepare(ctx, "autonomoussystem", query)
@@ -78,12 +75,21 @@ func (r *Queries) fetchAutonomousSystemByRowID(ctx context.Context, rowID int64)
 	}
 
 	var c, u *string
-	var a AutonomousSystem
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.ASN); err != nil {
+	var id, asn int64
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &asn); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset:     &oamnet.AutonomousSystem{Number: int(asn)},
+	}, nil
 }

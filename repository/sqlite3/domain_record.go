@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 // DOMAINRECORD ---------------------------------------------------------------
@@ -102,7 +106,7 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type DomainRecord struct {
+type domrec struct {
 	ID             int64      `json:"id"`
 	CreatedAt      *time.Time `json:"created_at,omitempty"`
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
@@ -119,25 +123,26 @@ type DomainRecord struct {
 	WhoisServer    *string    `json:"whois_server,omitempty"`
 }
 
-func (s *Statements) UpsertDomainRecord(ctx context.Context, record DomainRecord) (int64, error) {
+func (s *Statements) UpsertDomainRecord(ctx context.Context, a *oamreg.DomainRecord) (int64, error) {
 	row := s.UpsertDomainRecordStmt.QueryRowContext(ctx,
-		sql.Named("domain_text", record.Domain),
-		sql.Named("unique_id", record.UniqueID),
-		sql.Named("record_name", record.RecordName),
-		sql.Named("raw_record", record.RawRecord),
-		sql.Named("record_status", record.RecordStatus),
-		sql.Named("punycode", record.Punycode),
-		sql.Named("extension", record.Extension),
-		sql.Named("created_date", record.CreatedDate),
-		sql.Named("updated_date", record.UpdatedDate),
-		sql.Named("expiration_date", record.ExpirationDate),
-		sql.Named("whois_server", record.WhoisServer),
+		sql.Named("domain_text", a.Domain),
+		sql.Named("unique_id", a.ID),
+		sql.Named("record_name", a.Name),
+		sql.Named("raw_record", a.Raw),
+		sql.Named("record_status", a.Status),
+		sql.Named("punycode", a.Punycode),
+		sql.Named("extension", a.Extension),
+		sql.Named("created_date", a.CreatedDate),
+		sql.Named("updated_date", a.UpdatedDate),
+		sql.Named("expiration_date", a.ExpirationDate),
+		sql.Named("whois_server", a.WhoisServer),
+		sql.Named("attrs", ""),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchDomainRecordByRowID(ctx context.Context, rowID int64) (*DomainRecord, error) {
+func (r *Queries) fetchDomainRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, unique_id, raw_record, record_name, domain, 
 			  record_status, punycode, extension, created_date, updated_date, expiration_date, whois_server
 		      FROM domainrecord WHERE id = ?`
@@ -147,7 +152,7 @@ func (r *Queries) fetchDomainRecordByRowID(ctx context.Context, rowID int64) (*D
 		return nil, err
 	}
 
-	var a DomainRecord
+	var a domrec
 	var c, u, cd, ud, ex *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
 		&a.ID, &c, &u, &a.UniqueID, &a.RawRecord, &a.RecordName, &a.Domain,
@@ -158,8 +163,71 @@ func (r *Queries) fetchDomainRecordByRowID(ctx context.Context, rowID int64) (*D
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	a.CreatedDate = parseTS(cd)
-	a.UpdatedDate = parseTS(ud)
-	a.ExpirationDate = parseTS(ex)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var cdate time.Time
+	if a.CreatedDate = parseTS(cd); a.CreatedDate != nil {
+		cdate = *a.CreatedDate
+	}
+
+	var udate time.Time
+	if a.UpdatedDate = parseTS(ud); a.UpdatedDate != nil {
+		udate = *a.UpdatedDate
+	}
+
+	var edate time.Time
+	if a.ExpirationDate = parseTS(ud); a.ExpirationDate != nil {
+		edate = *a.ExpirationDate
+	}
+
+	var uid string
+	if a.UniqueID != nil {
+		uid = *a.UniqueID
+	}
+
+	var rawrec string
+	if a.RawRecord != nil {
+		rawrec = *a.RawRecord
+	}
+
+	var rstatus string
+	if a.RecordStatus != nil {
+		rstatus = *a.RecordStatus
+	}
+
+	var punny string
+	if a.Punycode != nil {
+		punny = *a.Punycode
+	}
+
+	var ext string
+	if a.Extension != nil {
+		ext = *a.Extension
+	}
+
+	var whois string
+	if a.WhoisServer != nil {
+		whois = *a.WhoisServer
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamreg.DomainRecord{
+			Raw:            rawrec,
+			ID:             uid,
+			Domain:         a.Domain,
+			Punycode:       punny,
+			Name:           a.RecordName,
+			Extension:      ext,
+			WhoisServer:    whois,
+			CreatedDate:    cdate.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedDate:    udate.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			ExpirationDate: edate.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			Status:         []string{rstatus},
+		},
+	}, nil
 }

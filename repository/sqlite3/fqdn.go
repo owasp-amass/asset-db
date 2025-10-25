@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 // FQDN -----------------------------------------------------------------------
@@ -68,23 +72,23 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type FQDN struct {
+type fqdn struct {
 	ID        int64      `json:"id"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	FQDN      string     `json:"fqdn"`
 }
 
-func (s *Statements) UpsertFQDN(ctx context.Context, fqdn, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
 	row := s.UpsertFQDNStmt.QueryRowContext(ctx,
-		sql.Named("fqdn_text", fqdn),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("fqdn_text", a.Name),
+		sql.Named("attrs", ""),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchFQDNByRowID(ctx context.Context, rowID int64) (*FQDN, error) {
+func (r *Queries) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, fqdn FROM fqdn WHERE id = ?`
 
 	st, err := r.getOrPrepare(ctx, "fqdn", query)
@@ -92,7 +96,7 @@ func (r *Queries) fetchFQDNByRowID(ctx context.Context, rowID int64) (*FQDN, err
 		return nil, err
 	}
 
-	var a FQDN
+	var a fqdn
 	var c, u *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.FQDN); err != nil {
 		return nil, err
@@ -100,5 +104,14 @@ func (r *Queries) fetchFQDNByRowID(ctx context.Context, rowID int64) (*FQDN, err
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: *a.CreatedAt,
+		LastSeen:  *a.UpdatedAt,
+		Asset:     &oamdns.FQDN{Name: a.FQDN},
+	}, nil
 }

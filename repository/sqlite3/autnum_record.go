@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 // AUTNUMRECORD ---------------------------------------------------------------
@@ -74,7 +78,7 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type AutnumRecord struct {
+type autnum struct {
 	ID           int64      `json:"id"`
 	CreatedAt    *time.Time `json:"created_at,omitempty"`
 	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
@@ -87,22 +91,22 @@ type AutnumRecord struct {
 	WhoisServer  *string    `json:"whois_server,omitempty"`
 }
 
-func (s *Statements) UpsertAutnumRecord(ctx context.Context, handle string, asn int64, recordName, recordStatus *string, createdDate, updatedDate *time.Time, whoisServer *string, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertAutnumRecord(ctx context.Context, a *oamreg.AutnumRecord) (int64, error) {
 	row := s.UpsertAutnumRecordStmt.QueryRowContext(ctx,
-		sql.Named("handle", handle),
-		sql.Named("asn", asn),
-		sql.Named("record_name", recordName),
-		sql.Named("record_status", recordStatus),
-		sql.Named("created_date", createdDate),
-		sql.Named("updated_date", updatedDate),
-		sql.Named("whois_server", whoisServer),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("handle", a.Handle),
+		sql.Named("asn", a.Number),
+		sql.Named("record_name", a.Name),
+		sql.Named("record_status", a.Status),
+		sql.Named("created_date", a.CreatedDate),
+		sql.Named("updated_date", a.UpdatedDate),
+		sql.Named("whois_server", a.WhoisServer),
+		sql.Named("attrs", ""),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchAutnumRecordByRowID(ctx context.Context, rowID int64) (*AutnumRecord, error) {
+func (r *Queries) fetchAutnumRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, record_name, handle, asn, record_status, created_date, updated_date, whois_server
 		      FROM autnumrecord WHERE id = ?`
 
@@ -111,7 +115,7 @@ func (r *Queries) fetchAutnumRecordByRowID(ctx context.Context, rowID int64) (*A
 		return nil, err
 	}
 
-	var a AutnumRecord
+	var a autnum
 	var c, u, cd, ud *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
 		&a.ID, &c, &u, &a.RecordName, &a.Handle, &a.ASN, &a.RecordStatus, &cd, &ud, &a.WhoisServer,
@@ -121,7 +125,47 @@ func (r *Queries) fetchAutnumRecordByRowID(ctx context.Context, rowID int64) (*A
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	a.CreatedDate = parseTS(cd)
-	a.UpdatedDate = parseTS(ud)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var cdate time.Time
+	if a.CreatedDate = parseTS(cd); a.CreatedDate != nil {
+		cdate = *a.CreatedDate
+	}
+
+	var udate time.Time
+	if a.UpdatedDate = parseTS(ud); a.UpdatedDate != nil {
+		udate = *a.UpdatedDate
+	}
+
+	var rname string
+	if a.RecordName != nil {
+		rname = *a.RecordName
+	}
+
+	var rstatus string
+	if a.RecordStatus != nil {
+		rstatus = *a.RecordStatus
+	}
+
+	var whois string
+	if a.WhoisServer != nil {
+		whois = *a.WhoisServer
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamreg.AutnumRecord{
+			Number:      int(a.ASN),
+			Handle:      a.Handle,
+			Name:        rname,
+			WhoisServer: whois,
+			CreatedDate: cdate.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedDate: udate.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			Status:      []string{rstatus},
+		},
+	}, nil
 }

@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamacct "github.com/owasp-amass/open-asset-model/account"
 )
 
 // ACCOUNT --------------------------------------------------------------------
@@ -78,7 +82,7 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type Account struct {
+type account struct {
 	ID          int64      `json:"id"`
 	CreatedAt   *time.Time `json:"created_at,omitempty"`
 	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
@@ -90,21 +94,21 @@ type Account struct {
 	Active      *bool      `json:"active,omitempty"`
 }
 
-func (s *Statements) UpsertAccount(ctx context.Context, unique_id, account_type, username, account_number string, balance float64, active bool, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertAccount(ctx context.Context, a *oamacct.Account) (int64, error) {
 	row := s.UpsertAccountStmt.QueryRowContext(ctx,
-		sql.Named("unique_id", unique_id),
-		sql.Named("account_type", account_type),
-		sql.Named("username", username),
-		sql.Named("account_number", account_number),
-		sql.Named("balance", balance),
-		sql.Named("active", active),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("unique_id", a.ID),
+		sql.Named("account_type", a.Type),
+		sql.Named("username", a.Username),
+		sql.Named("account_number", a.Number),
+		sql.Named("balance", a.Balance),
+		sql.Named("active", a.Active),
+		sql.Named("attrs", ""),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchAccountByRowID(ctx context.Context, rowID int64) (*Account, error) {
+func (r *Queries) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, balance, active
 		      FROM account WHERE id = ?`
 
@@ -113,7 +117,7 @@ func (r *Queries) fetchAccountByRowID(ctx context.Context, rowID int64) (*Accoun
 		return nil, err
 	}
 
-	var a Account
+	var a account
 	var c, u *string
 	var bal *float64
 	var act *int64
@@ -132,5 +136,41 @@ func (r *Queries) fetchAccountByRowID(ctx context.Context, rowID int64) (*Accoun
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var username string
+	if a.Username == nil {
+		username = *a.Username
+	}
+
+	var acctnum string
+	if a.AccountNo == nil {
+		acctnum = *a.AccountNo
+	}
+
+	var balance float64
+	if a.Balance == nil {
+		balance = *a.Balance
+	}
+
+	var active bool
+	if a.Active == nil {
+		active = *a.Active
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamacct.Account{
+			ID:       a.UniqueID,
+			Type:     a.AccountType,
+			Username: username,
+			Number:   acctnum,
+			Balance:  balance,
+			Active:   active,
+		},
+	}, nil
 }
