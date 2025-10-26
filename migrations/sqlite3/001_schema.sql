@@ -31,11 +31,10 @@ CREATE TABLE IF NOT EXISTS edge_type_lu (
 
 -- Seed common types (extend as needed)
 INSERT OR IGNORE INTO entity_type_lu(name) VALUES
- ('account'),('autnumrecord'),('autonomoussystem'),('contactrecord'),
- ('domainrecord'),('file'),('fqdn'),('fundstransfer'),('identifier'),
- ('ipaddress'),('ipnetrecord'),('location'),('netblock'),('organization'),
- ('person'),('phone'),('product'),('productrelease'),('service'),
- ('tlscertificate'),('url');
+ ('account'),('autnumrecord'),('autonomoussystem'),('contactrecord'),('domainrecord'),('file'),
+ ('fqdn'),('fundstransfer'),('identifier'),('ipaddress'),('ipnetrecord'),('location'),('netblock'),
+ ('organization'),('person'),('phone'),('product'),('productrelease'),('service'),('tlscertificate'),
+ ('url');
 
 INSERT OR IGNORE INTO edge_type_lu(name) VALUES
  ('basicdnsrelation'),('portrelation'),('prefdnsrelation'),('simplerelation'),('srvdnsrelation');
