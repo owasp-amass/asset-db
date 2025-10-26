@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/open-asset-model/contact"
 )
 
 // PHONE ----------------------------------------------------------------------
@@ -59,7 +63,7 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type Phone struct {
+type phone struct {
 	ID            int64      `json:"id"`
 	CreatedAt     *time.Time `json:"created_at,omitempty"`
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
@@ -70,20 +74,20 @@ type Phone struct {
 	CountryAbbrev *string    `json:"country_abbrev,omitempty"`
 }
 
-func (s *Statements) UpsertPhone(ctx context.Context, phone *Phone, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertPhone(ctx context.Context, a *contact.Phone) (int64, error) {
 	row := s.UpsertPhoneStmt.QueryRowContext(ctx,
-		sql.Named("raw_number", phone.RawNumber),
-		sql.Named("e164", phone.E164),
-		sql.Named("number_type", phone.NumberType),
-		sql.Named("country_code", phone.CountryCode),
-		sql.Named("country_abbrev", phone.CountryAbbrev),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("raw_number", a.Raw),
+		sql.Named("e164", a.E164),
+		sql.Named("number_type", a.Type),
+		sql.Named("country_code", a.CountryCode),
+		sql.Named("country_abbrev", a.CountryAbbrev),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchPhoneByRowID(ctx context.Context, rowID int64) (*Phone, error) {
+func (r *Queries) fetchPhoneByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, raw_number, e164, number_type, country_code, country_abbrev
 		      FROM phone WHERE id = ?`
 
@@ -92,7 +96,7 @@ func (r *Queries) fetchPhoneByRowID(ctx context.Context, rowID int64) (*Phone, e
 		return nil, err
 	}
 
-	var a Phone
+	var a phone
 	var c, u *string
 	var cc *int64
 	if err := st.QueryRowContext(ctx, rowID).Scan(
@@ -103,6 +107,32 @@ func (r *Queries) fetchPhoneByRowID(ctx context.Context, rowID int64) (*Phone, e
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	a.CountryCode = cc
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var ccode int
+	if cc != nil {
+		ccode = int(*cc)
+	}
+
+	var ntype, cabbrev string
+	if a.NumberType != nil {
+		ntype = *a.NumberType
+	}
+	if a.CountryAbbrev != nil {
+		cabbrev = *a.CountryAbbrev
+	}
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &contact.Phone{
+			Raw:           a.RawNumber,
+			E164:          a.E164,
+			Type:          ntype,
+			CountryCode:   ccode,
+			CountryAbbrev: cabbrev,
+		},
+	}, nil
 }

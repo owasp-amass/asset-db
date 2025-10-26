@@ -57,7 +57,7 @@ SELECT entity_id FROM ent_id;`
 func (s *Statements) UpsertContactRecord(ctx context.Context, a *contact.ContactRecord) (int64, error) {
 	row := s.UpsertContactRecordStmt.QueryRowContext(ctx,
 		sql.Named("discovered_at", a.DiscoveredAt),
-		sql.Named("attrs", ""),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)

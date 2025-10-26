@@ -86,8 +86,8 @@ type autnum struct {
 	Handle       string     `json:"handle"`
 	ASN          int64      `json:"asn"`
 	RecordStatus *string    `json:"record_status,omitempty"`
-	CreatedDate  *time.Time `json:"created_date,omitempty"`
-	UpdatedDate  *time.Time `json:"updated_date,omitempty"`
+	CreatedDate  *string    `json:"created_date,omitempty"`
+	UpdatedDate  *string    `json:"updated_date,omitempty"`
 	WhoisServer  *string    `json:"whois_server,omitempty"`
 }
 
@@ -116,9 +116,10 @@ func (r *Queries) fetchAutnumRecordByRowID(ctx context.Context, eid, rowID int64
 	}
 
 	var a autnum
-	var c, u, cd, ud *string
+	var c, u *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &a.RecordName, &a.Handle, &a.ASN, &a.RecordStatus, &cd, &ud, &a.WhoisServer,
+		&a.ID, &c, &u, &a.RecordName, &a.Handle, &a.ASN,
+		&a.RecordStatus, &a.CreatedDate, &a.UpdatedDate, &a.WhoisServer,
 	); err != nil {
 		return nil, err
 	}
@@ -129,13 +130,13 @@ func (r *Queries) fetchAutnumRecordByRowID(ctx context.Context, eid, rowID int64
 		return nil, errors.New("failed to obtain the timestamps")
 	}
 
-	var cdate time.Time
-	if a.CreatedDate = parseTS(cd); a.CreatedDate != nil {
+	var cdate string
+	if a.CreatedDate != nil {
 		cdate = *a.CreatedDate
 	}
 
-	var udate time.Time
-	if a.UpdatedDate = parseTS(ud); a.UpdatedDate != nil {
+	var udate string
+	if a.UpdatedDate != nil {
 		udate = *a.UpdatedDate
 	}
 
@@ -163,8 +164,8 @@ func (r *Queries) fetchAutnumRecordByRowID(ctx context.Context, eid, rowID int64
 			Handle:      a.Handle,
 			Name:        rname,
 			WhoisServer: whois,
-			CreatedDate: cdate.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedDate: udate.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			CreatedDate: cdate,
+			UpdatedDate: udate,
 			Status:      []string{rstatus},
 		},
 	}, nil

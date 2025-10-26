@@ -72,13 +72,6 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type fqdn struct {
-	ID        int64      `json:"id"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	FQDN      string     `json:"fqdn"`
-}
-
 func (s *Statements) UpsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
 	row := s.UpsertFQDNStmt.QueryRowContext(ctx,
 		sql.Named("fqdn_text", a.Name),
@@ -96,22 +89,23 @@ func (r *Queries) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*type
 		return nil, err
 	}
 
-	var a fqdn
+	var id int64
+	var fqdn string
 	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.FQDN); err != nil {
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &fqdn); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
 		return nil, errors.New("failed to obtain the timestamps")
 	}
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: *a.CreatedAt,
-		LastSeen:  *a.UpdatedAt,
-		Asset:     &oamdns.FQDN{Name: a.FQDN},
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset:     &oamdns.FQDN{Name: fqdn},
 	}, nil
 }

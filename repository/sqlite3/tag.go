@@ -9,10 +9,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
 // UPSERT TAG DICTIONARY (returns tag_id) -------------------------------------
@@ -134,6 +137,58 @@ type TagAssignment struct {
 	Tag       Tag             `json:"tag"`
 	Details   json.RawMessage `json:"details,omitempty"`
 	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
+}
+
+func (r *sqliteRepository) CreateEntityTag(ctx context.Context, entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error) {
+	return r.CreateEntityProperty(ctx, entity, tag.Property)
+}
+
+func (r *sqliteRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
+	return nil, nil
+}
+
+func (r *sqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
+	return nil, nil
+}
+
+func (r *sqliteRepository) GetEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+	return nil, nil
+}
+
+func (r *sqliteRepository) DeleteEntityTag(ctx context.Context, id string) error {
+	tid, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.queries.DeleteTagByID(ctx, tid, true)
+	return err
+}
+
+func (r *sqliteRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, tag *types.EdgeTag) (*types.EdgeTag, error) {
+	return r.CreateEdgeProperty(ctx, edge, tag.Property)
+}
+
+func (r *sqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
+	return nil, nil
+}
+
+func (r *sqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
+	return nil, nil
+}
+
+func (r *sqliteRepository) GetEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
+	return nil, nil
+}
+
+func (r *sqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
+	tid, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.queries.DeleteTagByID(ctx, tid, true)
+	return err
 }
 
 func (s *Statements) UpsertTag(ctx context.Context, ns, name, value, metaJSON string) (int64, error) {

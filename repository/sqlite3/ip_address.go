@@ -7,9 +7,14 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"net/netip"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
 // IPADDRESS ------------------------------------------------------------------
@@ -70,25 +75,17 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type IPAddress struct {
-	ID        int64      `json:"id"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	IPVersion string     `json:"ip_version"`
-	IP        string     `json:"ip_address"`
-}
-
-func (s *Statements) UpsertIPAddress(ctx context.Context, ipVersion, ipAddress, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertIPAddress(ctx context.Context, a *oamnet.IPAddress) (int64, error) {
 	row := s.UpsertIPAddressStmt.QueryRowContext(ctx,
-		sql.Named("ip_version", ipVersion),
-		sql.Named("ip_address", ipAddress),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("ip_version", a.Type),
+		sql.Named("ip_address", a.Address),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchIPAddressByRowID(ctx context.Context, rowID int64) (*IPAddress, error) {
+func (r *Queries) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, ip_version, ip_address FROM ipaddress WHERE id = ?`
 
 	st, err := r.getOrPrepare(ctx, "ipaddress", query)
@@ -96,13 +93,31 @@ func (r *Queries) fetchIPAddressByRowID(ctx context.Context, rowID int64) (*IPAd
 		return nil, err
 	}
 
-	var a IPAddress
+	var id int64
 	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.IPVersion, &a.IP); err != nil {
+	var addrstr, iptype string
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &iptype, &addrstr); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	addr, err := netip.ParseAddr(addrstr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset: &oamnet.IPAddress{
+			Address: addr,
+			Type:    iptype,
+		},
+	}, nil
 }

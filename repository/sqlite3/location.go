@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/open-asset-model/contact"
 )
 
 // LOCATION -------------------------------------------------------------------
@@ -90,24 +94,24 @@ type Location struct {
 	BuildingNumber *string    `json:"building_number,omitempty"`
 }
 
-func (s *Statements) UpsertLocation(ctx context.Context, loc *Location) (int64, error) {
+func (s *Statements) UpsertLocation(ctx context.Context, a *contact.Location) (int64, error) {
 	row := s.UpsertLocationStmt.QueryRowContext(ctx,
-		sql.Named("city", loc.City),
-		sql.Named("unit", loc.Unit),
-		sql.Named("street_address", loc.StreetAddress),
-		sql.Named("country", loc.Country),
-		sql.Named("building", loc.Building),
-		sql.Named("province", loc.Province),
-		sql.Named("locality", loc.Locality),
-		sql.Named("postal_code", loc.PostalCode),
-		sql.Named("street_name", loc.StreetName),
-		sql.Named("building_number", loc.BuildingNumber),
+		sql.Named("city", a.City),
+		sql.Named("unit", a.Unit),
+		sql.Named("street_address", a.Address),
+		sql.Named("country", a.Country),
+		sql.Named("building", a.Building),
+		sql.Named("province", a.Province),
+		sql.Named("locality", a.Locality),
+		sql.Named("postal_code", a.PostalCode),
+		sql.Named("street_name", a.StreetName),
+		sql.Named("building_number", a.BuildingNumber),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchLocationByRowID(ctx context.Context, rowID int64) (*Location, error) {
+func (r *Queries) fetchLocationByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, city, unit, street_address, country, 
 			  building, province, locality, postal_code, street_name, building_number
 		      FROM location WHERE id = ?`
@@ -128,5 +132,60 @@ func (r *Queries) fetchLocationByRowID(ctx context.Context, rowID int64) (*Locat
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var building string
+	if a.Building != nil {
+		building = *a.Building
+	}
+
+	var buildnum string
+	if a.BuildingNumber != nil {
+		buildnum = *a.BuildingNumber
+	}
+
+	var streetname string
+	if a.StreetName != nil {
+		streetname = *a.StreetName
+	}
+
+	var unit string
+	if a.Unit != nil {
+		unit = *a.Unit
+	}
+
+	var locality string
+	if a.Locality != nil {
+		locality = *a.Locality
+	}
+
+	var province string
+	if a.Province != nil {
+		province = *a.Province
+	}
+
+	var postalcode string
+	if a.PostalCode != nil {
+		postalcode = *a.PostalCode
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &contact.Location{
+			Address:        a.StreetAddress,
+			Building:       building,
+			BuildingNumber: buildnum,
+			StreetName:     streetname,
+			Unit:           unit,
+			City:           a.City,
+			Locality:       locality,
+			Province:       province,
+			Country:        a.Country,
+			PostalCode:     postalcode,
+		},
+	}, nil
 }

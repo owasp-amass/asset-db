@@ -117,9 +117,9 @@ type domrec struct {
 	RecordStatus   *string    `json:"record_status,omitempty"` // TEXT[] in PG; in SQLite we commonly keep TEXT/JSON
 	Punycode       *string    `json:"punycode,omitempty"`
 	Extension      *string    `json:"extension,omitempty"`
-	CreatedDate    *time.Time `json:"created_date,omitempty"`
-	UpdatedDate    *time.Time `json:"updated_date,omitempty"`
-	ExpirationDate *time.Time `json:"expiration_date,omitempty"`
+	CreatedDate    *string    `json:"created_date,omitempty"`
+	UpdatedDate    *string    `json:"updated_date,omitempty"`
+	ExpirationDate *string    `json:"expiration_date,omitempty"`
 	WhoisServer    *string    `json:"whois_server,omitempty"`
 }
 
@@ -153,10 +153,11 @@ func (r *Queries) fetchDomainRecordByRowID(ctx context.Context, eid, rowID int64
 	}
 
 	var a domrec
-	var c, u, cd, ud, ex *string
+	var c, u *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &a.UniqueID, &a.RawRecord, &a.RecordName, &a.Domain,
-		&a.RecordStatus, &a.Punycode, &a.Extension, &cd, &ud, &ex, &a.WhoisServer,
+		&a.ID, &c, &u, &a.UniqueID, &a.RawRecord, &a.RecordName,
+		&a.Domain, &a.RecordStatus, &a.Punycode, &a.Extension,
+		&a.CreatedDate, &a.UpdatedDate, &a.ExpirationDate, &a.WhoisServer,
 	); err != nil {
 		return nil, err
 	}
@@ -167,18 +168,18 @@ func (r *Queries) fetchDomainRecordByRowID(ctx context.Context, eid, rowID int64
 		return nil, errors.New("failed to obtain the timestamps")
 	}
 
-	var cdate time.Time
-	if a.CreatedDate = parseTS(cd); a.CreatedDate != nil {
+	var cdate string
+	if a.CreatedDate != nil {
 		cdate = *a.CreatedDate
 	}
 
-	var udate time.Time
-	if a.UpdatedDate = parseTS(ud); a.UpdatedDate != nil {
+	var udate string
+	if a.UpdatedDate != nil {
 		udate = *a.UpdatedDate
 	}
 
-	var edate time.Time
-	if a.ExpirationDate = parseTS(ud); a.ExpirationDate != nil {
+	var edate string
+	if a.ExpirationDate != nil {
 		edate = *a.ExpirationDate
 	}
 
@@ -224,9 +225,9 @@ func (r *Queries) fetchDomainRecordByRowID(ctx context.Context, eid, rowID int64
 			Name:           a.RecordName,
 			Extension:      ext,
 			WhoisServer:    whois,
-			CreatedDate:    cdate.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedDate:    udate.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			ExpirationDate: edate.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			CreatedDate:    cdate,
+			UpdatedDate:    udate,
+			ExpirationDate: edate,
 			Status:         []string{rstatus},
 		},
 	}, nil

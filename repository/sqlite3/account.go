@@ -102,7 +102,7 @@ func (s *Statements) UpsertAccount(ctx context.Context, a *oamacct.Account) (int
 		sql.Named("account_number", a.Number),
 		sql.Named("balance", a.Balance),
 		sql.Named("active", a.Active),
-		sql.Named("attrs", ""),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
@@ -119,19 +119,11 @@ func (r *Queries) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*t
 
 	var a account
 	var c, u *string
-	var bal *float64
 	var act *int64
 	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &a.UniqueID, &a.AccountType, &a.Username, &a.AccountNo, &bal, &act,
+		&a.ID, &c, &u, &a.UniqueID, &a.AccountType, &a.Username, &a.AccountNo, &a.Balance, &act,
 	); err != nil {
 		return nil, err
-	}
-	if bal != nil {
-		a.Balance = bal
-	}
-	if act != nil {
-		b := *act != 0
-		a.Active = &b
 	}
 
 	a.CreatedAt = parseTS(c)
@@ -141,23 +133,24 @@ func (r *Queries) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*t
 	}
 
 	var username string
-	if a.Username == nil {
+	if a.Username != nil {
 		username = *a.Username
 	}
 
 	var acctnum string
-	if a.AccountNo == nil {
+	if a.AccountNo != nil {
 		acctnum = *a.AccountNo
 	}
 
 	var balance float64
-	if a.Balance == nil {
+	if a.Balance != nil {
 		balance = *a.Balance
 	}
 
 	var active bool
-	if a.Active == nil {
-		active = *a.Active
+	if act != nil {
+		b := *act != 0
+		active = b
 	}
 
 	return &types.Entity{

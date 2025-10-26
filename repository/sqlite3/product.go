@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
 // PRODUCT --------------------------------------------------------------------
@@ -62,7 +66,7 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type Product struct {
+type product struct {
 	ID                 int64      `json:"id"`
 	CreatedAt          *time.Time `json:"created_at,omitempty"`
 	UpdatedAt          *time.Time `json:"updated_at,omitempty"`
@@ -74,21 +78,21 @@ type Product struct {
 	CountryOfOrigin    *string    `json:"country_of_origin,omitempty"`
 }
 
-func (s *Statements) UpsertProduct(ctx context.Context, product *Product, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertProduct(ctx context.Context, a *oamplat.Product) (int64, error) {
 	row := s.UpsertProductStmt.QueryRowContext(ctx,
-		sql.Named("unique_id", product.UniqueID),
-		sql.Named("product_name", product.ProductName),
-		sql.Named("product_type", product.ProductType),
-		sql.Named("category", product.Category),
-		sql.Named("product_description", product.ProductDescription),
-		sql.Named("country_of_origin", product.CountryOfOrigin),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("unique_id", a.ID),
+		sql.Named("product_name", a.Name),
+		sql.Named("product_type", a.Type),
+		sql.Named("category", a.Category),
+		sql.Named("product_description", a.Description),
+		sql.Named("country_of_origin", a.CountryOfOrigin),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchProductByRowID(ctx context.Context, rowID int64) (*Product, error) {
+func (r *Queries) fetchProductByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, unique_id, product_name, product_type, category, product_description, country_of_origin
 		        FROM product WHERE id = ?`
 
@@ -97,7 +101,7 @@ func (r *Queries) fetchProductByRowID(ctx context.Context, rowID int64) (*Produc
 		return nil, err
 	}
 
-	var a Product
+	var a product
 	var c, u *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
 		&a.ID, &c, &u, &a.UniqueID, &a.ProductName, &a.ProductType, &a.Category, &a.ProductDescription, &a.CountryOfOrigin,
@@ -107,5 +111,35 @@ func (r *Queries) fetchProductByRowID(ctx context.Context, rowID int64) (*Produc
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var ptype, category, description, country string
+	if a.ProductType != nil {
+		ptype = *a.ProductType
+	}
+	if a.Category != nil {
+		category = *a.Category
+	}
+	if a.ProductDescription != nil {
+		description = *a.ProductDescription
+	}
+	if a.CountryOfOrigin != nil {
+		country = *a.CountryOfOrigin
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamplat.Product{
+			ID:              a.UniqueID,
+			Name:            a.ProductName,
+			Type:            ptype,
+			Category:        category,
+			Description:     description,
+			CountryOfOrigin: country,
+		},
+	}, nil
 }

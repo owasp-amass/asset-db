@@ -10,10 +10,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
 // ENSURE EDGE (returns edge_id) ----------------------------------------------
@@ -66,6 +71,181 @@ type EdgeWithTypes struct {
 	Edge
 	FromType string `json:"from_type"`
 	ToType   string `json:"to_type"`
+}
+
+func (r *sqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
+	if edge == nil {
+		return nil, fmt.Errorf("nil edge provided")
+	}
+
+	if edge.FromEntity == nil || edge.ToEntity == nil {
+		return nil, fmt.Errorf("both FromEntity and ToEntity must be set")
+	}
+
+	fromID, err := strconv.ParseInt(edge.FromEntity.ID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid FromEntity ID: %v", err)
+	}
+
+	toID, err := strconv.ParseInt(edge.ToEntity.ID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ToEntity ID: %v", err)
+	}
+
+	content, err := edge.Relation.JSON()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal edge relation to JSON: %v", err)
+	}
+
+	edgeID, err := r.stmts.EnsureEdge(ctx, string(edge.Relation.RelationType()), fromID, toID, string(content))
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure edge: %v", err)
+	}
+
+	return r.FindEdgeById(ctx, fmt.Sprintf("%d", edgeID))
+}
+
+func (r *sqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
+	edgeID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid edge ID: %v", err)
+	}
+
+	sqlEdge, err := r.queries.FindEdgeByID(ctx, edgeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve created edge: %v", err)
+	}
+
+	return convertSQLiteEdgeToOAMEdge(sqlEdge)
+}
+
+func convertSQLiteEdgeToOAMEdge(e *Edge) (*types.Edge, error) {
+	if e == nil {
+		return nil, fmt.Errorf("nil edge provided")
+	}
+
+	var rel oam.Relation
+	switch e.EType {
+	case strings.ToLower(string(oam.BasicDNSRelation)):
+		var r oamdns.BasicDNSRelation
+		if err := json.Unmarshal(e.Content, &r); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal BasicDNSRelation: %v", err)
+		}
+		rel = &r
+	case strings.ToLower(string(oam.PortRelation)):
+		var r oamgen.PortRelation
+		if err := json.Unmarshal(e.Content, &r); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal PortRelation: %v", err)
+		}
+		rel = &r
+	case strings.ToLower(string(oam.PrefDNSRelation)):
+		var r oamdns.PrefDNSRelation
+		if err := json.Unmarshal(e.Content, &r); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal PrefDNSRelation: %v", err)
+		}
+		rel = &r
+	case strings.ToLower(string(oam.SimpleRelation)):
+		var r oamgen.SimpleRelation
+		if err := json.Unmarshal(e.Content, &r); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal SimpleRelation: %v", err)
+		}
+		rel = &r
+	case strings.ToLower(string(oam.SRVDNSRelation)):
+		var r oamdns.SRVDNSRelation
+		if err := json.Unmarshal(e.Content, &r); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal SRVDNSRelation: %v", err)
+		}
+		rel = &r
+	default:
+		return nil, fmt.Errorf("unsupported edge type: %s", e.EType)
+	}
+
+	return &types.Edge{
+		ID:         fmt.Sprintf("%d", e.EdgeID),
+		CreatedAt:  (*e.CreatedAt).In(time.UTC).Local(),
+		LastSeen:   (*e.UpdatedAt).In(time.UTC).Local(),
+		Relation:   rel,
+		FromEntity: &types.Entity{ID: fmt.Sprintf("%d", e.FromEntityID)},
+		ToEntity:   &types.Entity{ID: fmt.Sprintf("%d", e.ToEntityID)},
+	}, nil
+}
+
+func (r *sqliteRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	eid, err := strconv.ParseInt(entity.ID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid entity ID: %v", err)
+	}
+
+	edges, err := r.queries.FindEdgesForEntity(ctx, eid, "in", "", since, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve incoming edges: %v", err)
+	}
+
+	var out []*types.Edge
+	for _, e := range edges {
+		if len(labels) > 0 {
+			matched := false
+			for _, l := range labels {
+				if e.EType == l {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		edge, err := convertSQLiteEdgeToOAMEdge(&e.Edge)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert edge: %v", err)
+		}
+		out = append(out, edge)
+	}
+	return out, nil
+}
+
+func (r *sqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	eid, err := strconv.ParseInt(entity.ID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid entity ID: %v", err)
+	}
+
+	edges, err := r.queries.FindEdgesForEntity(ctx, eid, "out", "", since, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve outgoing edges: %v", err)
+	}
+
+	var out []*types.Edge
+	for _, e := range edges {
+		if len(labels) > 0 {
+			matched := false
+			for _, l := range labels {
+				if e.EType == l {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		edge, err := convertSQLiteEdgeToOAMEdge(&e.Edge)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert edge: %v", err)
+		}
+		out = append(out, edge)
+	}
+	return out, nil
+}
+
+func (r *sqliteRepository) DeleteEdge(ctx context.Context, id string) error {
+	edgeID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid edge ID: %v", err)
+	}
+	return r.queries.DeleteEdgeByID(ctx, edgeID)
 }
 
 func (s *Statements) EnsureEdge(ctx context.Context, etype string, fromID, toID int64, contentJSON string) (int64, error) {

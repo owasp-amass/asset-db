@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/open-asset-model/people"
 )
 
 // PERSON ---------------------------------------------------------------------
@@ -59,7 +63,7 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type Person struct {
+type person struct {
 	ID         int64      `json:"id"`
 	CreatedAt  *time.Time `json:"created_at,omitempty"`
 	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
@@ -70,20 +74,20 @@ type Person struct {
 	MiddleName *string    `json:"middle_name,omitempty"`
 }
 
-func (s *Statements) UpsertPerson(ctx context.Context, p *Person, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertPerson(ctx context.Context, a *people.Person) (int64, error) {
 	row := s.UpsertPersonStmt.QueryRowContext(ctx,
-		sql.Named("full_name", p.FullName),
-		sql.Named("unique_id", p.UniqueID),
-		sql.Named("first_name", p.FirstName),
-		sql.Named("family_name", p.FamilyName),
-		sql.Named("middle_name", p.MiddleName),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("full_name", a.FullName),
+		sql.Named("unique_id", a.ID),
+		sql.Named("first_name", a.FirstName),
+		sql.Named("family_name", a.FamilyName),
+		sql.Named("middle_name", a.MiddleName),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchPersonByRowID(ctx context.Context, rowID int64) (*Person, error) {
+func (r *Queries) fetchPersonByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, full_name, unique_id, first_name, family_name, middle_name
 		      FROM person WHERE id = ?`
 
@@ -92,7 +96,7 @@ func (r *Queries) fetchPersonByRowID(ctx context.Context, rowID int64) (*Person,
 		return nil, err
 	}
 
-	var a Person
+	var a person
 	var c, u *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
 		&a.ID, &c, &u, &a.FullName, &a.UniqueID, &a.FirstName, &a.FamilyName, &a.MiddleName,
@@ -102,5 +106,34 @@ func (r *Queries) fetchPersonByRowID(ctx context.Context, rowID int64) (*Person,
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var fullname, firstname, familyname, middlename string
+	if a.FullName != nil {
+		fullname = *a.FullName
+	}
+	if a.FirstName != nil {
+		firstname = *a.FirstName
+	}
+	if a.FamilyName != nil {
+		familyname = *a.FamilyName
+	}
+	if a.MiddleName != nil {
+		middlename = *a.MiddleName
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &people.Person{
+			ID:         a.UniqueID,
+			FullName:   fullname,
+			FirstName:  firstname,
+			FamilyName: familyname,
+			MiddleName: middlename,
+		},
+	}, nil
 }

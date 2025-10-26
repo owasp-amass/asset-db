@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
 // PRODUCTRELEASE -------------------------------------------------------------
@@ -49,25 +53,17 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type ProductRelease struct {
-	ID          int64      `json:"id"`
-	CreatedAt   *time.Time `json:"created_at,omitempty"`
-	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
-	ReleaseName string     `json:"release_name"`
-	ReleaseDate *time.Time `json:"release_date,omitempty"`
-}
-
-func (s *Statements) UpsertProductRelease(ctx context.Context, release *ProductRelease, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertProductRelease(ctx context.Context, a *oamplat.ProductRelease) (int64, error) {
 	row := s.UpsertProductReleaseStmt.QueryRowContext(ctx,
-		sql.Named("release_name", release.ReleaseName),
-		sql.Named("release_date", release.ReleaseDate),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("release_name", a.Name),
+		sql.Named("release_date", a.ReleaseDate),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchProductReleaseByRowID(ctx context.Context, rowID int64) (*ProductRelease, error) {
+func (r *Queries) fetchProductReleaseByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, release_name, release_date
 		      FROM productrelease WHERE id = ?`
 
@@ -76,14 +72,31 @@ func (r *Queries) fetchProductReleaseByRowID(ctx context.Context, rowID int64) (
 		return nil, err
 	}
 
-	var a ProductRelease
+	var id int64
+	var name string
 	var c, u, rd *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.ReleaseName, &rd); err != nil {
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &name, &rd); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	a.ReleaseDate = parseTS(rd)
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var rdate string
+	if rd != nil {
+		rdate = *rd
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset: &oamplat.ProductRelease{
+			Name:        name,
+			ReleaseDate: rdate,
+		},
+	}, nil
 }

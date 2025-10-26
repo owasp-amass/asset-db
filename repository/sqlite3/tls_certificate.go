@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 )
 
 // TLSCERTIFICATE -------------------------------------------------------------
@@ -96,11 +100,11 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type TLSCertificate struct {
+type cert struct {
 	ID                    int64      `json:"id"`
 	CreatedAt             *time.Time `json:"created_at,omitempty"`
 	UpdatedAt             *time.Time `json:"updated_at,omitempty"`
-	IsCA                  *bool      `json:"is_ca,omitempty"`
+	IsCA                  bool       `json:"is_ca,omitempty"`
 	TLSVersion            *int64     `json:"tls_version,omitempty"`
 	KeyUsage              *string    `json:"key_usage,omitempty"`
 	NotAfter              *time.Time `json:"not_after,omitempty"`
@@ -116,32 +120,29 @@ type TLSCertificate struct {
 	CRLDistributionPoints *string    `json:"crl_distribution_points,omitempty"`
 }
 
-func (s *Statements) UpsertTLSCertificate(ctx context.Context, cert *TLSCertificate, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertTLSCertificate(ctx context.Context, a *oamcert.TLSCertificate) (int64, error) {
 	row := s.UpsertTLSCertificateStmt.QueryRowContext(ctx,
-		sql.Named("id", cert.ID),
-		sql.Named("created_at", cert.CreatedAt),
-		sql.Named("updated_at", cert.UpdatedAt),
-		sql.Named("is_ca", cert.IsCA),
-		sql.Named("tls_version", cert.TLSVersion),
-		sql.Named("key_usage", cert.KeyUsage),
-		sql.Named("not_after", cert.NotAfter),
-		sql.Named("not_before", cert.NotBefore),
-		sql.Named("ext_key_usage", cert.ExtKeyUsage),
-		sql.Named("serial_number", cert.SerialNumber),
-		sql.Named("subject_key_id", cert.SubjectKeyID),
-		sql.Named("authority_key_id", cert.AuthorityKeyID),
-		sql.Named("issuer_common_name", cert.IssuerCommonName),
-		sql.Named("signature_algorithm", cert.SignatureAlgorithm),
-		sql.Named("subject_common_name", cert.SubjectCommonName),
-		sql.Named("public_key_algorithm", cert.PublicKeyAlgorithm),
-		sql.Named("crl_distribution_points", cert.CRLDistributionPoints),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("is_ca", a.IsCA),
+		sql.Named("tls_version", a.Version),
+		sql.Named("key_usage", a.KeyUsage),
+		sql.Named("not_after", a.NotAfter),
+		sql.Named("not_before", a.NotBefore),
+		sql.Named("ext_key_usage", a.ExtKeyUsage),
+		sql.Named("serial_number", a.SerialNumber),
+		sql.Named("subject_key_id", a.SubjectKeyID),
+		sql.Named("authority_key_id", a.AuthorityKeyID),
+		sql.Named("issuer_common_name", a.IssuerCommonName),
+		sql.Named("signature_algorithm", a.SignatureAlgorithm),
+		sql.Named("subject_common_name", a.SubjectCommonName),
+		sql.Named("public_key_algorithm", a.PublicKeyAlgorithm),
+		sql.Named("crl_distribution_points", a.CRLDistributionPoints),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchTLSCertificateByRowID(ctx context.Context, rowID int64) (*TLSCertificate, error) {
+func (r *Queries) fetchTLSCertificateByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, is_ca, tls_version, key_usage, not_after, not_before, ext_key_usage,
 		             serial_number, subject_key_id, authority_key_id, issuer_common_name, signature_algorithm,
 		             public_key_algorithm, crl_distribution_points, subject_common_name
@@ -152,7 +153,7 @@ func (r *Queries) fetchTLSCertificateByRowID(ctx context.Context, rowID int64) (
 		return nil, err
 	}
 
-	var a TLSCertificate
+	var a cert
 	var c, u, na, nb *string
 	var isca *int64
 	var tlsver *int64
@@ -163,15 +164,82 @@ func (r *Queries) fetchTLSCertificateByRowID(ctx context.Context, rowID int64) (
 	); err != nil {
 		return nil, err
 	}
+
 	if isca != nil {
 		b := *isca != 0
-		a.IsCA = &b
+		a.IsCA = b
 	}
 
-	a.TLSVersion = tlsver
-	a.NotAfter = parseTS(na)
-	a.NotBefore = parseTS(nb)
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var version string
+	if a.TLSVersion != nil {
+		version = strconv.FormatInt(*a.TLSVersion, 10)
+	}
+
+	var iscommon string
+	if a.IssuerCommonName != nil {
+		iscommon = *a.IssuerCommonName
+	}
+
+	var notafter, notbefore string
+	if na != nil {
+		notafter = *na
+	}
+	if nb != nil {
+		notbefore = *nb
+	}
+
+	var keyusage string
+	if a.KeyUsage != nil {
+		keyusage = *a.KeyUsage
+	}
+
+	var extkey string
+	if a.ExtKeyUsage != nil {
+		extkey = *a.ExtKeyUsage
+	}
+
+	var subkeyid, authkeyid, sigalg, pubkeyalg, crldp string
+	if a.SubjectKeyID != nil {
+		subkeyid = *a.SubjectKeyID
+	}
+	if a.AuthorityKeyID != nil {
+		authkeyid = *a.AuthorityKeyID
+	}
+	if a.SignatureAlgorithm != nil {
+		sigalg = *a.SignatureAlgorithm
+	}
+	if a.PublicKeyAlgorithm != nil {
+		pubkeyalg = *a.PublicKeyAlgorithm
+	}
+	if a.CRLDistributionPoints != nil {
+		crldp = *a.CRLDistributionPoints
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamcert.TLSCertificate{
+			Version:               version,
+			SerialNumber:          a.SerialNumber,
+			SubjectCommonName:     a.SubjectCommonName,
+			IssuerCommonName:      iscommon,
+			NotBefore:             notbefore,
+			NotAfter:              notafter,
+			KeyUsage:              []string{keyusage},
+			ExtKeyUsage:           []string{extkey},
+			SignatureAlgorithm:    sigalg,
+			PublicKeyAlgorithm:    pubkeyalg,
+			IsCA:                  a.IsCA,
+			CRLDistributionPoints: []string{crldp},
+			SubjectKeyID:          subkeyid,
+			AuthorityKeyID:        authkeyid,
+		},
+	}, nil
 }

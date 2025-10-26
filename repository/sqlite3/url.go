@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
 // URL ------------------------------------------------------------------------
@@ -81,31 +85,20 @@ WITH
   )
 SELECT entity_id FROM ent_id;`
 
-type URLAsset struct {
-	ID        int64      `json:"id"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	RawURL    string     `json:"raw_url"`
-	Host      string     `json:"host"`
-	URLPath   *string    `json:"url_path,omitempty"`
-	Port      *int64     `json:"port,omitempty"`
-	Scheme    *string    `json:"scheme,omitempty"`
-}
-
-func (s *Statements) UpsertURL(ctx context.Context, url *URLAsset, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertURL(ctx context.Context, a *oamurl.URL) (int64, error) {
 	row := s.UpsertURLStmt.QueryRowContext(ctx,
-		sql.Named("raw_url", url.RawURL),
-		sql.Named("host", url.Host),
-		sql.Named("url_path", url.URLPath),
-		sql.Named("port", url.Port),
-		sql.Named("scheme", url.Scheme),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("raw_url", a.Raw),
+		sql.Named("host", a.Host),
+		sql.Named("url_path", a.Path),
+		sql.Named("port", a.Port),
+		sql.Named("scheme", a.Scheme),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchURLByRowID(ctx context.Context, rowID int64) (*URLAsset, error) {
+func (r *Queries) fetchURLByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, raw_url, host, url_path, port, scheme
 		      FROM url WHERE id = ?`
 
@@ -114,15 +107,44 @@ func (r *Queries) fetchURLByRowID(ctx context.Context, rowID int64) (*URLAsset, 
 		return nil, err
 	}
 
-	var a URLAsset
-	var port *int64
+	var id int64
+	var raw, host string
+	var p, sch *string
+	var portptr *int64
 	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.RawURL, &a.Host, &a.URLPath, &port, &a.Scheme); err != nil {
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &raw, &host, &p, &portptr, &sch); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	a.Port = port
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var path, scheme string
+	if p != nil {
+		path = *p
+	}
+	if sch != nil {
+		scheme = *sch
+	}
+
+	var port int
+	if portptr != nil {
+		port = int(*portptr)
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset: &oamurl.URL{
+			Raw:    raw,
+			Scheme: scheme,
+			Host:   host,
+			Port:   port,
+			Path:   path,
+		},
+	}, nil
 }

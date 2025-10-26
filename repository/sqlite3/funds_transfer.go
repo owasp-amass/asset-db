@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamfin "github.com/owasp-amass/open-asset-model/financial"
 )
 
 // FUNDSTRANSFER --------------------------------------------------------------
@@ -65,7 +69,7 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type FundsTransfer struct {
+type funds struct {
 	ID              int64      `json:"id"`
 	CreatedAt       *time.Time `json:"created_at,omitempty"`
 	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
@@ -74,25 +78,25 @@ type FundsTransfer struct {
 	ReferenceNumber *string    `json:"reference_number,omitempty"`
 	Currency        *string    `json:"currency,omitempty"`
 	TransferMethod  *string    `json:"transfer_method,omitempty"`
-	ExchangeDate    *time.Time `json:"exchange_date,omitempty"`
+	ExchangeDate    *string    `json:"exchange_date,omitempty"`
 	ExchangeRate    *float64   `json:"exchange_rate,omitempty"`
 }
 
-func (s *Statements) UpsertFundsTransfer(ctx context.Context, ft FundsTransfer) (int64, error) {
+func (s *Statements) UpsertFundsTransfer(ctx context.Context, a *oamfin.FundsTransfer) (int64, error) {
 	row := s.UpsertFundsTransferStmt.QueryRowContext(ctx,
-		sql.Named("unique_id", ft.UniqueID),
-		sql.Named("amount", ft.Amount),
-		sql.Named("reference_number", ft.ReferenceNumber),
-		sql.Named("currency", ft.Currency),
-		sql.Named("transfer_method", ft.TransferMethod),
-		sql.Named("exchange_date", ft.ExchangeDate),
-		sql.Named("exchange_rate", ft.ExchangeRate),
+		sql.Named("unique_id", a.ID),
+		sql.Named("amount", a.Amount),
+		sql.Named("reference_number", a.ReferenceNumber),
+		sql.Named("currency", a.Currency),
+		sql.Named("transfer_method", a.Method),
+		sql.Named("exchange_date", a.ExchangeDate),
+		sql.Named("exchange_rate", a.ExchangeRate),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchFundsTransferByRowID(ctx context.Context, rowID int64) (*FundsTransfer, error) {
+func (r *Queries) fetchFundsTransferByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, unique_id, amount, reference_number, currency, transfer_method, exchange_date, exchange_rate
 		      FROM fundstransfer WHERE id = ?`
 
@@ -101,7 +105,7 @@ func (r *Queries) fetchFundsTransferByRowID(ctx context.Context, rowID int64) (*
 		return nil, err
 	}
 
-	var a FundsTransfer
+	var a funds
 	var c, u, ed *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.UniqueID,
 		&a.Amount, &a.ReferenceNumber, &a.Currency, &a.TransferMethod, &ed, &a.ExchangeRate,
@@ -111,6 +115,47 @@ func (r *Queries) fetchFundsTransferByRowID(ctx context.Context, rowID int64) (*
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	a.ExchangeDate = parseTS(ed)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var edate string
+	if a.ExchangeDate != nil {
+		edate = *a.ExchangeDate
+	}
+
+	var refnum string
+	if a.ReferenceNumber != nil {
+		refnum = *a.ReferenceNumber
+	}
+
+	var curr string
+	if a.Currency != nil {
+		curr = *a.Currency
+	}
+
+	var tmethod string
+	if a.TransferMethod != nil {
+		tmethod = *a.TransferMethod
+	}
+
+	var exrate float64
+	if a.ExchangeRate != nil {
+		exrate = *a.ExchangeRate
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamfin.FundsTransfer{
+			ID:              a.UniqueID,
+			Amount:          a.Amount,
+			ReferenceNumber: refnum,
+			Currency:        curr,
+			Method:          tmethod,
+			ExchangeDate:    edate,
+			ExchangeRate:    exrate,
+		},
+	}, nil
 }

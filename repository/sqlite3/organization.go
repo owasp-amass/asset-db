@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 // ORGANIZATION ----------------------------------------------------------------
@@ -65,35 +69,35 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type Organization struct {
+type organization struct {
 	ID             int64      `json:"id"`
 	CreatedAt      *time.Time `json:"created_at,omitempty"`
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 	OrgName        *string    `json:"org_name,omitempty"`
-	Active         *bool      `json:"active,omitempty"`
+	Active         bool       `json:"active,omitempty"`
 	UniqueID       string     `json:"unique_id"`
 	LegalName      string     `json:"legal_name"`
 	Jurisdiction   *string    `json:"jurisdiction,omitempty"`
-	FoundingDate   *time.Time `json:"founding_date,omitempty"`
+	FoundingDate   *string    `json:"founding_date,omitempty"`
 	RegistrationID *string    `json:"registration_id,omitempty"`
 }
 
-func (s *Statements) UpsertOrganization(ctx context.Context, org *Organization, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertOrganization(ctx context.Context, a *oamorg.Organization) (int64, error) {
 	row := s.UpsertOrganizationStmt.QueryRowContext(ctx,
-		sql.Named("unique_id", org.UniqueID),
-		sql.Named("legal_name", org.LegalName),
-		sql.Named("org_name", org.OrgName),
-		sql.Named("active", org.Active),
-		sql.Named("jurisdiction", org.Jurisdiction),
-		sql.Named("founding_date", org.FoundingDate),
-		sql.Named("registration_id", org.RegistrationID),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("unique_id", a.ID),
+		sql.Named("org_name", a.Name),
+		sql.Named("legal_name", a.LegalName),
+		sql.Named("founding_date", a.FoundingDate),
+		sql.Named("jurisdiction", a.Jurisdiction),
+		sql.Named("registration_id", a.RegistrationID),
+		sql.Named("active", a.Active),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchOrganizationByRowID(ctx context.Context, rowID int64) (*Organization, error) {
+func (r *Queries) fetchOrganizationByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, org_name, active, unique_id, legal_name, jurisdiction, founding_date, registration_id
 		      FROM organization WHERE id = ?`
 
@@ -103,20 +107,57 @@ func (r *Queries) fetchOrganizationByRowID(ctx context.Context, rowID int64) (*O
 	}
 
 	var act *int64
-	var a Organization
+	var a organization
 	var c, u, fd *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
 		&a.ID, &c, &u, &a.OrgName, &act, &a.UniqueID, &a.LegalName, &a.Jurisdiction, &fd, &a.RegistrationID,
 	); err != nil {
 		return nil, err
 	}
-	if act != nil {
-		b := *act != 0
-		a.Active = &b
-	}
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	a.FoundingDate = parseTS(fd)
-	return &a, nil
+	if a.CreatedAt == nil || a.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var orgname string
+	if a.OrgName != nil {
+		orgname = *a.OrgName
+	}
+
+	var jurisdiction string
+	if a.Jurisdiction != nil {
+		jurisdiction = *a.Jurisdiction
+	}
+
+	var fdate string
+	if fd != nil {
+		fdate = *fd
+	}
+
+	var regid string
+	if a.RegistrationID != nil {
+		regid = *a.RegistrationID
+	}
+
+	if act != nil {
+		b := *act != 0
+		a.Active = b
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamorg.Organization{
+			ID:             a.UniqueID,
+			Name:           orgname,
+			LegalName:      a.LegalName,
+			FoundingDate:   fdate,
+			Jurisdiction:   jurisdiction,
+			RegistrationID: regid,
+			Active:         a.Active,
+		},
+	}, nil
 }

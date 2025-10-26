@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamfile "github.com/owasp-amass/open-asset-model/file"
 )
 
 // FILE -----------------------------------------------------------------------
@@ -57,27 +61,18 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type FileAsset struct {
-	ID        int64      `json:"id"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	FileURL   string     `json:"file_url"`
-	Basename  *string    `json:"basename,omitempty"`
-	FileType  *string    `json:"file_type,omitempty"`
-}
-
-func (s *Statements) UpsertFile(ctx context.Context, fileURL, basename, fileType, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
 	row := s.UpsertFileStmt.QueryRowContext(ctx,
-		sql.Named("file_url", fileURL),
-		sql.Named("basename", basename),
-		sql.Named("file_type", fileType),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("file_url", a.URL),
+		sql.Named("basename", a.Name),
+		sql.Named("file_type", a.Type),
+		sql.Named("attrs", ""),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchFileByRowID(ctx context.Context, rowID int64) (*FileAsset, error) {
+func (r *Queries) fetchFileByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, file_url, basename, file_type FROM file WHERE id = ?`
 
 	st, err := r.getOrPrepare(ctx, "file", query)
@@ -85,13 +80,37 @@ func (r *Queries) fetchFileByRowID(ctx context.Context, rowID int64) (*FileAsset
 		return nil, err
 	}
 
-	var a FileAsset
-	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.FileURL, &a.Basename, &a.FileType); err != nil {
+	var id int64
+	var url string
+	var c, u, fn, ft *string
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &url, &fn, &ft); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var fname string
+	if fn != nil {
+		fname = *fn
+	}
+
+	var ftype string
+	if ft != nil {
+		ftype = *ft
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset: &oamfile.File{
+			URL:  url,
+			Name: fname,
+			Type: ftype,
+		},
+	}, nil
 }

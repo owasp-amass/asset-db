@@ -7,9 +7,14 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"net/netip"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 // IPNETRECORD ----------------------------------------------------------------
@@ -114,28 +119,28 @@ type IPNetRecord struct {
 	Country      *string    `json:"country,omitempty"`
 }
 
-func (s *Statements) UpsertIPNetRecord(ctx context.Context, recordCIDR, recordName, ipVersion, handle, method, recordStatus, createdDate, updatedDate, whoisServer, parentHandle, startAddress, endAddress, country, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertIPNetRecord(ctx context.Context, a *oamreg.IPNetRecord) (int64, error) {
 	row := s.UpsertIPNetRecordStmt.QueryRowContext(ctx,
-		sql.Named("record_cidr", recordCIDR),
-		sql.Named("record_name", recordName),
-		sql.Named("ip_version", ipVersion),
-		sql.Named("handle", handle),
-		sql.Named("method", method),
-		sql.Named("record_status", recordStatus),
-		sql.Named("created_date", createdDate),
-		sql.Named("updated_date", updatedDate),
-		sql.Named("whois_server", whoisServer),
-		sql.Named("parent_handle", parentHandle),
-		sql.Named("start_address", startAddress),
-		sql.Named("end_address", endAddress),
-		sql.Named("country", country),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("record_cidr", a.CIDR.String()),
+		sql.Named("record_name", a.Name),
+		sql.Named("ip_version", a.Type),
+		sql.Named("handle", a.Handle),
+		sql.Named("method", a.Method),
+		sql.Named("record_status", a.Status),
+		sql.Named("created_date", a.CreatedDate),
+		sql.Named("updated_date", a.UpdatedDate),
+		sql.Named("whois_server", a.WhoisServer),
+		sql.Named("parent_handle", a.ParentHandle),
+		sql.Named("start_address", a.StartAddress.String()),
+		sql.Named("end_address", a.EndAddress.String()),
+		sql.Named("country", a.Country),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchIPNetRecordByRowID(ctx context.Context, rowID int64) (*IPNetRecord, error) {
+func (r *Queries) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, record_cidr, record_name, ip_version, handle, method, record_status,
 		      created_date, updated_date, whois_server, parent_handle, start_address, end_address, country
 		      FROM ipnetrecord WHERE id = ?`
@@ -156,7 +161,88 @@ func (r *Queries) fetchIPNetRecordByRowID(ctx context.Context, rowID int64) (*IP
 
 	a.CreatedAt = parseTS(c)
 	a.UpdatedAt = parseTS(u)
-	a.CreatedDate = parseTS(cd)
-	a.UpdatedDate = parseTS(ud)
-	return &a, nil
+	if a.CreatedDate == nil || a.UpdatedDate == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	ipnet, err := netip.ParsePrefix(a.RecordCIDR)
+	if err != nil {
+		return nil, err
+	}
+
+	var method string
+	if a.Method != nil {
+		method = *a.Method
+	}
+
+	var rstatus string
+	if a.RecordStatus != nil {
+		rstatus = *a.RecordStatus
+	}
+
+	var phandle string
+	if a.ParentHandle != nil {
+		phandle = *a.ParentHandle
+	}
+
+	var whois string
+	if a.WhoisServer != nil {
+		whois = *a.WhoisServer
+	}
+
+	var saddrstr string
+	if a.StartAddress != nil {
+		saddrstr = *a.StartAddress
+	}
+
+	startaddr, err := netip.ParseAddr(saddrstr)
+	if err != nil {
+		return nil, err
+	}
+
+	var eaddrstr string
+	if a.EndAddress != nil {
+		eaddrstr = *a.EndAddress
+	}
+
+	endaddr, err := netip.ParseAddr(eaddrstr)
+	if err != nil {
+		return nil, err
+	}
+
+	var country string
+	if a.Country != nil {
+		country = *a.Country
+	}
+
+	var cdate string
+	if cd != nil {
+		cdate = *cd
+	}
+
+	var udate string
+	if ud != nil {
+		udate = *ud
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
+		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		Asset: &oamreg.IPNetRecord{
+			CIDR:         ipnet,
+			Handle:       a.Handle,
+			StartAddress: startaddr,
+			EndAddress:   endaddr,
+			Type:         a.IPVersion,
+			Name:         a.RecordName,
+			Method:       method,
+			Country:      country,
+			ParentHandle: phandle,
+			WhoisServer:  whois,
+			CreatedDate:  cdate,
+			UpdatedDate:  udate,
+			Status:       []string{rstatus},
+		},
+	}, nil
 }

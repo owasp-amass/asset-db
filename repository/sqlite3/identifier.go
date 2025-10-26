@@ -7,9 +7,13 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
 // IDENTIFIER -----------------------------------------------------------------
@@ -47,25 +51,17 @@ const tmplUpsertIdentifier = `WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type Identifier struct {
-	ID        int64      `json:"id"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	IDType    *string    `json:"id_type,omitempty"`
-	UniqueID  string     `json:"unique_id"`
-}
-
-func (s *Statements) UpsertIdentifier(ctx context.Context, idType, uniqueID, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertIdentifier(ctx context.Context, a *oamgen.Identifier) (int64, error) {
 	row := s.UpsertIdentifierStmt.QueryRowContext(ctx,
-		sql.Named("id_type", idType),
-		sql.Named("unique_id", uniqueID),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("id_type", a.Type),
+		sql.Named("unique_id", a.UniqueID),
+		sql.Named("attrs", "{}"), // Identifiers currently have no extra attributes
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchIdentifierByRowID(ctx context.Context, rowID int64) (*Identifier, error) {
+func (r *Queries) fetchIdentifierByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, id_type, unique_id FROM identifier WHERE id = ?`
 
 	st, err := r.getOrPrepare(ctx, "identifier", query)
@@ -73,13 +69,31 @@ func (r *Queries) fetchIdentifierByRowID(ctx context.Context, rowID int64) (*Ide
 		return nil, err
 	}
 
-	var a Identifier
-	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.IDType, &a.UniqueID); err != nil {
+	var id int64
+	var uid string
+	var c, u, it *string
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &it, &uid); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var idType string
+	if it != nil {
+		idType = *it
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset: &oamgen.Identifier{
+			UniqueID: uid,
+			Type:     idType,
+		},
+	}, nil
 }

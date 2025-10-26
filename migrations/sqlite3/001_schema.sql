@@ -38,16 +38,7 @@ INSERT OR IGNORE INTO entity_type_lu(name) VALUES
  ('tlscertificate'),('url');
 
 INSERT OR IGNORE INTO edge_type_lu(name) VALUES
- ('address'),('contact'),('release'),('manufacturer'),('provider'),('certificate'),('terms_of_service'),
- ('product_used'),('common_name'),('subject_contact'),('issuer_contact'),('san_dns_name'),('san_url'),
- ('san_ip_address'),('san_email_address'),('issuing_certificate'),('issuing_certificate_url'),('domain'),
- ('ocsp_server'),('ip_address'),('file'),('id'),('user'),('announces'),('registration'),('fqdn'),('url'),
- ('name_server'),('registrar_contact'),('registrant_contact'),('billing_contact'),('contains'),('node'),
- ('dns_record'),('port'),('verified_for'),('sender'),('recipient'),('third_party'),('issuing_agent'),
- ('registration_agency'),('issuing_authority'),('ptr_record'),('legal_address'),('hq_address'),('location'),
- ('subsidiary'),('org_unit'),('account'),('member'),('website'),('social_media_profile'),('funding_source'),
- ('registrant'),('rdap_url'),('abuse_contact'),('admin_contact'),('technical_contact'),('whois_server'),
- ('organization'),('person'),('phone');
+ ('basicdnsrelation'),('portrelation'),('prefdnsrelation'),('simplerelation'),('srvdnsrelation');
 
 -- -----------------------------
 -- Core entity & mapping

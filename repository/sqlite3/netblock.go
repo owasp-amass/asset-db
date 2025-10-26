@@ -7,9 +7,14 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"net/netip"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
 // NETBLOCK -------------------------------------------------------------------
@@ -48,25 +53,17 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type Netblock struct {
-	ID           int64      `json:"id"`
-	CreatedAt    *time.Time `json:"created_at,omitempty"`
-	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
-	NetblockCIDR string     `json:"netblock_cidr"`
-	IPVersion    *string    `json:"ip_version,omitempty"`
-}
-
-func (s *Statements) UpsertNetblock(ctx context.Context, netblockCIDR string, ipVersion int, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertNetblock(ctx context.Context, a *oamnet.Netblock) (int64, error) {
 	row := s.UpsertNetblockStmt.QueryRowContext(ctx,
-		sql.Named("netblock_cidr", netblockCIDR),
-		sql.Named("ip_version", ipVersion),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("netblock_cidr", a.CIDR.String()),
+		sql.Named("ip_version", a.Type),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchNetblockByRowID(ctx context.Context, rowID int64) (*Netblock, error) {
+func (r *Queries) fetchNetblockByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, netblock_cidr, ip_version FROM netblock WHERE id = ?`
 
 	st, err := r.getOrPrepare(ctx, "netblock", query)
@@ -74,13 +71,36 @@ func (r *Queries) fetchNetblockByRowID(ctx context.Context, rowID int64) (*Netbl
 		return nil, err
 	}
 
-	var a Netblock
-	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&a.ID, &c, &u, &a.NetblockCIDR, &a.IPVersion); err != nil {
+	var id int64
+	var c, u, ipver *string
+	var netstr string
+	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &netstr, &ipver); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	cidr, err := netip.ParsePrefix(netstr)
+	if err != nil {
+		return nil, err
+	}
+
+	var version string
+	if ipver != nil {
+		version = *ipver
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset: &oamnet.Netblock{
+			CIDR: cidr,
+			Type: version,
+		},
+	}, nil
 }

@@ -8,10 +8,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"strconv"
 	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
 // SERVICE --------------------------------------------------------------------
@@ -61,7 +65,7 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type Service struct {
+type service struct {
 	ID           int64            `json:"id"`
 	CreatedAt    *time.Time       `json:"created_at,omitempty"`
 	UpdatedAt    *time.Time       `json:"updated_at,omitempty"`
@@ -72,20 +76,20 @@ type Service struct {
 	Attributes   *json.RawMessage `json:"attributes,omitempty"` // JSON
 }
 
-func (s *Statements) UpsertService(ctx context.Context, serv *Service, attrsJSON string) (int64, error) {
+func (s *Statements) UpsertService(ctx context.Context, a *oamplat.Service) (int64, error) {
 	row := s.UpsertServiceStmt.QueryRowContext(ctx,
-		sql.Named("unique_id", serv.UniqueID),
-		sql.Named("service_type", serv.ServiceType),
-		sql.Named("output_data", serv.OutputData),
-		sql.Named("output_length", serv.OutputLength),
-		sql.Named("attributes", serv.Attributes),
-		sql.Named("attrs", attrsJSON),
+		sql.Named("unique_id", a.ID),
+		sql.Named("service_type", a.Type),
+		sql.Named("output_data", a.Output),
+		sql.Named("output_length", a.OutputLen),
+		sql.Named("attributes", a.Attributes),
+		sql.Named("attrs", "{}"),
 	)
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchServiceByRowID(ctx context.Context, rowID int64) (*Service, error) {
+func (r *Queries) fetchServiceByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	query := `SELECT id, created_at, updated_at, unique_id, service_type, output_data, output_length, attributes
 		      FROM service WHERE id = ?`
 
@@ -94,22 +98,56 @@ func (r *Queries) fetchServiceByRowID(ctx context.Context, rowID int64) (*Servic
 		return nil, err
 	}
 
-	var a Service
+	var id int64
 	var c, u *string
 	var outLen *int64
-	var attrsStr *string
+	var uid, stype string
+	var outdata, attrsStr *string
 	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &a.UniqueID, &a.ServiceType, &a.OutputData, &outLen, &attrsStr,
+		&id, &c, &u, &uid, &stype, &outdata, &outLen, &attrsStr,
 	); err != nil {
 		return nil, err
 	}
+
+	var attributes json.RawMessage
 	if attrsStr != nil && strings.TrimSpace(*attrsStr) != "" {
 		raw := json.RawMessage(*attrsStr)
-		a.Attributes = &raw
+		attributes = raw
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	a.OutputLength = outLen
-	return &a, nil
+	created := parseTS(c)
+	updated := parseTS(u)
+	if created == nil || updated == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	var olen int
+	if outLen != nil {
+		olen = int(*outLen)
+	}
+
+	var odata string
+	if outdata != nil {
+		odata = *outdata
+	}
+
+	var sattrs map[string][]string
+	if attributes != nil {
+		if err := json.Unmarshal(attributes, &sattrs); err != nil {
+			return nil, err
+		}
+	}
+
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: (*created).In(time.UTC).Local(),
+		LastSeen:  (*updated).In(time.UTC).Local(),
+		Asset: &oamplat.Service{
+			ID:         uid,
+			Type:       stype,
+			Output:     odata,
+			OutputLen:  olen,
+			Attributes: sattrs,
+		},
+	}, nil
 }

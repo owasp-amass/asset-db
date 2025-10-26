@@ -18,10 +18,18 @@ import (
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamfile "github.com/owasp-amass/open-asset-model/file"
+	oamfin "github.com/owasp-amass/open-asset-model/financial"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
+	"github.com/owasp-amass/open-asset-model/people"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
 // Entity models a row in `entities` plus its inlined concrete Asset.
@@ -53,8 +61,40 @@ func (r *sqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*t
 		eid, err = r.stmts.UpsertContactRecord(ctx, asset.(*contact.ContactRecord))
 	case oam.DomainRecord:
 		eid, err = r.stmts.UpsertDomainRecord(ctx, asset.(*oamreg.DomainRecord))
+	case oam.File:
+		eid, err = r.stmts.UpsertFile(ctx, asset.(*oamfile.File))
 	case oam.FQDN:
 		eid, err = r.stmts.UpsertFQDN(ctx, asset.(*oamdns.FQDN))
+	case oam.FundsTransfer:
+		eid, err = r.stmts.UpsertFundsTransfer(ctx, asset.(*oamfin.FundsTransfer))
+	case oam.Identifier:
+		eid, err = r.stmts.UpsertIdentifier(ctx, asset.(*oamgen.Identifier))
+	case oam.IPAddress:
+		eid, err = r.stmts.UpsertIPAddress(ctx, asset.(*oamnet.IPAddress))
+	case oam.IPNetRecord:
+		eid, err = r.stmts.UpsertIPNetRecord(ctx, asset.(*oamreg.IPNetRecord))
+	case oam.Location:
+		eid, err = r.stmts.UpsertLocation(ctx, asset.(*contact.Location))
+	case oam.Netblock:
+		eid, err = r.stmts.UpsertNetblock(ctx, asset.(*oamnet.Netblock))
+	case oam.Organization:
+		eid, err = r.stmts.UpsertOrganization(ctx, asset.(*oamorg.Organization))
+	case oam.Person:
+		eid, err = r.stmts.UpsertPerson(ctx, asset.(*people.Person))
+	case oam.Phone:
+		eid, err = r.stmts.UpsertPhone(ctx, asset.(*contact.Phone))
+	case oam.Product:
+		eid, err = r.stmts.UpsertProduct(ctx, asset.(*oamplat.Product))
+	case oam.ProductRelease:
+		eid, err = r.stmts.UpsertProductRelease(ctx, asset.(*oamplat.ProductRelease))
+	case oam.Service:
+		eid, err = r.stmts.UpsertService(ctx, asset.(*oamplat.Service))
+	case oam.TLSCertificate:
+		eid, err = r.stmts.UpsertTLSCertificate(ctx, asset.(*oamcert.TLSCertificate))
+	case oam.URL:
+		eid, err = r.stmts.UpsertURL(ctx, asset.(*oamurl.URL))
+	default:
+		return nil, fmt.Errorf("unsupported asset type %q", asset.AssetType())
 	}
 
 	if err != nil {
