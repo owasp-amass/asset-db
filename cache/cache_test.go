@@ -15,7 +15,7 @@ import (
 
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
-	"github.com/owasp-amass/asset-db/repository/sqlrepo"
+	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -61,8 +61,8 @@ func TestGetDBType(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = cache.Close() }()
 
-	if dbtype := cache.GetDBType(); dbtype != sqlrepo.SQLite {
-		t.Errorf("DB type was: %s, expected: %s", dbtype, sqlrepo.SQLite)
+	if dbtype := cache.GetDBType(); dbtype != sqlite3.SQLite {
+		t.Errorf("DB type was: %s, expected: %s", dbtype, sqlite3.SQLite)
 	}
 }
 
@@ -72,12 +72,12 @@ func createTestRepositories() (repository.Repository, repository.Repository, str
 		return nil, nil, "", errors.New("failed to create the temp dir")
 	}
 
-	c, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	c, err := assetdb.New(sqlite3.SQLiteMemory, "")
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("failed to create the cache db: %s", err.Error())
 	}
 
-	db, err := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "assetdb.sqlite"))
+	db, err := assetdb.New(sqlite3.SQLite, filepath.Join(dir, "assetdb.sqlite"))
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("failed to create the database: %s", err.Error())
 	}

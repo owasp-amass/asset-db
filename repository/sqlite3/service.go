@@ -65,17 +65,6 @@ WITH
              WHERE entity_ref.entity_id IS NOT excluded.entity_id)
 SELECT entity_id FROM ent_id;`
 
-type service struct {
-	ID           int64            `json:"id"`
-	CreatedAt    *time.Time       `json:"created_at,omitempty"`
-	UpdatedAt    *time.Time       `json:"updated_at,omitempty"`
-	UniqueID     string           `json:"unique_id"`
-	ServiceType  string           `json:"service_type"`
-	OutputData   *string          `json:"output_data,omitempty"`
-	OutputLength *int64           `json:"output_length,omitempty"`
-	Attributes   *json.RawMessage `json:"attributes,omitempty"` // JSON
-}
-
 func (s *Statements) UpsertService(ctx context.Context, a *oamplat.Service) (int64, error) {
 	row := s.UpsertServiceStmt.QueryRowContext(ctx,
 		sql.Named("unique_id", a.ID),

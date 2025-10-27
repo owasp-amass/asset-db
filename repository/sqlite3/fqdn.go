@@ -104,8 +104,8 @@ func (r *Queries) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*type
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: (*created).In(time.UTC).Local(),
-		LastSeen:  (*updated).In(time.UTC).Local(),
+		CreatedAt: created.In(time.UTC).Local(),
+		LastSeen:  updated.In(time.UTC).Local(),
 		Asset:     &oamdns.FQDN{Name: fqdn},
 	}, nil
 }

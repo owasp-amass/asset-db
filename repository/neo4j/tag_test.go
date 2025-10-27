@@ -43,7 +43,7 @@ func TestEntityTag(t *testing.T) {
 		t.Errorf("tag.LastSeen: %s, expected to be after: %s", ct.LastSeen.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
 
-	tag, err := store.findEntityTagById(ctx, ct.ID)
+	tag, err := store.FindEntityTagById(ctx, ct.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.CreatedAt, tag.CreatedAt)
 	assert.Equal(t, ct.LastSeen, tag.LastSeen)
@@ -84,7 +84,7 @@ func TestEntityTag(t *testing.T) {
 	err = store.DeleteEntityTag(ctx, ct3.ID)
 	assert.NoError(t, err)
 
-	_, err = store.findEntityTagById(ctx, ct3.ID)
+	_, err = store.FindEntityTagById(ctx, ct3.ID)
 	assert.Error(t, err)
 }
 
@@ -123,7 +123,7 @@ func TestEdgeTag(t *testing.T) {
 		t.Errorf("tag.LastSeen: %s, expected to be after: %s", ct.LastSeen.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
 
-	tag, err := store.findEdgeTagById(ctx, ct.ID)
+	tag, err := store.FindEdgeTagById(ctx, ct.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.CreatedAt, tag.CreatedAt)
 	assert.Equal(t, ct.LastSeen, tag.LastSeen)
@@ -164,6 +164,6 @@ func TestEdgeTag(t *testing.T) {
 	err = store.DeleteEdgeTag(ctx, ct3.ID)
 	assert.NoError(t, err)
 
-	_, err = store.findEdgeTagById(ctx, ct3.ID)
+	_, err = store.FindEdgeTagById(ctx, ct3.ID)
 	assert.Error(t, err)
 }

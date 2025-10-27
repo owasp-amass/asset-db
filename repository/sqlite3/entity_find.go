@@ -180,7 +180,7 @@ JOIN ` + table + ` a ON a.id = r.row_id
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []*types.Entity
 	for rows.Next() {
@@ -232,7 +232,7 @@ ORDER BY e.updated_at DESC, e.entity_id DESC`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := make([]*types.Entity, 0, max(0, limit))
 	for rows.Next() {
@@ -295,7 +295,7 @@ JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []*types.Entity
 	for rows.Next() {

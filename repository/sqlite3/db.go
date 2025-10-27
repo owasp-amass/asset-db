@@ -73,7 +73,7 @@ func sqliteDatabase(dsn string, conns, idles int) (*sqliteRepository, error) {
 // Close implements the Repository interface.
 func (sql *sqliteRepository) Close() error {
 	if sql.queries != nil {
-		sql.queries.Close()
+		_ = sql.queries.Close()
 	}
 	if sql.stmts != nil {
 		sql.stmts.Close()

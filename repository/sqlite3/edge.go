@@ -341,7 +341,7 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []EdgeWithTypes
 	for rows.Next() {
@@ -394,7 +394,7 @@ WHERE `)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []Edge
 	for rows.Next() {

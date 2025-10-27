@@ -154,16 +154,16 @@ func (neo *neoRepository) uniqueEntityTagID() string {
 
 	for {
 		id := uuid.New().String()
-		if _, err := neo.findEntityTagById(ctx, id); err != nil {
+		if _, err := neo.FindEntityTagById(ctx, id); err != nil {
 			return id
 		}
 	}
 }
 
-// findEntityTagById finds an entity tag in the database by the ID.
+// FindEntityTagById finds an entity tag in the database by the ID.
 // It takes a string representing the entity tag ID and retrieves the corresponding tag from the database.
 // Returns the discovered tag as a types.EntityTag or an error if the asset is not found.
-func (neo *neoRepository) findEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
+func (neo *neoRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

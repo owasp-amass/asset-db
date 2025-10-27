@@ -53,12 +53,12 @@ func (r *Queries) DeleteEntityByID(ctx context.Context, entityID int64, alsoDele
 			var t string
 			var id int64
 			if err := rows.Scan(&t, &id); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return err
 			}
 			refs = append(refs, ref{table: t, rowID: id})
 		}
-		rows.Close()
+		_ = rows.Close()
 
 		for _, rf := range refs {
 			tbl := validateAssetTable(rf.table)

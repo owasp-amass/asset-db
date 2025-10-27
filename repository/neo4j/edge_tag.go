@@ -154,16 +154,16 @@ func (neo *neoRepository) uniqueEdgeTagID() string {
 
 	for {
 		id := uuid.New().String()
-		if _, err := neo.findEdgeTagById(ctx, id); err != nil {
+		if _, err := neo.FindEdgeTagById(ctx, id); err != nil {
 			return id
 		}
 	}
 }
 
-// findEdgeTagById finds an edge tag in the database by the ID.
+// FindEdgeTagById finds an edge tag in the database by the ID.
 // It takes a string representing the edge tag ID and retrieves the corresponding tag from the database.
 // Returns the discovered tag as a types.EdgeTag or an error if the asset is not found.
-func (neo *neoRepository) findEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
+func (neo *neoRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

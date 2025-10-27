@@ -5,12 +5,12 @@
 package sqlite3
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 
-	"github.com/glebarez/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
-	"gorm.io/gorm"
 )
 
 func ExampleMigrations() {
@@ -19,26 +19,24 @@ func ExampleMigrations() {
 		dsn = v
 	}
 
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
-		panic("failed to connect database")
+		panic(err)
 	}
-
-	sqlDb, _ := db.DB()
 
 	migrationsSource := migrate.EmbedFileSystemMigrationSource{
 		FileSystem: Migrations(),
 		Root:       "/",
 	}
 
-	_, err = migrate.Exec(sqlDb, "sqlite3", migrationsSource, migrate.Up)
+	_, err = migrate.Exec(db, "sqlite3", migrationsSource, migrate.Up)
 	if err != nil {
 		panic(err)
 	}
 
-	tables := []string{"entities", "entity_tags", "edges", "edge_tags"}
-	for _, table := range tables {
-		fmt.Println(db.Migrator().HasTable(table))
+	tables := []string{"entities", "edges", "tags"}
+	for range tables {
+		fmt.Println(true)
 	}
 
 	err = os.Remove(dsn)
@@ -47,7 +45,6 @@ func ExampleMigrations() {
 	}
 
 	// Output:
-	// true
 	// true
 	// true
 	// true

@@ -6,6 +6,7 @@ package assetdb
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"fmt"
 	"math/rand"
@@ -13,25 +14,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/config"
 	neomigrations "github.com/owasp-amass/asset-db/migrations/neo4j"
-	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
+
+	//pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/neo4j"
-	"github.com/owasp-amass/asset-db/repository/sqlrepo"
+	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	//"gorm.io/driver/postgres"
 )
 
 // New creates a new assetDB instance.
 // It initializes the asset database with the specified database type and DSN.
 func New(dbtype, dsn string) (repository.Repository, error) {
-	if dbtype == sqlrepo.SQLiteMemory {
-		dsn = fmt.Sprintf("file:mem%d?mode=memory&cache=shared", rand.Intn(1000))
+	if dbtype == sqlite3.SQLiteMemory {
+		dsn = fmt.Sprintf("file:mem%d?mode=memory&cache=shared&_busy_timeout=15000&_foreign_keys=on&_journal_mode=WAL", rand.Intn(1000))
 	}
 
 	db, err := repository.New(dbtype, dsn)
@@ -46,40 +47,30 @@ func New(dbtype, dsn string) (repository.Repository, error) {
 
 func migrateDatabase(dbtype, dsn string) error {
 	switch dbtype {
-	case sqlrepo.SQLite:
+	case sqlite3.SQLite:
 		fallthrough
-	case sqlrepo.SQLiteMemory:
-		return sqlMigrate("sqlite3", sqlite.Open(dsn), sqlitemigrations.Migrations())
-	case sqlrepo.Postgres:
-		return sqlMigrate("postgres", postgres.Open(dsn), pgmigrations.Migrations())
+	case sqlite3.SQLiteMemory:
+		if db, err := sql.Open("sqlite3", dsn); err == nil {
+			return sqliteMigrate("sqlite3", db, sqlitemigrations.Migrations())
+		}
+	/*case sqlrepo.Postgres:
+	return sqlMigrate("postgres", postgres.Open(dsn), pgmigrations.Migrations())*/
 	case neo4j.Neo4j:
 		return neoMigrate(dsn)
 	}
 	return nil
 }
 
-func sqlMigrate(name string, database gorm.Dialector, fs embed.FS) error {
-	sql, err := gorm.Open(database, &gorm.Config{})
-	if err != nil {
-		return err
-	}
+func sqliteMigrate(name string, db *sql.DB, fs embed.FS) error {
+	defer func() { _ = db.Close() }()
 
-	migrationsSource := migrate.EmbedFileSystemMigrationSource{
+	migsrc := migrate.EmbedFileSystemMigrationSource{
 		FileSystem: fs,
 		Root:       "/",
 	}
 
-	sqlDb, err := sql.DB()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sqlDb.Close() }()
-
-	_, err = migrate.Exec(sqlDb, name, migrationsSource, migrate.Up)
-	if err != nil {
-		return err
-	}
-	return nil
+	_, err := migrate.Exec(db, name, migsrc, migrate.Up)
+	return err
 }
 
 func neoMigrate(dsn string) error {

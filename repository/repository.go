@@ -12,7 +12,6 @@ import (
 
 	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
-	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -51,8 +50,8 @@ func New(dbtype, dsn string) (Repository, error) {
 	switch strings.ToLower(dbtype) {
 	case strings.ToLower(neo4j.Neo4j):
 		return neo4j.New(dbtype, dsn)
-	case strings.ToLower(sqlrepo.Postgres):
-		fallthrough
+	/*case strings.ToLower(sqlrepo.Postgres):
+	fallthrough*/
 	case strings.ToLower(sqlite3.SQLite):
 		fallthrough
 	case strings.ToLower(sqlite3.SQLiteMemory):

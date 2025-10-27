@@ -12,7 +12,7 @@ import (
 	"time"
 
 	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/asset-db/repository/sqlrepo"
+	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -25,7 +25,7 @@ func TestExtract(t *testing.T) {
 	now := time.Now()
 
 	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -125,7 +125,7 @@ func TestPredAndObject(t *testing.T) {
 	now := time.Now()
 
 	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -210,7 +210,7 @@ func TestPredAndObject(t *testing.T) {
 
 func TestFindFirstSubject(t *testing.T) {
 	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -257,7 +257,7 @@ func TestEntityPropsMatch(t *testing.T) {
 	now := time.Now()
 
 	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -317,7 +317,7 @@ func TestEdgePropsMatch(t *testing.T) {
 	now := time.Now()
 
 	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()

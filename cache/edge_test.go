@@ -240,7 +240,7 @@ func TestIncomingEdges(t *testing.T) {
 	assert.Error(t, err)
 
 	var rentity *types.Entity
-	for i, _ := range entities1 {
+	for i := 0; i < len(entities1); i++ {
 		e, err := c.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
 			"name": names1[i],
 		})

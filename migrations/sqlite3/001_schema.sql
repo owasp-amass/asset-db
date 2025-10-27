@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS tags (
   name       TEXT NOT NULL,
   value      TEXT,
   meta       TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(meta)),
-  UNIQUE (namespace, name, coalesce(value,'∅'))
+  UNIQUE (namespace, name, value)
 );
 CREATE INDEX IF NOT EXISTS idx_tags_ns_name ON tags(namespace, name);
 

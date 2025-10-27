@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -193,6 +194,65 @@ func (r *sqliteRepository) CreateEntityProperty(ctx context.Context, entity *typ
 	}, nil
 }
 
+func (r *sqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
+	const q = `
+SELECT m.id, m.entity_id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
+FROM entity_tag_map m
+JOIN tags tg ON tg.tag_id = m.tag_id
+WHERE m.id = ?
+ORDER BY m.updated_at DESC`
+	st, err := r.queries.prepNamed(ctx, "q.tags.entityTagById", q)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := st.QueryContext(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	rows.Next()
+	var eid int64
+	var ta TagAssignment
+	var created, updated, tupdated *string
+	var v *string
+	var meta, det *string
+	if err := rows.Scan(
+		&ta.ID, &eid, &ta.Tag.TagID, &ta.Tag.Namespace,
+		&ta.Tag.Name, &v, &meta, &det, &created, &updated, &tupdated,
+	); err != nil {
+		return nil, err
+	}
+	ta.Tag.Value = v
+	if meta != nil && strings.TrimSpace(*meta) != "" {
+		ta.Tag.Meta = json.RawMessage(*meta)
+	}
+	if det != nil && strings.TrimSpace(*det) != "" {
+		ta.Details = json.RawMessage(*det)
+	}
+
+	ta.CreatedAt = parseTS(created)
+	ta.UpdatedAt = parseTS(updated)
+	ta.Tag.UpdatedAt = parseTS(tupdated)
+	if ta.CreatedAt == nil || ta.UpdatedAt == nil || ta.Tag.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	prop, err := convertSQLitePropertyToOAMProperty(&ta)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.EntityTag{
+		ID:        strconv.FormatInt(ta.ID, 10),
+		CreatedAt: ta.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  ta.UpdatedAt.In(time.UTC).Local(),
+		Property:  prop,
+		Entity:    &types.Entity{ID: strconv.FormatInt(eid, 10)},
+	}, nil
+}
+
 func (r *sqliteRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
@@ -343,6 +403,65 @@ func (r *sqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.E
 	}, nil
 }
 
+func (r *sqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
+	const q = `
+SELECT m.id, m.edge_id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
+FROM edge_tag_map m
+JOIN tags tg ON tg.tag_id = m.tag_id
+WHERE m.id = ?
+ORDER BY m.updated_at DESC`
+	st, err := r.queries.prepNamed(ctx, "q.tags.edgeTagById", q)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := st.QueryContext(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	rows.Next()
+	var eid int64
+	var ta TagAssignment
+	var created, updated, tupdated *string
+	var v *string
+	var meta, det *string
+	if err := rows.Scan(
+		&ta.ID, &eid, &ta.Tag.TagID, &ta.Tag.Namespace,
+		&ta.Tag.Name, &v, &meta, &det, &created, &updated, &tupdated,
+	); err != nil {
+		return nil, err
+	}
+	ta.Tag.Value = v
+	if meta != nil && strings.TrimSpace(*meta) != "" {
+		ta.Tag.Meta = json.RawMessage(*meta)
+	}
+	if det != nil && strings.TrimSpace(*det) != "" {
+		ta.Details = json.RawMessage(*det)
+	}
+
+	ta.CreatedAt = parseTS(created)
+	ta.UpdatedAt = parseTS(updated)
+	ta.Tag.UpdatedAt = parseTS(tupdated)
+	if ta.CreatedAt == nil || ta.UpdatedAt == nil || ta.Tag.UpdatedAt == nil {
+		return nil, errors.New("failed to obtain the timestamps")
+	}
+
+	prop, err := convertSQLitePropertyToOAMProperty(&ta)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.EdgeTag{
+		ID:        strconv.FormatInt(ta.ID, 10),
+		CreatedAt: ta.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  ta.UpdatedAt.In(time.UTC).Local(),
+		Property:  prop,
+		Edge:      &types.Edge{ID: strconv.FormatInt(eid, 10)},
+	}, nil
+}
+
 func (r *sqliteRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
 	eid, err := strconv.ParseInt(edge.ID, 10, 64)
 	if err != nil {
@@ -459,7 +578,7 @@ ORDER BY m.updated_at DESC`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []TagAssignment
 	for rows.Next() {
@@ -504,7 +623,7 @@ ORDER BY m.updated_at DESC`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []TagAssignment
 	for rows.Next() {
@@ -561,7 +680,7 @@ WHERE tg.namespace = ? AND tg.name = ?`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var ids []int64
 	for rows.Next() {
@@ -612,7 +731,7 @@ ORDER BY m.updated_at DESC`
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	rows.Next()
 	var tid int64
@@ -660,7 +779,7 @@ ORDER BY m.updated_at DESC`
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	rows.Next()
 	var tid int64

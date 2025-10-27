@@ -7,7 +7,6 @@ package neo4j
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -210,63 +209,6 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 	}
 
 	return m, nil
-}
-
-func queryNodeByAssetKey(varname string, asset oam.Asset) (string, error) {
-	if asset == nil {
-		return "", errors.New("the asset is nil")
-	}
-
-	var node string
-	switch v := asset.(type) {
-	case *account.Account:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Account, "unique_id", v.ID)
-	case *oamreg.AutnumRecord:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.AutnumRecord, "handle", v.Handle)
-	case *oamnet.AutonomousSystem:
-		node = fmt.Sprintf("(%s:%s {%s: %d})", varname, oam.AutonomousSystem, "number", v.Number)
-	case *contact.ContactRecord:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.ContactRecord, "discovered_at", v.DiscoveredAt)
-	case *oamreg.DomainRecord:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.DomainRecord, "domain", v.Domain)
-	case *file.File:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.File, "url", v.URL)
-	case *dns.FQDN:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.FQDN, "name", v.Name)
-	case *financial.FundsTransfer:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.FundsTransfer, "unique_id", v.ID)
-	case *general.Identifier:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Identifier, "unique_id", v.UniqueID)
-	case *oamnet.IPAddress:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.IPAddress, "address", v.Address.String())
-	case *oamreg.IPNetRecord:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.IPNetRecord, "handle", v.Handle)
-	case *contact.Location:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Location, "address", v.Address)
-	case *oamnet.Netblock:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Netblock, "cidr", v.CIDR.String())
-	case *org.Organization:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Organization, "unique_id", v.ID)
-	case *people.Person:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Person, "unique_id", v.ID)
-	case *contact.Phone:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Phone, "raw", v.Raw)
-	case *platform.Product:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Product, "unique_id", v.ID)
-	case *platform.ProductRelease:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.ProductRelease, "name", v.Name)
-	case *platform.Service:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.Service, "unique_id", v.ID)
-	case *oamcert.TLSCertificate:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.TLSCertificate, "serial_number", v.SerialNumber)
-	case *url.URL:
-		node = fmt.Sprintf("(%s:%s {%s: '%s'})", varname, oam.URL, "url", v.Raw)
-	}
-	if node == "" {
-		return "", errors.New("asset type not supported")
-	}
-
-	return node, nil
 }
 
 func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
