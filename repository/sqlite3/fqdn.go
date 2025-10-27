@@ -16,83 +16,77 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
-// FQDN -----------------------------------------------------------------------
-// Params: :fqdn_text, :attrs
-const tmplUpsertFQDN = `
-WITH
-  row_try AS (
-    INSERT INTO fqdn(fqdn) VALUES (:fqdn_text)
-    ON CONFLICT(fqdn_norm) DO NOTHING
-    RETURNING id
-  ),
-  row_id_cte AS (
-    SELECT id AS row_id FROM row_try
-    UNION ALL SELECT id AS row_id FROM fqdn WHERE fqdn_norm = lower(:fqdn_text) LIMIT 1
-  ),
-  ensure_type AS (
-    INSERT INTO entity_type_lu(name) VALUES ('fqdn')
-    ON CONFLICT(name) DO NOTHING
-    RETURNING id
-  ),
-  type_id AS (
-    SELECT id FROM ensure_type
-    UNION ALL SELECT id FROM entity_type_lu WHERE name='fqdn' LIMIT 1
-  ),
-  ent_ins AS (
-    INSERT INTO entities(type_id, display_value, attrs)
-    SELECT (SELECT id FROM type_id), lower(:fqdn_text), coalesce(:attrs,'{}')
-    ON CONFLICT(type_id, display_value) DO UPDATE SET
-      attrs = CASE
-        WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN json_patch(entities.attrs, coalesce(:attrs,'{}'))
-        ELSE entities.attrs
-      END,
-      updated_at = CASE
-        WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN strftime('%Y-%m-%d %H:%M:%f','now')
-        ELSE entities.updated_at
-      END
-    WHERE json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    RETURNING entity_id
-  ),
-  ent_id AS (
-    SELECT entity_id FROM ent_ins
-    UNION ALL
-    SELECT entity_id FROM entities
-    WHERE type_id = (SELECT id FROM type_id) AND display_value = lower(:fqdn_text)
-    LIMIT 1
-  ),
-  ref_up AS (
-    INSERT INTO entity_ref(entity_id, table_name, row_id)
-    VALUES ((SELECT entity_id FROM ent_id), 'fqdn', (SELECT row_id FROM row_id_cte))
-    ON CONFLICT(table_name, row_id) DO UPDATE SET
-      entity_id  = excluded.entity_id,
-      updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
-    WHERE entity_ref.entity_id IS NOT excluded.entity_id
-  )
-SELECT entity_id FROM ent_id;`
+// Params: :fqdn_text
+const upsertFQDN = `
+INSERT INTO fqdn (fqdn)
+VALUES (:fqdn_text)
+ON CONFLICT(fqdn) DO UPDATE SET
+  updated_at = CURRENT_TIMESTAMP;`
 
-func (s *Statements) UpsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
-	row := s.UpsertFQDNStmt.QueryRowContext(ctx,
-		sql.Named("fqdn_text", a.Name),
-		sql.Named("attrs", ""),
-	)
+// Param: :fqdn_text
+const selectFQDNIDByFQDN = `
+SELECT id FROM fqdn
+WHERE fqdn = :fqdn_text;`
+
+// Param: :fqdn_id
+const selectFQDNByID = `
+SELECT id, created_at, updated_at, fqdn FROM fqdn
+WHERE id = :fqdn_id;`
+
+type fqdnStatements struct {
+	UpsertFQDNStmt         *sql.Stmt
+	SelectFQDNIDByFQDNStmt *sql.Stmt
+	SelectFQDNByIDStmt     *sql.Stmt
+}
+
+func (r *SqliteRepository) prepareFQDNStatements(ctx context.Context) error {
+	var err error
+	stmts := new(fqdnStatements)
+
+	if stmts.UpsertFQDNStmt, err = r.DB.PrepareContext(ctx, upsertFQDN); err != nil {
+		return err
+	}
+	if stmts.SelectFQDNIDByFQDNStmt, err = r.DB.PrepareContext(ctx, selectFQDNIDByFQDN); err != nil {
+		return err
+	}
+	if stmts.SelectFQDNByIDStmt, err = r.DB.PrepareContext(ctx, selectFQDNByID); err != nil {
+		return err
+	}
+
+	r.fqdnStmts = stmts
+	return nil
+}
+func (r *SqliteRepository) closeFQDNStatements() error {
+	if r.fqdnStmts == nil {
+		return nil
+	}
+	if r.fqdnStmts.UpsertFQDNStmt != nil {
+		r.fqdnStmts.UpsertFQDNStmt.Close()
+	}
+	if r.fqdnStmts.SelectFQDNIDByFQDNStmt != nil {
+		r.fqdnStmts.SelectFQDNIDByFQDNStmt.Close()
+	}
+	if r.fqdnStmts.SelectFQDNByIDStmt != nil {
+		r.fqdnStmts.SelectFQDNByIDStmt.Close()
+	}
+	return nil
+}
+
+func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
+	_ = r.fqdnStmts.UpsertFQDNStmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name))
+
+	row := r.fqdnStmts.SelectFQDNIDByFQDNStmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name))
+
 	var id int64
 	return id, row.Scan(&id)
 }
 
-func (r *Queries) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	query := `SELECT id, created_at, updated_at, fqdn FROM fqdn WHERE id = ?`
-
-	st, err := r.getOrPrepare(ctx, "fqdn", query)
-	if err != nil {
-		return nil, err
-	}
-
+func (r *SqliteRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	var id int64
 	var fqdn string
 	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &fqdn); err != nil {
+
+	if err := r.fqdnStmts.SelectFQDNByIDStmt.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &fqdn); err != nil {
 		return nil, err
 	}
 

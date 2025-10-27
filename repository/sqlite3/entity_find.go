@@ -18,7 +18,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-func (r *sqliteRepository) FindEntityById(ctx context.Context, id string) (*types.Entity, error) {
+func (r *SqliteRepository) FindEntityById(ctx context.Context, id string) (*types.Entity, error) {
 	entityId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func (r *sqliteRepository) FindEntityById(ctx context.Context, id string) (*type
 	return r.queries.FindEntityByID(ctx, int64(entityId))
 }
 
-func (r *sqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
+func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
 	ents, err := r.queries.FindByContent(ctx, etype, filters, 0)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (r *sqliteRepository) FindEntitiesByContent(ctx context.Context, etype stri
 	return filtered, nil
 }
 
-func (r *sqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
+func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
 	ent, err := r.queries.FindOneByContent(ctx, etype, filters)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func (r *sqliteRepository) FindOneEntityByContent(ctx context.Context, etype str
 	return ent, nil
 }
 
-func (r *sqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
+func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
 	ents, err := r.queries.FindEntitiesByType(ctx, string(atype), 0)
 	if err != nil {
 		return nil, err

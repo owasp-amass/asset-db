@@ -18,16 +18,17 @@ const (
 	SQLiteMemory string = "sqlite_memory"
 )
 
-// sqliteRepository is a repository implementation.
-type sqliteRepository struct {
-	db      *sql.DB
-	queries *Queries
-	stmts   *Statements
-	dbtype  string
+// SqliteRepository is a repository implementation.
+type SqliteRepository struct {
+	DB            *sql.DB
+	queries       *Queries
+	fqdnStmts     *fqdnStatements
+	netblockStmts *netblockStatements
+	dbtype        string
 }
 
 // New creates a new instance of the asset database repository.
-func New(dbtype, dsn string) (*sqliteRepository, error) {
+func New(dbtype, dsn string) (*SqliteRepository, error) {
 	repo, err := sqliteDatabase(dsn, 1, 1)
 	if err != nil {
 		return nil, err
@@ -37,24 +38,27 @@ func New(dbtype, dsn string) (*sqliteRepository, error) {
 	return repo, nil
 }
 
+func (sql *SqliteRepository) Prepare(ctx context.Context) error {
+	err := ApplyPragmas(context.Background(), sql.DB)
+	if err != nil {
+		return err
+	}
+
+	if err := sql.prepareNetblockStatements(ctx); err != nil {
+		return err
+	}
+
+	queries, err := NewQueries(sql.DB)
+	if err != nil {
+		return err
+	}
+	sql.queries = queries
+	return nil
+}
+
 // sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
-func sqliteDatabase(dsn string, conns, idles int) (*sqliteRepository, error) {
+func sqliteDatabase(dsn string, conns, idles int) (*SqliteRepository, error) {
 	db, err := sql.Open("sqlite3", dsn)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx := context.Background()
-	if err := ApplyPragmas(ctx, db); err != nil {
-		return nil, err
-	}
-
-	stmts, err := SeedAndPrepareAll(ctx, db, SeedOptions{RefreshTemplates: true})
-	if err != nil {
-		return nil, err
-	}
-
-	queries, err := NewQueries(db)
 	if err != nil {
 		return nil, err
 	}
@@ -63,28 +67,28 @@ func sqliteDatabase(dsn string, conns, idles int) (*sqliteRepository, error) {
 	db.SetMaxIdleConns(idles)
 	db.SetConnMaxLifetime(time.Hour)
 	db.SetConnMaxIdleTime(10 * time.Minute)
-	return &sqliteRepository{
-		db:      db,
-		stmts:   stmts,
-		queries: queries,
-	}, nil
+	return &SqliteRepository{DB: db}, nil
 }
 
 // Close implements the Repository interface.
-func (sql *sqliteRepository) Close() error {
+func (sql *SqliteRepository) Close() error {
 	if sql.queries != nil {
 		_ = sql.queries.Close()
 	}
-	if sql.stmts != nil {
-		sql.stmts.Close()
+
+	if sql.netblockStmts != nil {
+		if err := sql.closeNetblockStatements(); err != nil {
+			return err
+		}
 	}
-	if sql.db != nil {
-		return sql.db.Close()
+
+	if sql.DB != nil {
+		return sql.DB.Close()
 	}
 	return errors.New("failed to obtain access to the database handle")
 }
 
 // GetDBType returns the type of the database.
-func (sql *sqliteRepository) GetDBType() string {
+func (sql *SqliteRepository) GetDBType() string {
 	return sql.dbtype
 }

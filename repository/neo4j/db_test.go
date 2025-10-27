@@ -27,7 +27,7 @@ func TestMain(m *testing.M) {
 	}
 	defer store.Close()
 
-	if err := neomigrations.InitializeSchema(store.db, store.dbname); err != nil {
+	if err := neomigrations.InitializeSchema(store.DB, store.dbname); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}

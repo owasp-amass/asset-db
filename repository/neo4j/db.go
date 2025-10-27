@@ -17,14 +17,14 @@ import (
 
 const Neo4j string = "neo4j"
 
-// neoRepository is a repository implementation using Neo4j as the underlying DBMS.
-type neoRepository struct {
-	db     neo4jdb.DriverWithContext
+// NeoRepository is a repository implementation using Neo4j as the underlying DBMS.
+type NeoRepository struct {
+	DB     neo4jdb.DriverWithContext
 	dbname string
 }
 
 // New creates a new instance of the asset database repository.
-func New(dbtype, dsn string) (*neoRepository, error) {
+func New(dbtype, dsn string) (*NeoRepository, error) {
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return nil, err
@@ -52,18 +52,23 @@ func New(dbtype, dsn string) (*neoRepository, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return &neoRepository{
-		db:     driver,
+	return &NeoRepository{
+		DB:     driver,
 		dbname: dbname,
 	}, driver.VerifyConnectivity(ctx)
 }
 
-// Close implements the Repository interface.
-func (neo *neoRepository) Close() error {
-	return neo.db.Close(context.Background())
+// GetDBType returns the type of the database.
+func (neo *NeoRepository) GetDBType() string {
+	return Neo4j
 }
 
-// GetDBType returns the type of the database.
-func (neo *neoRepository) GetDBType() string {
-	return Neo4j
+// Prepare prepares the repository for use.
+func (neo *NeoRepository) Prepare(ctx context.Context) error {
+	return nil
+}
+
+// Close implements the Repository interface.
+func (neo *NeoRepository) Close() error {
+	return neo.DB.Close(context.Background())
 }

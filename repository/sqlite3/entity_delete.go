@@ -14,7 +14,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func (r *sqliteRepository) DeleteEntity(ctx context.Context, id string) error {
+func (r *SqliteRepository) DeleteEntity(ctx context.Context, id string) error {
 	entityId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return err

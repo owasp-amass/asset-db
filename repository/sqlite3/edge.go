@@ -73,7 +73,7 @@ type EdgeWithTypes struct {
 	ToType   string `json:"to_type"`
 }
 
-func (r *sqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
+func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
 	if edge == nil {
 		return nil, fmt.Errorf("nil edge provided")
 	}
@@ -105,7 +105,7 @@ func (r *sqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*t
 	return r.FindEdgeById(ctx, fmt.Sprintf("%d", edgeID))
 }
 
-func (r *sqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
+func (r *SqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
 	edgeID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid edge ID: %v", err)
@@ -170,7 +170,7 @@ func convertSQLiteEdgeToOAMEdge(e *Edge) (*types.Edge, error) {
 	}, nil
 }
 
-func (r *sqliteRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (r *SqliteRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid entity ID: %v", err)
@@ -205,7 +205,7 @@ func (r *sqliteRepository) IncomingEdges(ctx context.Context, entity *types.Enti
 	return out, nil
 }
 
-func (r *sqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (r *SqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid entity ID: %v", err)
@@ -240,7 +240,7 @@ func (r *sqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Enti
 	return out, nil
 }
 
-func (r *sqliteRepository) DeleteEdge(ctx context.Context, id string) error {
+func (r *SqliteRepository) DeleteEdge(ctx context.Context, id string) error {
 	edgeID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid edge ID: %v", err)

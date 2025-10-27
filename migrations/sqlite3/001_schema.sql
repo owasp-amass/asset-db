@@ -9,12 +9,6 @@
 -- ============================================================================
 
 PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;         -- tweak to FULL for extra durability
-PRAGMA temp_store = MEMORY;
-PRAGMA mmap_size = 268435456;        -- 256 MiB map if available
-PRAGMA page_size = 4096;
-PRAGMA cache_size = -1048576;        -- ~1 GiB cache (negative = KiB units)
 
 -- -----------------------------
 -- Lookup tables (compact IDs)

@@ -144,11 +144,11 @@ type TagAssignment struct {
 	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
 }
 
-func (r *sqliteRepository) CreateEntityTag(ctx context.Context, entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error) {
+func (r *SqliteRepository) CreateEntityTag(ctx context.Context, entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error) {
 	return r.CreateEntityProperty(ctx, entity, tag.Property)
 }
 
-func (r *sqliteRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
+func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
 	_, err := r.stmts.UpsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), "{}")
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func (r *sqliteRepository) CreateEntityProperty(ctx context.Context, entity *typ
 	}, nil
 }
 
-func (r *sqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
+func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
 	const q = `
 SELECT m.id, m.entity_id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
 FROM entity_tag_map m
@@ -253,7 +253,7 @@ ORDER BY m.updated_at DESC`
 	}, nil
 }
 
-func (r *sqliteRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
@@ -338,7 +338,7 @@ func convertSQLitePropertyToOAMProperty(ta *TagAssignment) (oam.Property, error)
 	return p, nil
 }
 
-func (r *sqliteRepository) DeleteEntityTag(ctx context.Context, id string) error {
+func (r *SqliteRepository) DeleteEntityTag(ctx context.Context, id string) error {
 	mid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return err
@@ -353,11 +353,11 @@ func (r *sqliteRepository) DeleteEntityTag(ctx context.Context, id string) error
 	return err
 }
 
-func (r *sqliteRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, tag *types.EdgeTag) (*types.EdgeTag, error) {
+func (r *SqliteRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, tag *types.EdgeTag) (*types.EdgeTag, error) {
 	return r.CreateEdgeProperty(ctx, edge, tag.Property)
 }
 
-func (r *sqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
+func (r *SqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
 	_, err := r.stmts.UpsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), "{}")
 	if err != nil {
 		return nil, err
@@ -403,7 +403,7 @@ func (r *sqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.E
 	}, nil
 }
 
-func (r *sqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
+func (r *SqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
 	const q = `
 SELECT m.id, m.edge_id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
 FROM edge_tag_map m
@@ -462,7 +462,7 @@ ORDER BY m.updated_at DESC`
 	}, nil
 }
 
-func (r *sqliteRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
+func (r *SqliteRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
 	eid, err := strconv.ParseInt(edge.ID, 10, 64)
 	if err != nil {
 		return nil, err
@@ -512,7 +512,7 @@ func (r *sqliteRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, s
 	return out, nil
 }
 
-func (r *sqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
+func (r *SqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
 	mid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return err

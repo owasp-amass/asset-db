@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"context"
 	"time"
 
 	"github.com/owasp-amass/asset-db/repository"
@@ -39,4 +40,9 @@ func (c *Cache) Close() error {
 // GetDBType implements the Repository interface.
 func (c *Cache) GetDBType() string {
 	return c.db.GetDBType()
+}
+
+// Prepare implements the Repository interface.
+func (c *Cache) Prepare(ctx context.Context) error {
+	return nil
 }

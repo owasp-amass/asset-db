@@ -20,7 +20,7 @@ import (
 // CreateEdge creates an edge between two entities in the database.
 // The edge is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
-func (neo *neoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
+func (neo *NeoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
 	if edge == nil || edge.Relation == nil || edge.FromEntity == nil ||
 		edge.FromEntity.Asset == nil || edge.ToEntity == nil || edge.ToEntity.Asset == nil {
 		return nil, errors.New("failed input validation checks")
@@ -55,7 +55,7 @@ func (neo *neoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*ty
 	from := fmt.Sprintf("MATCH (from:Entity {entity_id: '%s'})", edge.FromEntity.ID)
 	to := fmt.Sprintf("MATCH (to:Entity {entity_id: '%s'})", edge.ToEntity.ID)
 	query := fmt.Sprintf("%s %s CREATE (from)-[r:%s $props]->(to) RETURN r", from, to, strings.ToUpper(edge.Relation.Label()))
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query,
 		map[string]interface{}{"props": props},
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
@@ -86,7 +86,7 @@ func (neo *neoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*ty
 }
 
 // isDuplicateEdge checks if the relationship between source and dest already exists.
-func (neo *neoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (*types.Edge, bool) {
+func (neo *NeoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (*types.Edge, bool) {
 	var dup bool
 	var e *types.Edge
 
@@ -113,12 +113,12 @@ func (neo *neoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (
 }
 
 // edgeSeen updates the updated_at timestamp for the specified edge.
-func (neo *neoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
+func (neo *NeoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	query := fmt.Sprintf("MATCH ()-[r]->() WHERE elementId(r) = $eid SET r.updated_at = localDateTime('%s')", timeToNeo4jTime(updated))
-	_, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+	_, err := neo4jdb.ExecuteQuery(ctx, neo.DB, query,
 		map[string]interface{}{
 			"eid": rel.ID,
 		},
@@ -128,11 +128,11 @@ func (neo *neoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	return err
 }
 
-func (neo *neoRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
+func (neo *NeoRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
 		"MATCH (from:Entity)-[r]->(to:Entity) WHERE elementId(r) = $eid RETURN r, from.entity_id AS fid, to.entity_id AS tid",
 		map[string]interface{}{
 			"eid": id,
@@ -184,7 +184,7 @@ func (neo *neoRepository) FindEdgeById(ctx context.Context, id string) (*types.E
 // IncomingEdges finds all edges pointing to the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all incoming eges are returned.
-func (neo *neoRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (neo *NeoRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -193,7 +193,7 @@ func (neo *neoRepository) IncomingEdges(ctx context.Context, entity *types.Entit
 		query = fmt.Sprintf("MATCH (:Entity {entity_id: $eid})<-[r]-(from:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, from.entity_id AS fid", timeToNeo4jTime(since))
 	}
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query,
 		map[string]interface{}{
 			"eid": entity.ID,
 		},
@@ -255,7 +255,7 @@ func (neo *neoRepository) IncomingEdges(ctx context.Context, entity *types.Entit
 // OutgoingEdges finds all edges from the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all outgoing edges are returned.
-func (neo *neoRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (neo *NeoRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -264,7 +264,7 @@ func (neo *neoRepository) OutgoingEdges(ctx context.Context, entity *types.Entit
 		query = fmt.Sprintf("MATCH (:Entity {entity_id: $eid})-[r]->(to:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, to.entity_id AS tid", timeToNeo4jTime(since))
 	}
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query,
 		map[string]interface{}{
 			"eid": entity.ID,
 		},
@@ -326,11 +326,11 @@ func (neo *neoRepository) OutgoingEdges(ctx context.Context, entity *types.Entit
 // DeleteEdge removes an edge in the database by its ID.
 // It takes a string representing the edge ID and removes the corresponding edge from the database.
 // Returns an error if the edge is not found.
-func (neo *neoRepository) DeleteEdge(ctx context.Context, id string) error {
+func (neo *NeoRepository) DeleteEdge(ctx context.Context, id string) error {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	_, err := neo4jdb.ExecuteQuery(tctx, neo.db,
+	_, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
 		"MATCH ()-[r]->() WHERE elementId(r) = $eid DELETE r",
 		map[string]interface{}{
 			"eid": id,

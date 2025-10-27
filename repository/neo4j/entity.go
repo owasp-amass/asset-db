@@ -19,7 +19,7 @@ import (
 // CreateEntity creates a new entity in the database.
 // It takes an Entity as input and persists it in the database.
 // Returns the created entity as a types.Entity or an error if the creation fails.
-func (neo *neoRepository) CreateEntity(ctx context.Context, input *types.Entity) (*types.Entity, error) {
+func (neo *NeoRepository) CreateEntity(ctx context.Context, input *types.Entity) (*types.Entity, error) {
 	if input == nil {
 		return nil, errors.New("the input entity is nil")
 	}
@@ -58,7 +58,7 @@ func (neo *neoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
 			"MATCH (a:Entity {entity_id: $eid}) SET a = $props RETURN a",
 			map[string]interface{}{"eid": entity.ID, "props": props},
 			neo4jdb.EagerResultTransformer,
@@ -103,7 +103,7 @@ func (neo *neoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 		defer cancel()
 
 		query := fmt.Sprintf("CREATE (a:Entity:%s $props) RETURN a", input.Asset.AssetType())
-		result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query,
 			map[string]interface{}{"props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
@@ -138,11 +138,11 @@ func (neo *neoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 // It takes an oam.Asset as input and persists it in the database.
 // The asset is serialized to JSON and stored in the Content field of the Entity struct.
 // Returns the created entity as a types.Entity or an error if the creation fails.
-func (neo *neoRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error) {
+func (neo *NeoRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error) {
 	return neo.CreateEntity(ctx, &types.Entity{Asset: asset})
 }
 
-func (neo *neoRepository) uniqueEntityID() string {
+func (neo *NeoRepository) uniqueEntityID() string {
 	tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -157,11 +157,11 @@ func (neo *neoRepository) uniqueEntityID() string {
 // FindEntityById finds an entity in the database by the ID.
 // It takes a string representing the entity ID and retrieves the corresponding entity from the database.
 // Returns the found entity as a types.Entity or an error if the asset is not found.
-func (neo *neoRepository) FindEntityById(ctx context.Context, id string) (*types.Entity, error) {
+func (neo *NeoRepository) FindEntityById(ctx context.Context, id string) (*types.Entity, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
 		"MATCH (a:Entity {entity_id: $eid}) RETURN a",
 		map[string]interface{}{"eid": id},
 		neo4jdb.EagerResultTransformer,
@@ -189,7 +189,7 @@ func (neo *neoRepository) FindEntityById(ctx context.Context, id string) (*types
 // If since.IsZero(), the parameter will be ignored.
 // The asset data is serialized to JSON and compared against the Content field of the Entity struct.
 // Returns a single matching entity as *types.Entity or an error if the search fails.
-func (neo *neoRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
+func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
 	var field, value string
 	for k, v := range filters {
 		field = k
@@ -208,7 +208,7 @@ func (neo *neoRepository) FindOneEntityByContent(ctx context.Context, etype stri
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -239,7 +239,7 @@ func (neo *neoRepository) FindOneEntityByContent(ctx context.Context, etype stri
 // If since.IsZero(), the parameter will be ignored.
 // The asset data is serialized to JSON and compared against the Content field of the Entity struct.
 // Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (neo *neoRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
+func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
 	var field, value string
 	for k, v := range filters {
 		field = k
@@ -258,7 +258,7 @@ func (neo *neoRepository) FindEntitiesByContent(ctx context.Context, etype strin
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -288,7 +288,7 @@ func (neo *neoRepository) FindEntitiesByContent(ctx context.Context, etype strin
 // It takes an asset type and retrieves the corresponding entities from the database.
 // If since.IsZero(), the parameter will be ignored.
 // Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (neo *neoRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
+func (neo *NeoRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
 	query := fmt.Sprintf("MATCH (a:%s) RETURN a", string(atype))
 	if !since.IsZero() {
 		query = fmt.Sprintf("MATCH (a:%s) WHERE a.updated_at >= localDateTime('%s') RETURN a", string(atype), timeToNeo4jTime(since))
@@ -297,7 +297,7 @@ func (neo *neoRepository) FindEntitiesByType(ctx context.Context, atype oam.Asse
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -334,11 +334,11 @@ func (neo *neoRepository) FindEntitiesByType(ctx context.Context, atype oam.Asse
 // DeleteEntity removes an entity in the database by its ID.
 // It takes a string representing the entity ID and removes the corresponding entity from the database.
 // Returns an error if the entity is not found.
-func (neo *neoRepository) DeleteEntity(ctx context.Context, id string) error {
+func (neo *NeoRepository) DeleteEntity(ctx context.Context, id string) error {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	_, err := neo4jdb.ExecuteQuery(tctx, neo.db,
+	_, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
 		"MATCH (n:Entity {entity_id: $eid}) DETACH DELETE n",
 		map[string]interface{}{
 			"eid": id,

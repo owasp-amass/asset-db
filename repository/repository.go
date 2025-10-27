@@ -20,6 +20,7 @@ import (
 // It provides operations for creating, retrieving, tagging, and linking assets.
 type Repository interface {
 	GetDBType() string
+	Prepare(ctx context.Context) error
 	CreateEntity(ctx context.Context, entity *types.Entity) (*types.Entity, error)
 	CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error)
 	FindEntityById(ctx context.Context, id string) (*types.Entity, error)

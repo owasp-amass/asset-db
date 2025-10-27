@@ -6,17 +6,12 @@ package assetdb
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"fmt"
 	"math/rand"
-	"net/url"
-	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j/config"
 	neomigrations "github.com/owasp-amass/asset-db/migrations/neo4j"
 
 	//pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
@@ -39,72 +34,61 @@ func New(dbtype, dsn string) (repository.Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := migrateDatabase(dbtype, dsn); err != nil {
+	if err := migrateDatabase(dbtype, db); err != nil {
 		return nil, err
-	}
-	return db, nil
-}
-
-func migrateDatabase(dbtype, dsn string) error {
-	switch dbtype {
-	case sqlite3.SQLite:
-		fallthrough
-	case sqlite3.SQLiteMemory:
-		if db, err := sql.Open("sqlite3", dsn); err == nil {
-			return sqliteMigrate("sqlite3", db, sqlitemigrations.Migrations())
-		}
-	/*case sqlrepo.Postgres:
-	return sqlMigrate("postgres", postgres.Open(dsn), pgmigrations.Migrations())*/
-	case neo4j.Neo4j:
-		return neoMigrate(dsn)
-	}
-	return nil
-}
-
-func sqliteMigrate(name string, db *sql.DB, fs embed.FS) error {
-	defer func() { _ = db.Close() }()
-
-	migsrc := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: fs,
-		Root:       "/",
-	}
-
-	_, err := migrate.Exec(db, name, migsrc, migrate.Up)
-	return err
-}
-
-func neoMigrate(dsn string) error {
-	u, err := url.Parse(dsn)
-	if err != nil {
-		return err
-	}
-
-	auth := neo4jdb.NoAuth()
-	var username, password string
-	if u.User != nil {
-		username = u.User.Username()
-		password, _ = u.User.Password()
-		auth = neo4jdb.BasicAuth(username, password, "")
-	}
-	dbname := strings.TrimPrefix(u.Path, "/")
-
-	newdsn := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
-	driver, err := neo4jdb.NewDriverWithContext(newdsn, auth, func(cfg *config.Config) {
-		cfg.MaxConnectionPoolSize = 20
-		cfg.MaxConnectionLifetime = time.Hour
-		cfg.ConnectionLivenessCheckTimeout = 10 * time.Minute
-	})
-	if err != nil {
-		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := driver.VerifyConnectivity(ctx); err != nil {
+	if err := db.Prepare(ctx); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func migrateDatabase(dbtype string, repo repository.Repository) error {
+	switch dbtype {
+	case sqlite3.SQLite:
+		fallthrough
+	case sqlite3.SQLiteMemory:
+		return sqliteMigrate(repo, sqlitemigrations.Migrations())
+	/*case sqlrepo.Postgres:
+	return sqlMigrate("postgres", postgres.Open(dsn), pgmigrations.Migrations())*/
+	case neo4j.Neo4j:
+		return neoMigrate(repo)
+	}
+	return nil
+}
+
+func sqliteMigrate(repo repository.Repository, fs embed.FS) error {
+	migsrc := migrate.EmbedFileSystemMigrationSource{
+		FileSystem: fs,
+		Root:       "/",
+	}
+
+	r, ok := repo.(*sqlite3.SqliteRepository)
+	if !ok {
+		return fmt.Errorf("failed to cast repository to sqliteRepository")
+	}
+	db := r.DB
+
+	_, err := migrate.Exec(db, "sqlite3", migsrc, migrate.Up)
+	return err
+}
+
+func neoMigrate(repo repository.Repository) error {
+	r, ok := repo.(*neo4j.NeoRepository)
+	if !ok {
+		return fmt.Errorf("failed to cast repository to neoRepository")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := r.DB.VerifyConnectivity(ctx); err != nil {
 		return err
 	}
-	defer func() { _ = driver.Close(context.Background()) }()
 
-	return neomigrations.InitializeSchema(driver, dbname)
+	return neomigrations.InitializeSchema(r.DB, "neo4j")
 }

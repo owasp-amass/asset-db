@@ -42,11 +42,11 @@ type Entity struct {
 	Asset        any             `json:"asset"`         // concrete asset struct
 }
 
-func (r *sqliteRepository) CreateEntity(ctx context.Context, entity *types.Entity) (*types.Entity, error) {
+func (r *SqliteRepository) CreateEntity(ctx context.Context, entity *types.Entity) (*types.Entity, error) {
 	return r.CreateAsset(ctx, entity.Asset)
 }
 
-func (r *sqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error) {
+func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error) {
 	var eid int64
 	var err error
 
@@ -64,7 +64,7 @@ func (r *sqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*t
 	case oam.File:
 		eid, err = r.stmts.UpsertFile(ctx, asset.(*oamfile.File))
 	case oam.FQDN:
-		eid, err = r.stmts.UpsertFQDN(ctx, asset.(*oamdns.FQDN))
+		eid, err = r.upsertFQDN(ctx, asset.(*oamdns.FQDN))
 	case oam.FundsTransfer:
 		eid, err = r.stmts.UpsertFundsTransfer(ctx, asset.(*oamfin.FundsTransfer))
 	case oam.Identifier:
@@ -76,7 +76,7 @@ func (r *sqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*t
 	case oam.Location:
 		eid, err = r.stmts.UpsertLocation(ctx, asset.(*contact.Location))
 	case oam.Netblock:
-		eid, err = r.stmts.UpsertNetblock(ctx, asset.(*oamnet.Netblock))
+		eid, err = r.upsertNetblock(ctx, asset.(*oamnet.Netblock))
 	case oam.Organization:
 		eid, err = r.stmts.UpsertOrganization(ctx, asset.(*oamorg.Organization))
 	case oam.Person:
