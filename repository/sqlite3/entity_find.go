@@ -26,7 +26,7 @@ func (r *sqliteRepository) FindEntityById(ctx context.Context, id string) (*type
 	return r.queries.FindEntityByID(ctx, int64(entityId))
 }
 
-func (r *sqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters ContentFilters) ([]*types.Entity, error) {
+func (r *sqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
 	ents, err := r.queries.FindByContent(ctx, etype, filters, 0)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (r *sqliteRepository) FindEntitiesByContent(ctx context.Context, etype stri
 	return filtered, nil
 }
 
-func (r *sqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters ContentFilters) (*types.Entity, error) {
+func (r *sqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
 	ent, err := r.queries.FindOneByContent(ctx, etype, filters)
 	if err != nil {
 		return nil, err
@@ -121,10 +121,8 @@ func (r *Queries) FindByTypeAndValue(ctx context.Context, assetType, value strin
 // FindByContent builds the SQL WHERE from a registry of allowed columns per
 // asset type, and returns Entity+Asset. Supports multiple matches.
 
-type ContentFilters map[string]any
-
 // FindOneByContent returns exactly one (first by updated_at desc)
-func (r *Queries) FindOneByContent(ctx context.Context, assetType string, filters ContentFilters) (*types.Entity, error) {
+func (r *Queries) FindOneByContent(ctx context.Context, assetType string, filters types.ContentFilters) (*types.Entity, error) {
 	ents, err := r.FindByContent(ctx, assetType, filters, 1)
 	if err != nil {
 		return nil, err
@@ -137,7 +135,7 @@ func (r *Queries) FindOneByContent(ctx context.Context, assetType string, filter
 
 // FindByContent finds entities for asset type with given filters (on the asset table).
 // limit <= 0 => no explicit LIMIT.
-func (r *Queries) FindByContent(ctx context.Context, assetType string, filters ContentFilters, limit int) ([]*types.Entity, error) {
+func (r *Queries) FindByContent(ctx context.Context, assetType string, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
 	table := normalizeType(assetType)
 	if table == "" {
 		return nil, fmt.Errorf("unknown asset type %q", assetType)

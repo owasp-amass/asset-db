@@ -7,6 +7,7 @@
 package neo4j
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -17,28 +18,29 @@ import (
 )
 
 func TestCreateEdge(t *testing.T) {
-	from, err := store.CreateEntity(&types.Entity{
+	ctx := context.Background()
+	from, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "create1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	to, err := store.CreateEntity(&types.Entity{
+	to, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "create2.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	_, err = store.CreateEdge(&types.Edge{
+	_, err = store.CreateEdge(ctx, &types.Edge{
 		Relation:   &general.SimpleRelation{Name: "invalid_label"},
 		FromEntity: from,
 		ToEntity:   to,
 	})
 	assert.Error(t, err)
 
-	first, err := store.CreateEdge(&types.Edge{
+	first, err := store.CreateEdge(ctx, &types.Edge{
 		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
@@ -46,7 +48,7 @@ func TestCreateEdge(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	second, err := store.CreateEdge(&types.Edge{
+	second, err := store.CreateEdge(ctx, &types.Edge{
 		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
@@ -59,31 +61,32 @@ func TestCreateEdge(t *testing.T) {
 }
 
 func TestFindEdgeById(t *testing.T) {
-	_, err := store.FindEdgeById("bad_id")
+	ctx := context.Background()
+	_, err := store.FindEdgeById(ctx, "bad_id")
 	assert.Error(t, err)
 
-	from, err := store.CreateEntity(&types.Entity{
+	from, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "find1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	to, err := store.CreateEntity(&types.Entity{
+	to, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "find2.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	first, err := store.CreateEdge(&types.Edge{
+	first, err := store.CreateEdge(ctx, &types.Edge{
 		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
 	})
 	assert.NoError(t, err)
 
-	second, err := store.FindEdgeById(first.ID)
+	second, err := store.FindEdgeById(ctx, first.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, first.ID, second.ID)
 	assert.Equal(t, first.FromEntity.ID, second.FromEntity.ID)
@@ -91,14 +94,15 @@ func TestFindEdgeById(t *testing.T) {
 }
 
 func TestIncomingEdges(t *testing.T) {
-	from, err := store.CreateEntity(&types.Entity{
+	ctx := context.Background()
+	from, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "incoming1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	to, err := store.CreateEntity(&types.Entity{
+	to, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "incoming2.edge",
 		},
@@ -109,7 +113,7 @@ func TestIncomingEdges(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		created := now.Add(time.Duration(i*-24) * time.Hour)
 
-		_, err := store.CreateEdge(&types.Edge{
+		_, err := store.CreateEdge(ctx, &types.Edge{
 			CreatedAt: created,
 			LastSeen:  created,
 			Relation: &dns.BasicDNSRelation{
@@ -126,31 +130,32 @@ func TestIncomingEdges(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	_, err = store.IncomingEdges(to, time.Time{}, "invalid_label")
+	_, err = store.IncomingEdges(ctx, to, time.Time{}, "invalid_label")
 	assert.Error(t, err)
 
-	edges, err := store.IncomingEdges(to, time.Time{}, "dns_record")
+	edges, err := store.IncomingEdges(ctx, to, time.Time{}, "dns_record")
 	assert.NoError(t, err)
 	assert.Equal(t, len(edges), 10)
 
 	for i := 1; i <= 10; i++ {
 		since := now.Add(time.Duration(i*-24) * time.Hour)
 
-		edges, err := store.IncomingEdges(to, since)
+		edges, err := store.IncomingEdges(ctx, to, since)
 		assert.NoError(t, err)
 		assert.Equal(t, len(edges), i)
 	}
 }
 
 func TestOutgoingEdges(t *testing.T) {
-	from, err := store.CreateEntity(&types.Entity{
+	ctx := context.Background()
+	from, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "outgoing1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	to, err := store.CreateEntity(&types.Entity{
+	to, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "outgoing2.edge",
 		},
@@ -161,7 +166,7 @@ func TestOutgoingEdges(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		created := now.Add(time.Duration(i*-24) * time.Hour)
 
-		_, err := store.CreateEdge(&types.Edge{
+		_, err := store.CreateEdge(ctx, &types.Edge{
 			CreatedAt: created,
 			LastSeen:  created,
 			Relation: &dns.BasicDNSRelation{
@@ -178,47 +183,48 @@ func TestOutgoingEdges(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	_, err = store.OutgoingEdges(from, time.Time{}, "invalid_label")
+	_, err = store.OutgoingEdges(ctx, from, time.Time{}, "invalid_label")
 	assert.Error(t, err)
 
-	edges, err := store.OutgoingEdges(from, time.Time{}, "dns_record")
+	edges, err := store.OutgoingEdges(ctx, from, time.Time{}, "dns_record")
 	assert.NoError(t, err)
 	assert.Equal(t, len(edges), 10)
 
 	for i := 1; i <= 10; i++ {
 		since := now.Add(time.Duration(i*-24) * time.Hour)
 
-		edges, err := store.OutgoingEdges(from, since)
+		edges, err := store.OutgoingEdges(ctx, from, since)
 		assert.NoError(t, err)
 		assert.Equal(t, len(edges), i)
 	}
 }
 
 func TestDeleteEdge(t *testing.T) {
-	from, err := store.CreateEntity(&types.Entity{
+	ctx := context.Background()
+	from, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "delete1.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	to, err := store.CreateEntity(&types.Entity{
+	to, err := store.CreateEntity(ctx, &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "delete2.edge",
 		},
 	})
 	assert.NoError(t, err)
 
-	edge, err := store.CreateEdge(&types.Edge{
+	edge, err := store.CreateEdge(ctx, &types.Edge{
 		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: from,
 		ToEntity:   to,
 	})
 	assert.NoError(t, err)
 
-	err = store.DeleteEdge(edge.ID)
+	err = store.DeleteEdge(ctx, edge.ID)
 	assert.NoError(t, err)
 
-	_, err = store.FindEdgeById(edge.ID)
+	_, err = store.FindEdgeById(ctx, edge.ID)
 	assert.Error(t, err)
 }

@@ -280,7 +280,7 @@ var contentRegistry = map[string]regEntry{
 
 // buildWhere validates the provided filters and builds "col = ?" AND ... with args.
 // It honors case-insensitive matching for columns that already use lower() in colMap.
-func buildWhere(table string, reg regEntry, filters ContentFilters) (string, []any, error) {
+func buildWhere(table string, reg regEntry, filters types.ContentFilters) (string, []any, error) {
 	if len(filters) == 0 {
 		// No filters — allow full scan over that table via entity_ref (but still ordered by updated_at).
 		// Usually caller should set a LIMIT in this case.

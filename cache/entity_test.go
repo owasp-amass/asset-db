@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"testing"
@@ -31,10 +32,11 @@ func TestCreateEntity(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
 	after := ctime.Add(2 * time.Second)
-	entity, err := c.CreateEntity(&types.Entity{
+	entity, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Asset:     &dns.FQDN{Name: "owasp.org"},
@@ -43,12 +45,14 @@ func TestCreateEntity(t *testing.T) {
 	assert.WithinRange(t, entity.CreatedAt, before, after)
 	assert.WithinRange(t, entity.LastSeen, before, after)
 
-	if tags, err := c.cache.GetEntityTags(entity, now, "cache_create_entity"); err != nil || len(tags) != 1 {
+	if tags, err := c.cache.FindEntityTags(ctx, entity, now, "cache_create_entity"); err != nil || len(tags) != 1 {
 		t.Errorf("failed to create the cache tag:")
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := db2.FindEntitiesByContent(entity.Asset, before)
+	dbents, err := db2.FindEntitiesByContent(ctx, string(entity.Asset.AssetType()), before, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -77,19 +81,22 @@ func TestCreateAsset(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	before := now.Add(-2 * time.Second)
 	after := now.Add(2 * time.Second)
-	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 	assert.WithinRange(t, entity.CreatedAt, before, after)
 	assert.WithinRange(t, entity.LastSeen, before, after)
 
-	if tags, err := c.cache.GetEntityTags(entity, now, "cache_create_entity"); err != nil || len(tags) != 1 {
+	if tags, err := c.cache.FindEntityTags(ctx, entity, now, "cache_create_entity"); err != nil || len(tags) != 1 {
 		t.Errorf("failed to create the cache tag:")
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := db2.FindEntitiesByContent(entity.Asset, now)
+	dbents, err := db2.FindEntitiesByContent(ctx, string(entity.Asset.AssetType()), now, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -117,10 +124,11 @@ func TestFindEntityById(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = c.Close() }()
 
-	entity1, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	ctx := context.Background()
+	entity1, err := c.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
-	entity2, err := c.FindEntityById(entity1.ID)
+	entity2, err := c.FindEntityById(ctx, entity1.ID)
 	assert.NoError(t, err)
 
 	if !reflect.DeepEqual(entity1.Asset, entity2.Asset) {
@@ -143,10 +151,11 @@ func TestFindEntityByContent(t *testing.T) {
 
 	// add some really old stuff to the database
 	now := time.Now()
+	ctx := context.Background()
 	ctime1 := now.Add(-24 * time.Hour)
 	cbefore1 := ctime1.Add(-20 * time.Second)
 	fqdn1 := &dns.FQDN{Name: "owasp.org"}
-	entity1, err := c.db.CreateEntity(&types.Entity{
+	entity1, err := c.db.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime1,
 		LastSeen:  ctime1,
 		Asset:     fqdn1,
@@ -156,7 +165,7 @@ func TestFindEntityByContent(t *testing.T) {
 	ctime2 := now.Add(-8 * time.Hour)
 	cbefore2 := ctime2.Add(-20 * time.Second)
 	fqdn2 := &dns.FQDN{Name: "utica.edu"}
-	entity2, err := c.db.CreateEntity(&types.Entity{
+	entity2, err := c.db.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime2,
 		LastSeen:  ctime2,
 		Asset:     fqdn2,
@@ -164,7 +173,7 @@ func TestFindEntityByContent(t *testing.T) {
 	assert.NoError(t, err)
 	// add new entities to the database
 	fqdn3 := &dns.FQDN{Name: "sunypoly.edu"}
-	entity3, err := c.CreateEntity(&types.Entity{
+	entity3, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: now,
 		LastSeen:  now,
 		Asset:     fqdn3,
@@ -172,10 +181,14 @@ func TestFindEntityByContent(t *testing.T) {
 	assert.NoError(t, err)
 	after := time.Now().Add(2 * time.Second)
 
-	_, err = c.FindEntitiesByContent(fqdn3, after)
+	_, err = c.FindEntitiesByContent(ctx, "fqdn", after, types.ContentFilters{
+		"name": "sunypoly.edu",
+	})
 	assert.Error(t, err)
 
-	entities, err := c.FindEntitiesByContent(fqdn3, now)
+	entities, err := c.FindEntitiesByContent(ctx, "fqdn", now, types.ContentFilters{
+		"name": "sunypoly.edu",
+	})
 	assert.NoError(t, err)
 	if len(entities) != 1 {
 		t.Errorf("first request failed to produce the expected number of entities")
@@ -186,10 +199,14 @@ func TestFindEntityByContent(t *testing.T) {
 		t.Errorf("DeepEqual failed for the assets in the two entities")
 	}
 
-	_, err = c.FindEntitiesByContent(fqdn2, c.StartTime())
+	_, err = c.FindEntitiesByContent(ctx, "fqdn", c.StartTime(), types.ContentFilters{
+		"name": "utica.edu",
+	})
 	assert.Error(t, err)
 
-	entities, err = c.FindEntitiesByContent(fqdn2, cbefore2)
+	entities, err = c.FindEntitiesByContent(ctx, "fqdn", cbefore2, types.ContentFilters{
+		"name": "utica.edu",
+	})
 	assert.NoError(t, err)
 	if len(entities) != 1 {
 		t.Errorf("second request failed to produce the expected number of entities")
@@ -200,10 +217,14 @@ func TestFindEntityByContent(t *testing.T) {
 		t.Errorf("DeepEqual failed for the assets in the two entities")
 	}
 
-	_, err = c.FindEntitiesByContent(fqdn1, cbefore2)
+	_, err = c.FindEntitiesByContent(ctx, "fqdn", cbefore2, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.Error(t, err)
 
-	entities, err = c.FindEntitiesByContent(fqdn1, cbefore1)
+	entities, err = c.FindEntitiesByContent(ctx, "fqdn", cbefore1, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.NoError(t, err)
 	if len(entities) != 1 {
 		t.Errorf("third request failed to produce the expected number of entities")
@@ -232,12 +253,13 @@ func TestFindEntitiesByType(t *testing.T) {
 	defer set1.Close()
 	// add some really old stuff to the database
 	now := time.Now()
+	ctx := context.Background()
 	ctime1 := now.Add(-24 * time.Hour)
 	cbefore1 := ctime1.Add(-20 * time.Second)
 	cafter1 := ctime1.Add(20 * time.Second)
 	for _, name := range []string{"owasp.org", "utica.edu", "sunypoly.edu"} {
 		set1.Insert(name)
-		_, err := c.db.CreateEntity(&types.Entity{
+		_, err := c.db.CreateEntity(ctx, &types.Entity{
 			CreatedAt: ctime1,
 			LastSeen:  ctime1,
 			Asset:     &dns.FQDN{Name: name},
@@ -253,7 +275,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	cafter2 := ctime2.Add(20 * time.Second)
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		_, err := c.db.CreateEntity(&types.Entity{
+		_, err := c.db.CreateEntity(ctx, &types.Entity{
 			CreatedAt: ctime2,
 			LastSeen:  ctime2,
 			Asset:     &dns.FQDN{Name: name},
@@ -267,15 +289,15 @@ func TestFindEntitiesByType(t *testing.T) {
 	after := now.Add(20 * time.Second)
 	for _, name := range []string{"ns1.owasp.org", "ns1.utica.edu", "ns1.sunypoly.edu"} {
 		set3.Insert(name)
-		_, err := c.CreateAsset(&dns.FQDN{Name: name})
+		_, err := c.CreateAsset(ctx, &dns.FQDN{Name: name})
 		assert.NoError(t, err)
 	}
 
 	// no results should be produced with this since param
-	_, err = c.FindEntitiesByType(oam.FQDN, after)
+	_, err = c.FindEntitiesByType(ctx, oam.FQDN, after)
 	assert.Error(t, err)
 
-	entities, err := c.FindEntitiesByType(oam.FQDN, c.StartTime())
+	entities, err := c.FindEntitiesByType(ctx, oam.FQDN, c.StartTime())
 	assert.NoError(t, err)
 	if len(entities) != 3 {
 		t.Errorf("first request failed to produce the expected number of entities")
@@ -294,10 +316,10 @@ func TestFindEntitiesByType(t *testing.T) {
 		t.Errorf("first request failed to produce the correct entities")
 	}
 	// there shouldn't be a tag for this entity, since it didn't require the database
-	_, err = c.cache.GetEntityTags(entities[0], now, "cache_find_entities_by_type")
+	_, err = c.cache.FindEntityTags(ctx, entities[0], now, "cache_find_entities_by_type")
 	assert.Error(t, err)
 
-	entities, err = c.FindEntitiesByType(oam.FQDN, ctime2)
+	entities, err = c.FindEntitiesByType(ctx, oam.FQDN, ctime2)
 	assert.NoError(t, err)
 	if len(entities) != 6 {
 		t.Errorf("second request failed to produce the expected number of entities")
@@ -316,7 +338,7 @@ func TestFindEntitiesByType(t *testing.T) {
 		t.Errorf("second request failed to produce the correct entities")
 	}
 	// there should be a tag for this entity
-	tags, err := c.cache.GetEntityTags(entities[0], time.Time{}, "cache_find_entities_by_type")
+	tags, err := c.cache.FindEntityTags(ctx, entities[0], time.Time{}, "cache_find_entities_by_type")
 	assert.NoError(t, err)
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of entity tags")
@@ -327,7 +349,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	assert.NoError(t, err)
 	assert.WithinRange(t, tagtime, cbefore2, cafter2)
 
-	entities, err = c.FindEntitiesByType(oam.FQDN, ctime1)
+	entities, err = c.FindEntitiesByType(ctx, oam.FQDN, ctime1)
 	assert.NoError(t, err)
 	if len(entities) != 9 {
 		t.Errorf("third request failed to produce the expected number of entities")
@@ -346,7 +368,7 @@ func TestFindEntitiesByType(t *testing.T) {
 		t.Errorf("third request failed to produce the correct entities")
 	}
 	// there should now be a new tag for this entity
-	tags, err = c.cache.GetEntityTags(entities[0], time.Time{}, "cache_find_entities_by_type")
+	tags, err = c.cache.FindEntityTags(ctx, entities[0], time.Time{}, "cache_find_entities_by_type")
 	assert.NoError(t, err)
 	if len(tags) != 1 {
 		t.Errorf("third request failed to produce the expected number of entity tags")
@@ -371,16 +393,19 @@ func TestDeleteEntity(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = c.Close() }()
 
-	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	ctx := context.Background()
+	entity, err := c.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
-	err = c.DeleteEntity(entity.ID)
+	err = c.DeleteEntity(ctx, entity.ID)
 	assert.NoError(t, err)
 
-	_, err = c.FindEntityById(entity.ID)
+	_, err = c.FindEntityById(ctx, entity.ID)
 	assert.Error(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	_, err = db2.FindEntitiesByContent(entity.Asset, time.Time{})
+	_, err = db2.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.Error(t, err)
 }

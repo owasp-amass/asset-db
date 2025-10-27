@@ -17,8 +17,6 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-type ContentFilters map[string]any
-
 // Repository defines the methods for interacting with the asset database.
 // It provides operations for creating, retrieving, tagging, and linking assets.
 type Repository interface {
@@ -26,8 +24,8 @@ type Repository interface {
 	CreateEntity(ctx context.Context, entity *types.Entity) (*types.Entity, error)
 	CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error)
 	FindEntityById(ctx context.Context, id string) (*types.Entity, error)
-	FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters ContentFilters) ([]*types.Entity, error)
-	FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters ContentFilters) (*types.Entity, error)
+	FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error)
+	FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error)
 	FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	DeleteEntity(ctx context.Context, id string) error
 	CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error)
@@ -38,12 +36,12 @@ type Repository interface {
 	CreateEntityTag(ctx context.Context, entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error)
 	CreateEntityProperty(ctx context.Context, entity *types.Entity, property oam.Property) (*types.EntityTag, error)
 	FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error)
-	GetEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error)
+	FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error)
 	DeleteEntityTag(ctx context.Context, id string) error
 	CreateEdgeTag(ctx context.Context, edge *types.Edge, tag *types.EdgeTag) (*types.EdgeTag, error)
 	CreateEdgeProperty(ctx context.Context, edge *types.Edge, property oam.Property) (*types.EdgeTag, error)
 	FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error)
-	GetEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error)
+	FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error)
 	DeleteEdgeTag(ctx context.Context, id string) error
 	Close() error
 }

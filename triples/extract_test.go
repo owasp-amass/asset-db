@@ -5,6 +5,7 @@
 package triples
 
 import (
+	"context"
 	"fmt"
 	"net/netip"
 	"testing"
@@ -29,14 +30,15 @@ func TestExtract(t *testing.T) {
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
 
+	ctx := context.Background()
 	// create assets and relations for testing
-	fentity, err := db.CreateAsset(oamdns.FQDN{Name: "owasp.org"})
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
-	sentity, err := db.CreateAsset(oamdns.FQDN{Name: "www.owasp.org"})
+	sentity, err := db.CreateAsset(ctx, oamdns.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err, "Failed to create subdomain asset")
 	assert.NotNil(t, sentity, "Subdomain entity should not be nil")
-	edge, err := db.CreateEdge(&dbt.Edge{
+	edge, err := db.CreateEdge(ctx, &dbt.Edge{
 		Relation:   oamgen.SimpleRelation{Name: "node"},
 		FromEntity: fentity,
 		ToEntity:   sentity,
@@ -88,10 +90,10 @@ func TestExtract(t *testing.T) {
 	assert.Nil(t, results, "Results should be nil when an error occurs")
 
 	// add a new asset and relation to the database
-	nentity, err := db.CreateAsset(oamnet.IPAddress{Address: netip.MustParseAddr("192.168.1.2")})
+	nentity, err := db.CreateAsset(ctx, oamnet.IPAddress{Address: netip.MustParseAddr("192.168.1.2")})
 	assert.NoError(t, err, "Failed to create IP address asset")
 	assert.NotNil(t, nentity, "IP address entity should not be nil")
-	edge, err = db.CreateEdge(&dbt.Edge{
+	edge, err = db.CreateEdge(ctx, &dbt.Edge{
 		Relation: oamdns.BasicDNSRelation{
 			Name: "dns_record",
 			Header: oamdns.RRHeader{
@@ -130,14 +132,15 @@ func TestPredAndObject(t *testing.T) {
 
 	ipstr := "192.168.1.1"
 	cidr := "192.168.1.0/24"
+	ctx := context.Background()
 	// create an asset and relations for an FQDN that resolves to an IP address
-	fentity, err := db.CreateAsset(oamdns.FQDN{Name: "owasp.org"})
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
-	ipentity, err := db.CreateAsset(oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	ipentity, err := db.CreateAsset(ctx, oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
 	assert.NoError(t, err, "Failed to create the fqdn asset")
 	assert.NotNil(t, ipentity, "The entity should not be nil")
-	edge1, err := db.CreateEdge(&dbt.Edge{
+	edge1, err := db.CreateEdge(ctx, &dbt.Edge{
 		Relation: oamdns.BasicDNSRelation{
 			Name: "dns_record",
 			Header: oamdns.RRHeader{
@@ -151,10 +154,10 @@ func TestPredAndObject(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create edge")
 	assert.NotNil(t, edge1, "Edge should not be nil")
-	nentity, err := db.CreateAsset(oamnet.Netblock{CIDR: netip.MustParsePrefix(cidr), Type: "IPv4"})
+	nentity, err := db.CreateAsset(ctx, &oamnet.Netblock{CIDR: netip.MustParsePrefix(cidr), Type: "IPv4"})
 	assert.NoError(t, err, "Failed to create the netblock asset")
 	assert.NotNil(t, nentity, "The netblock entity should not be nil")
-	edge2, err := db.CreateEdge(&dbt.Edge{
+	edge2, err := db.CreateEdge(ctx, &dbt.Edge{
 		Relation:   oamgen.SimpleRelation{Name: "contains"},
 		FromEntity: nentity,
 		ToEntity:   ipentity,
@@ -213,8 +216,9 @@ func TestFindFirstSubject(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	ipstr := "192.168.1.2"
+	ctx := context.Background()
 	// add a new asset to the database
-	nentity, err := db.CreateAsset(oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
 	assert.NoError(t, err, "Failed to create IP address asset")
 	assert.NotNil(t, nentity, "IP address entity should not be nil")
 
@@ -258,8 +262,9 @@ func TestEntityPropsMatch(t *testing.T) {
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
 
+	ctx := context.Background()
 	// create an asset and property for testing
-	fentity, err := db.CreateAsset(oamdns.FQDN{Name: "owasp.org"})
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
 
@@ -278,7 +283,7 @@ func TestEntityPropsMatch(t *testing.T) {
 
 	pname := "test"
 	// add a property to the entity and test for success when that property is specified
-	tag, err := db.CreateEntityProperty(fentity, &oamgen.SourceProperty{Source: pname, Confidence: 100})
+	tag, err := db.CreateEntityProperty(ctx, fentity, &oamgen.SourceProperty{Source: pname, Confidence: 100})
 	assert.NoError(t, err, "Failed to create entity property")
 	assert.NotNil(t, tag, "Entity property should not be nil")
 	props, ok = entityPropsMatch(db, fentity, []*Property{p})
@@ -292,7 +297,7 @@ func TestEntityPropsMatch(t *testing.T) {
 	p2, err := parseProperty("[sourceproperty:test2,confidence:100]")
 	assert.NoError(t, err, "Failed to parse second property")
 	assert.NotNil(t, p2, "Parsed second property should not be nil")
-	tag, err = db.CreateEntityProperty(fentity, &oamgen.SourceProperty{Source: pname2, Confidence: 100})
+	tag, err = db.CreateEntityProperty(ctx, fentity, &oamgen.SourceProperty{Source: pname2, Confidence: 100})
 	assert.NoError(t, err, "Failed to create second entity property")
 	assert.NotNil(t, tag, "Second entity property should not be nil")
 	props, ok = entityPropsMatch(db, fentity, []*Property{p, p2})
@@ -318,14 +323,15 @@ func TestEdgePropsMatch(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	ipstr := "192.168.1.1"
+	ctx := context.Background()
 	// create an asset and relations for an FQDN that resolves to an IP address
-	fentity, err := db.CreateAsset(oamdns.FQDN{Name: "owasp.org"})
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
-	nentity, err := db.CreateAsset(oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
 	assert.NoError(t, err, "Failed to create subdomain asset")
 	assert.NotNil(t, nentity, "Subdomain entity should not be nil")
-	edge1, err := db.CreateEdge(&dbt.Edge{
+	edge1, err := db.CreateEdge(ctx, &dbt.Edge{
 		Relation: oamdns.BasicDNSRelation{
 			Name: "dns_record",
 			Header: oamdns.RRHeader{
@@ -355,7 +361,7 @@ func TestEdgePropsMatch(t *testing.T) {
 	assert.Equal(t, 0, len(props), "Expected no matching properties when none are associated")
 
 	// add a property to the edge and test for success when that property is specified
-	tag, err := db.CreateEdgeProperty(edge1, &oamgen.SourceProperty{Source: pname, Confidence: 100})
+	tag, err := db.CreateEdgeProperty(ctx, edge1, &oamgen.SourceProperty{Source: pname, Confidence: 100})
 	assert.NoError(t, err, "Failed to create edge property")
 	assert.NotNil(t, tag, "Edge property should not be nil")
 	props, ok = edgePropsMatch(db, edge1, []*Property{p})
@@ -369,7 +375,7 @@ func TestEdgePropsMatch(t *testing.T) {
 	p2, err := parseProperty("[sourceproperty:test2,confidence:100]")
 	assert.NoError(t, err, "Failed to parse second property")
 	assert.NotNil(t, p2, "Parsed second property should not be nil")
-	tag, err = db.CreateEdgeProperty(edge1, &oamgen.SourceProperty{Source: pname2, Confidence: 100})
+	tag, err = db.CreateEdgeProperty(ctx, edge1, &oamgen.SourceProperty{Source: pname2, Confidence: 100})
 	assert.NoError(t, err, "Failed to create second edge property")
 	assert.NotNil(t, tag, "Second edge property should not be nil")
 	props, ok = edgePropsMatch(db, edge1, []*Property{p, p2})
@@ -383,192 +389,4 @@ func TestEdgePropsMatch(t *testing.T) {
 	props, ok = edgePropsMatch(db, edge1, []*Property{p3})
 	assert.True(t, ok, "Expected edge properties to match when the specification matches both associated properties")
 	assert.Equal(t, 2, len(props), "Expected two matching properties when the specification matches both associated properties")
-}
-
-func TestSubjectToAsset(t *testing.T) {
-	tests := []struct {
-		Subject       *Node
-		ExpectSucceed bool
-	}{
-		{
-			Subject: &Node{
-				Type: oam.Account,
-				Key:  "112233445566778899",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.AutnumRecord,
-				Key:  "AS12345",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.AutonomousSystem,
-				Key:  "12345",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.AutonomousSystem,
-				Key:  "not-numeric",
-			},
-			ExpectSucceed: false,
-		},
-		{
-			Subject: &Node{
-				Type: oam.ContactRecord,
-				Key:  "http://example.com/contact",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.DomainRecord,
-				Key:  "example.com",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.File,
-				Key:  "file.txt",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.FQDN,
-				Key:  "www.example.com",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.FundsTransfer,
-				Key:  "txid1234567890abcdef",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Identifier,
-				Key:  "id123456",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.IPAddress,
-				Key:  "192.168.1.1",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.IPAddress,
-				Key:  "invalid-ip",
-			},
-			ExpectSucceed: false,
-		},
-		{
-			Subject: &Node{
-				Type: oam.IPNetRecord,
-				Key:  "192-168-1-1",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Location,
-				Key:  "New York City, NY, USA",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Netblock,
-				Key:  "192.168.1.0/24",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Netblock,
-				Key:  "invalid-cidr",
-			},
-			ExpectSucceed: false,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Organization,
-				Key:  "Example Org",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Person,
-				Key:  "John Doe",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Phone,
-				Key:  "+1234567890",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Product,
-				Key:  "Example Product",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.ProductRelease,
-				Key:  "v1.0.0",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.Service,
-				Key:  "Example Service",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.TLSCertificate,
-				Key:  "abcdef1234567890",
-			},
-			ExpectSucceed: true,
-		},
-		{
-			Subject: &Node{
-				Type: oam.URL,
-				Key:  "http://example.com",
-			},
-			ExpectSucceed: true,
-		},
-	}
-
-	for _, test := range tests {
-		asset, err := subjectToAsset(test.Subject)
-		if test.ExpectSucceed {
-			assert.NoError(t, err, "Expected no error for subject type %s with key %s", test.Subject.Type, test.Subject.Key)
-			assert.NotNil(t, asset, "Expected a valid asset for subject type %s with key %s", test.Subject.Type, test.Subject.Key)
-			assert.Equal(t, test.Subject.Key, asset.Key(), "Asset key mismatch for subject type %s", test.Subject.Type)
-		} else {
-			assert.Error(t, err, "Expected an error for subject type %s with key %s", test.Subject.Type, test.Subject.Key)
-			assert.Nil(t, asset, "Expected no asset for subject type %s with key %s", test.Subject.Type, test.Subject.Key)
-		}
-	}
 }

@@ -20,7 +20,7 @@ import (
 // CreateEdge creates an edge between two entities in the database.
 // The edge is established by creating a new Edge in the database, linking the two entities.
 // Returns the created edge as a types.Edge or an error if the link creation fails.
-func (neo *neoRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
+func (neo *neoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
 	if edge == nil || edge.Relation == nil || edge.FromEntity == nil ||
 		edge.FromEntity.Asset == nil || edge.ToEntity == nil || edge.ToEntity.Asset == nil {
 		return nil, errors.New("failed input validation checks")
@@ -49,13 +49,13 @@ func (neo *neoRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	from := fmt.Sprintf("MATCH (from:Entity {entity_id: '%s'})", edge.FromEntity.ID)
 	to := fmt.Sprintf("MATCH (to:Entity {entity_id: '%s'})", edge.ToEntity.ID)
 	query := fmt.Sprintf("%s %s CREATE (from)-[r:%s $props]->(to) RETURN r", from, to, strings.ToUpper(edge.Relation.Label()))
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
 		map[string]interface{}{"props": props},
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
@@ -79,9 +79,9 @@ func (neo *neoRepository) CreateEdge(edge *types.Edge) (*types.Edge, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	r.FromEntity = edge.FromEntity
 	r.ToEntity = edge.ToEntity
-
 	return r, nil
 }
 
@@ -90,12 +90,15 @@ func (neo *neoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (
 	var dup bool
 	var e *types.Edge
 
-	if outs, err := neo.OutgoingEdges(edge.FromEntity, time.Time{}, edge.Relation.Label()); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if outs, err := neo.OutgoingEdges(ctx, edge.FromEntity, time.Time{}, edge.Relation.Label()); err == nil {
 		for _, out := range outs {
 			if edge.ToEntity.ID == out.ToEntity.ID && reflect.DeepEqual(edge.Relation, out.Relation) {
 				_ = neo.edgeSeen(out, updated)
 
-				e, err = neo.FindEdgeById(out.ID)
+				e, err = neo.FindEdgeById(ctx, out.ID)
 				if err != nil {
 					return nil, false
 				}
@@ -125,11 +128,11 @@ func (neo *neoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	return err
 }
 
-func (neo *neoRepository) FindEdgeById(id string) (*types.Edge, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 		"MATCH (from:Entity)-[r]->(to:Entity) WHERE elementId(r) = $eid RETURN r, from.entity_id AS fid, to.entity_id AS tid",
 		map[string]interface{}{
 			"eid": id,
@@ -181,8 +184,8 @@ func (neo *neoRepository) FindEdgeById(id string) (*types.Edge, error) {
 // IncomingEdges finds all edges pointing to the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all incoming eges are returned.
-func (neo *neoRepository) IncomingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	query := "MATCH (:Entity {entity_id: $eid})<-[r]-(from:Entity) RETURN r, from.entity_id AS fid"
@@ -190,7 +193,7 @@ func (neo *neoRepository) IncomingEdges(entity *types.Entity, since time.Time, l
 		query = fmt.Sprintf("MATCH (:Entity {entity_id: $eid})<-[r]-(from:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, from.entity_id AS fid", timeToNeo4jTime(since))
 	}
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
 		map[string]interface{}{
 			"eid": entity.ID,
 		},
@@ -252,8 +255,8 @@ func (neo *neoRepository) IncomingEdges(entity *types.Entity, since time.Time, l
 // OutgoingEdges finds all edges from the entity of the specified labels and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no labels are specified, all outgoing edges are returned.
-func (neo *neoRepository) OutgoingEdges(entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	query := "MATCH (:Entity {entity_id: $eid})-[r]->(to:Entity) RETURN r, to.entity_id AS tid"
@@ -261,7 +264,7 @@ func (neo *neoRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 		query = fmt.Sprintf("MATCH (:Entity {entity_id: $eid})-[r]->(to:Entity) WHERE r.updated_at >= localDateTime('%s') RETURN r, to.entity_id AS tid", timeToNeo4jTime(since))
 	}
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
 		map[string]interface{}{
 			"eid": entity.ID,
 		},
@@ -323,11 +326,11 @@ func (neo *neoRepository) OutgoingEdges(entity *types.Entity, since time.Time, l
 // DeleteEdge removes an edge in the database by its ID.
 // It takes a string representing the edge ID and removes the corresponding edge from the database.
 // Returns an error if the edge is not found.
-func (neo *neoRepository) DeleteEdge(id string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) DeleteEdge(ctx context.Context, id string) error {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+	_, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 		"MATCH ()-[r]->() WHERE elementId(r) = $eid DELETE r",
 		map[string]interface{}{
 			"eid": id,

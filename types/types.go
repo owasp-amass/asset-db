@@ -10,6 +10,8 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
+type ContentFilters map[string]any
+
 // Entity represents an entity in the asset database.
 type Entity struct {
 	ID        string

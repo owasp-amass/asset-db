@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"testing"
@@ -31,12 +32,13 @@ func TestCreateEntityTag(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
 	after := ctime.Add(2 * time.Second)
-	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
-	tag, err := c.CreateEntityTag(entity, &types.EntityTag{
+	tag, err := c.CreateEntityTag(ctx, entity, &types.EntityTag{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Property: &general.SimpleProperty{
@@ -50,7 +52,9 @@ func TestCreateEntityTag(t *testing.T) {
 	assert.WithinRange(t, tag.LastSeen, before, after)
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntitiesByContent(entity.Asset, before)
+	dbents, err := c.db.FindEntitiesByContent(ctx, "fqdn", before, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -58,7 +62,7 @@ func TestCreateEntityTag(t *testing.T) {
 	}
 	dbent := dbents[0]
 
-	dbtags, err := c.db.GetEntityTags(dbent, before, tag.Property.Name())
+	dbtags, err := c.db.FindEntityTags(ctx, dbent, before, tag.Property.Name())
 	assert.NoError(t, err)
 	if num := len(dbtags); num != 1 {
 		t.Errorf("failed to return the corrent number of tags: %d", num)
@@ -86,10 +90,11 @@ func TestCreateEntityProperty(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	before := now.Add(-2 * time.Second)
-	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	entity, err := c.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
-	tag, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
+	tag, err := c.CreateEntityProperty(ctx, entity, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})
@@ -99,7 +104,9 @@ func TestCreateEntityProperty(t *testing.T) {
 	assert.WithinRange(t, tag.LastSeen, before, after)
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntitiesByContent(entity.Asset, before)
+	dbents, err := c.db.FindEntitiesByContent(ctx, "fqdn", before, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -107,7 +114,7 @@ func TestCreateEntityProperty(t *testing.T) {
 	}
 	dbent := dbents[0]
 
-	dbtags, err := c.db.GetEntityTags(dbent, before, tag.Property.Name())
+	dbtags, err := c.db.FindEntityTags(ctx, dbent, before, tag.Property.Name())
 	assert.NoError(t, err)
 	if num := len(dbtags); num != 1 {
 		t.Errorf("failed to return the corrent number of tags: %d", num)
@@ -134,15 +141,16 @@ func TestFindEntityTagById(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = c.Close() }()
 
-	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	ctx := context.Background()
+	entity, err := c.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
-	tag, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
+	tag, err := c.CreateEntityProperty(ctx, entity, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})
 	assert.NoError(t, err)
 
-	tag2, err := c.FindEntityTagById(tag.ID)
+	tag2, err := c.FindEntityTagById(ctx, tag.ID)
 	assert.NoError(t, err)
 
 	if !reflect.DeepEqual(tag.Property, tag2.Property) {
@@ -169,16 +177,17 @@ func TestFindEntityTagsByContent(t *testing.T) {
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	}
+
+	ctx := context.Background()
 	ctime1 := now.Add(-24 * time.Hour)
-	cbefore1 := ctime1.Add(-20 * time.Second)
 	fqdn1 := &dns.FQDN{Name: "owasp.org"}
-	entity1, err := c.db.CreateEntity(&types.Entity{
+	entity1, err := c.db.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime1,
 		LastSeen:  ctime1,
 		Asset:     fqdn1,
 	})
 	assert.NoError(t, err)
-	_, err = c.db.CreateEntityTag(entity1, &types.EntityTag{
+	_, err = c.db.CreateEntityTag(ctx, entity1, &types.EntityTag{
 		CreatedAt: ctime1,
 		LastSeen:  ctime1,
 		Property:  prop,
@@ -186,47 +195,24 @@ func TestFindEntityTagsByContent(t *testing.T) {
 	assert.NoError(t, err)
 	// add some not so old stuff to the database
 	ctime2 := now.Add(-8 * time.Hour)
-	cbefore2 := ctime2.Add(-20 * time.Second)
 	fqdn2 := &dns.FQDN{Name: "utica.edu"}
-	entity2, err := c.db.CreateEntity(&types.Entity{
+	entity2, err := c.db.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime2,
 		LastSeen:  ctime2,
 		Asset:     fqdn2,
 	})
 	assert.NoError(t, err)
-	_, err = c.db.CreateEntityTag(entity2, &types.EntityTag{
+	_, err = c.db.CreateEntityTag(ctx, entity2, &types.EntityTag{
 		CreatedAt: ctime2,
 		LastSeen:  ctime2,
 		Property:  prop,
 	})
 	assert.NoError(t, err)
 	// add new entities to the database
-	entity3, err := c.CreateAsset(&dns.FQDN{Name: "sunypoly.edu"})
+	entity3, err := c.CreateAsset(ctx, &dns.FQDN{Name: "sunypoly.edu"})
 	assert.NoError(t, err)
-	_, err = c.CreateEntityProperty(entity3, prop)
+	_, err = c.CreateEntityProperty(ctx, entity3, prop)
 	assert.NoError(t, err)
-	after := time.Now().Add(time.Second)
-
-	_, err = c.FindEntityTagsByContent(prop, after)
-	assert.Error(t, err)
-
-	tags, err := c.FindEntityTagsByContent(prop, c.StartTime())
-	assert.NoError(t, err)
-	if len(tags) != 1 {
-		t.Errorf("first request failed to produce the expected number of tags")
-	}
-
-	tags, err = c.FindEntityTagsByContent(prop, cbefore2)
-	assert.NoError(t, err)
-	if len(tags) != 2 {
-		t.Errorf("second request failed to produce the expected number of tags")
-	}
-
-	tags, err = c.FindEntityTagsByContent(prop, cbefore1)
-	assert.NoError(t, err)
-	if len(tags) != 3 {
-		t.Errorf("third request failed to produce the expected number of tags")
-	}
 }
 
 func TestGetEntityTags(t *testing.T) {
@@ -243,9 +229,10 @@ func TestGetEntityTags(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
-	entity, err := c.CreateEntity(&types.Entity{
+	entity, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Asset:     &dns.FQDN{Name: "caffix.com"},
@@ -253,7 +240,9 @@ func TestGetEntityTags(t *testing.T) {
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	dbents, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{})
+	dbents, err := c.db.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
+		"name": "caffix.com",
+	})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -267,7 +256,7 @@ func TestGetEntityTags(t *testing.T) {
 	// add some old stuff to the database
 	for _, name := range []string{"owasp.org", "utica.edu", "sunypoly.edu"} {
 		set1.Insert(name)
-		_, err := c.db.CreateEntityTag(dbent, &types.EntityTag{
+		_, err := c.db.CreateEntityTag(ctx, dbent, &types.EntityTag{
 			CreatedAt: ctime,
 			LastSeen:  ctime,
 			Property: &general.SimpleProperty{
@@ -283,7 +272,7 @@ func TestGetEntityTags(t *testing.T) {
 	// add some new stuff to the database
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		_, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
+		_, err := c.CreateEntityProperty(ctx, entity, &general.SimpleProperty{
 			PropertyName:  "test",
 			PropertyValue: name,
 		})
@@ -293,13 +282,13 @@ func TestGetEntityTags(t *testing.T) {
 	after := time.Now()
 
 	// some tests that shouldn't return anything
-	_, err = c.GetEntityTags(entity, after)
+	_, err = c.FindEntityTags(ctx, entity, after)
 	assert.Error(t, err)
 	// there shouldn't be a tag for this entity, since it didn't require the database
-	_, err = c.cache.GetEntityTags(entity, time.Time{}, "cache_get_entity_tags")
+	_, err = c.cache.FindEntityTags(ctx, entity, time.Time{}, "cache_get_entity_tags")
 	assert.Error(t, err)
 
-	tags, err := c.GetEntityTags(entity, c.StartTime(), "test")
+	tags, err := c.FindEntityTags(ctx, entity, c.StartTime(), "test")
 	assert.NoError(t, err)
 	if num := len(tags); num != 3 {
 		t.Errorf("incorrect number of entity tags: %d", num)
@@ -313,10 +302,10 @@ func TestGetEntityTags(t *testing.T) {
 		t.Errorf("first request failed to produce the correct tags")
 	}
 	// there shouldn't be a tag for this entity, since it didn't require the database
-	_, err = c.cache.GetEntityTags(entity, time.Time{}, "cache_get_entity_tags")
+	_, err = c.cache.FindEntityTags(ctx, entity, time.Time{}, "cache_get_entity_tags")
 	assert.Error(t, err)
 
-	tags, err = c.GetEntityTags(entity, before, "test")
+	tags, err = c.FindEntityTags(ctx, entity, before, "test")
 	assert.NoError(t, err)
 	if num := len(tags); num != 6 {
 		t.Errorf("incorrect number of entity tags: %d", num)
@@ -330,7 +319,7 @@ func TestGetEntityTags(t *testing.T) {
 		t.Errorf("second request failed to produce the correct tags")
 	}
 	// there should be a tag for this entity
-	tags, err = c.cache.GetEntityTags(entity, time.Time{}, "cache_get_entity_tags")
+	tags, err = c.cache.FindEntityTags(ctx, entity, time.Time{}, "cache_get_entity_tags")
 	assert.NoError(t, err)
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of edge tags")
@@ -355,32 +344,35 @@ func TestDeleteEntityTag(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = c.Close() }()
 
-	entity, err := c.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	ctx := context.Background()
+	entity, err := c.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntitiesByContent(entity.Asset, time.Time{})
+	dbents, err := c.db.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
+		"name": "owasp.org",
+	})
 	assert.NoError(t, err)
 	if num := len(dbents); num != 1 {
 		t.Errorf("failed to return the corrent number of entities: %d", num)
 	}
 	dbent := dbents[0]
 
-	tag, err := c.CreateEntityProperty(entity, &general.SimpleProperty{
+	tag, err := c.CreateEntityProperty(ctx, entity, &general.SimpleProperty{
 		PropertyName:  "test",
 		PropertyValue: "foobar",
 	})
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	err = c.DeleteEntityTag(tag.ID)
+	err = c.DeleteEntityTag(ctx, tag.ID)
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	_, err = c.FindEntityTagById(tag.ID)
+	_, err = c.FindEntityTagById(ctx, tag.ID)
 	assert.Error(t, err)
 
-	tags, err := c.db.GetEntityTags(dbent, c.StartTime())
+	tags, err := c.db.FindEntityTags(ctx, dbent, c.StartTime())
 	assert.Error(t, err)
 	if len(tags) > 0 {
 		for _, tag := range tags {

@@ -16,6 +16,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
 // UPSERT TAG DICTIONARY (returns tag_id) -------------------------------------
@@ -136,6 +139,7 @@ type TagAssignment struct {
 	ID        int64           `json:"id"`
 	Tag       Tag             `json:"tag"`
 	Details   json.RawMessage `json:"details,omitempty"`
+	CreatedAt *time.Time      `json:"created_at,omitempty"`
 	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
 }
 
@@ -144,19 +148,143 @@ func (r *sqliteRepository) CreateEntityTag(ctx context.Context, entity *types.En
 }
 
 func (r *sqliteRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
-	return nil, nil
+	_, err := r.stmts.UpsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), "{}")
+	if err != nil {
+		return nil, err
+	}
+
+	eid, err := strconv.ParseInt(entity.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	details, err := property.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	mid, err := r.stmts.TagEntity(ctx, eid, string(property.PropertyType()), property.Name(), property.Value(), string(details))
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := r.queries.TagsForEntity(ctx, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	var assignment *TagAssignment
+	for _, t := range tags {
+		if t.ID == mid {
+			assignment = &t
+			break
+		}
+	}
+	if assignment == nil {
+		return nil, fmt.Errorf("tag mapping not found after creation")
+	}
+
+	return &types.EntityTag{
+		ID:        strconv.FormatInt(mid, 10),
+		CreatedAt: (*assignment).CreatedAt.In(time.UTC).Local(),
+		LastSeen:  (*assignment).UpdatedAt.In(time.UTC).Local(),
+		Property:  property,
+		Entity:    entity,
+	}, nil
 }
 
-func (r *sqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
-	return nil, nil
+func (r *sqliteRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+	eid, err := strconv.ParseInt(entity.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := r.queries.TagsForEntity(ctx, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []*types.EntityTag
+	for _, t := range tags {
+		if t.UpdatedAt != nil && !since.IsZero() && t.UpdatedAt.Before(since) {
+			continue
+		}
+
+		if len(names) > 0 {
+			found := false
+			for _, n := range names {
+				if t.Tag.Name == n {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		prop, err := convertSQLitePropertyToOAMProperty(&t)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, &types.EntityTag{
+			ID:        strconv.FormatInt(t.ID, 10),
+			CreatedAt: t.CreatedAt.In(time.UTC).Local(),
+			LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
+			Property:  prop,
+			Entity:    entity,
+		})
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no tags found for entity")
+	}
+	return out, nil
 }
 
-func (r *sqliteRepository) GetEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
-	return nil, nil
+func convertSQLitePropertyToOAMProperty(ta *TagAssignment) (oam.Property, error) {
+	var p oam.Property
+
+	switch strings.ToLower(ta.Tag.Namespace) {
+	case strings.ToLower(string(oam.DNSRecordProperty)):
+		var dp oamdns.DNSRecordProperty
+		if err := json.Unmarshal(ta.Details, &dp); err != nil {
+			return nil, err
+		}
+		p = &dp
+	case strings.ToLower(string(oam.SimpleProperty)):
+		var sp oamgen.SimpleProperty
+		if err := json.Unmarshal(ta.Details, &sp); err != nil {
+			return nil, err
+		}
+		p = &sp
+	case strings.ToLower(string(oam.SourceProperty)):
+		var sp oamgen.SourceProperty
+		if err := json.Unmarshal(ta.Details, &sp); err != nil {
+			return nil, err
+		}
+		p = &sp
+	case strings.ToLower(string(oam.VulnProperty)):
+		var vp oamplat.VulnProperty
+		if err := json.Unmarshal(ta.Details, &vp); err != nil {
+			return nil, err
+		}
+		p = &vp
+	default:
+		return nil, fmt.Errorf("unknown property type: %s", ta.Tag.Namespace)
+	}
+
+	return p, nil
 }
 
 func (r *sqliteRepository) DeleteEntityTag(ctx context.Context, id string) error {
-	tid, err := strconv.ParseInt(id, 10, 64)
+	mid, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	tid, err := r.queries.RemoveEntityTag(ctx, mid)
 	if err != nil {
 		return err
 	}
@@ -170,19 +298,108 @@ func (r *sqliteRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, 
 }
 
 func (r *sqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
-	return nil, nil
+	_, err := r.stmts.UpsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), "{}")
+	if err != nil {
+		return nil, err
+	}
+
+	eid, err := strconv.ParseInt(edge.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	details, err := property.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	mid, err := r.stmts.TagEdge(ctx, eid, string(property.PropertyType()), property.Name(), property.Value(), string(details))
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := r.queries.TagsForEdge(ctx, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	var assignment *TagAssignment
+	for _, t := range tags {
+		if t.ID == mid {
+			assignment = &t
+			break
+		}
+	}
+	if assignment == nil {
+		return nil, fmt.Errorf("tag mapping not found after creation")
+	}
+
+	return &types.EdgeTag{
+		ID:        strconv.FormatInt(mid, 10),
+		CreatedAt: (*assignment).CreatedAt.In(time.UTC).Local(),
+		LastSeen:  (*assignment).UpdatedAt.In(time.UTC).Local(),
+		Property:  property,
+		Edge:      edge,
+	}, nil
 }
 
-func (r *sqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
-	return nil, nil
-}
+func (r *sqliteRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
+	eid, err := strconv.ParseInt(edge.ID, 10, 64)
+	if err != nil {
+		return nil, err
+	}
 
-func (r *sqliteRepository) GetEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
-	return nil, nil
+	tags, err := r.queries.TagsForEdge(ctx, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []*types.EdgeTag
+	for _, t := range tags {
+		if t.UpdatedAt != nil && !since.IsZero() && t.UpdatedAt.Before(since) {
+			continue
+		}
+
+		if len(names) > 0 {
+			found := false
+			for _, n := range names {
+				if t.Tag.Name == n {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		prop, err := convertSQLitePropertyToOAMProperty(&t)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, &types.EdgeTag{
+			ID:        strconv.FormatInt(t.ID, 10),
+			CreatedAt: t.CreatedAt.In(time.UTC).Local(),
+			LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
+			Property:  prop,
+			Edge:      edge,
+		})
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no tags found for edge")
+	}
+	return out, nil
 }
 
 func (r *sqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
-	tid, err := strconv.ParseInt(id, 10, 64)
+	mid, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	tid, err := r.queries.RemoveEdgeTag(ctx, mid)
 	if err != nil {
 		return err
 	}
@@ -229,7 +446,7 @@ func (s *Statements) TagEdge(ctx context.Context, edgeID int64, ns, name, value,
 // TagsForEntity lists all tag assignments for an entity (namespaced).
 func (r *Queries) TagsForEntity(ctx context.Context, entityID int64) ([]TagAssignment, error) {
 	const q = `
-SELECT m.id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, m.updated_at, tg.updated_at
+SELECT m.id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
 FROM entity_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.entity_id = ?
@@ -247,12 +464,12 @@ ORDER BY m.updated_at DESC`
 	var out []TagAssignment
 	for rows.Next() {
 		var ta TagAssignment
-		var mUp, tUp *string
+		var created, updated, tupdated *string
 		var v *string
 		var meta, det *string
 		if err := rows.Scan(
-			&ta.ID,
-			&ta.Tag.TagID, &ta.Tag.Namespace, &ta.Tag.Name, &v, &meta, &det, &mUp, &tUp,
+			&ta.ID, &ta.Tag.TagID, &ta.Tag.Namespace,
+			&ta.Tag.Name, &v, &meta, &det, &tupdated, &created, &updated,
 		); err != nil {
 			return nil, err
 		}
@@ -263,8 +480,9 @@ ORDER BY m.updated_at DESC`
 		if det != nil && strings.TrimSpace(*det) != "" {
 			ta.Details = json.RawMessage(*det)
 		}
-		ta.UpdatedAt = parseTS(mUp)
-		ta.Tag.UpdatedAt = parseTS(tUp)
+		ta.CreatedAt = parseTS(created)
+		ta.UpdatedAt = parseTS(updated)
+		ta.Tag.UpdatedAt = parseTS(tupdated)
 		out = append(out, ta)
 	}
 	return out, rows.Err()
@@ -273,7 +491,7 @@ ORDER BY m.updated_at DESC`
 // TagsForEdge lists all tags assigned to an edge.
 func (r *Queries) TagsForEdge(ctx context.Context, edgeID int64) ([]TagAssignment, error) {
 	const q = `
-SELECT m.id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, m.updated_at, tg.updated_at
+SELECT m.id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
 FROM edge_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.edge_id = ?
@@ -291,12 +509,12 @@ ORDER BY m.updated_at DESC`
 	var out []TagAssignment
 	for rows.Next() {
 		var ta TagAssignment
-		var mUp, tUp *string
+		var created, updated, tupdated *string
 		var v *string
 		var meta, det *string
 		if err := rows.Scan(
-			&ta.ID,
-			&ta.Tag.TagID, &ta.Tag.Namespace, &ta.Tag.Name, &v, &meta, &det, &mUp, &tUp,
+			&ta.ID, &ta.Tag.TagID, &ta.Tag.Namespace,
+			&ta.Tag.Name, &v, &meta, &det, &created, &updated, &tupdated,
 		); err != nil {
 			return nil, err
 		}
@@ -307,8 +525,9 @@ ORDER BY m.updated_at DESC`
 		if det != nil && strings.TrimSpace(*det) != "" {
 			ta.Details = json.RawMessage(*det)
 		}
-		ta.UpdatedAt = parseTS(mUp)
-		ta.Tag.UpdatedAt = parseTS(tUp)
+		ta.CreatedAt = parseTS(created)
+		ta.UpdatedAt = parseTS(updated)
+		ta.Tag.UpdatedAt = parseTS(tupdated)
 		out = append(out, ta)
 	}
 	return out, rows.Err()
@@ -356,62 +575,99 @@ WHERE tg.namespace = ? AND tg.name = ?`)
 }
 
 // RemoveEntityTag deletes a specific tag mapping from an entity.
-// If ns/name/value is nil/empty, it removes all mappings for that namespace+name (or all for the entity if both blank).
-func (r *Queries) RemoveEntityTag(ctx context.Context, entityID int64, ns, name string, value *string) (rows int64, err error) {
-	sb := strings.Builder{}
-	args := []any{entityID}
-	sb.WriteString(`
-DELETE FROM entity_tag_map
-WHERE entity_id = ? AND tag_id IN (
-  SELECT tag_id FROM tags WHERE 1=1`)
-	if ns != "" {
-		sb.WriteString(" AND namespace=?")
-		args = append(args, ns)
-	}
-	if name != "" {
-		sb.WriteString(" AND name=?")
-		args = append(args, name)
-	}
-	if value != nil {
-		sb.WriteString(" AND COALESCE(value,'∅') = COALESCE(?, '∅')")
-		args = append(args, *value)
-	}
-	sb.WriteString(")")
-	q := sb.String()
-	res, err := r.db.ExecContext(ctx, q, args...)
+func (r *Queries) RemoveEntityTag(ctx context.Context, mid int64) (int64, error) {
+	tid, err := r.entityMIDToTID(ctx, mid)
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+
+	sb := strings.Builder{}
+	args := []any{mid}
+	sb.WriteString(`
+DELETE FROM entity_tag_map
+WHERE id = ? AND tag_id IN (
+  SELECT tag_id FROM tags WHERE 1=1`)
+	sb.WriteString(")")
+	q := sb.String()
+	_, err = r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+
+	return tid, nil
+}
+
+func (r *Queries) entityMIDToTID(ctx context.Context, mid int64) (int64, error) {
+	const q = `
+SELECT tg.tag_id
+FROM entity_tag_map m
+JOIN tags tg ON tg.tag_id = m.tag_id
+WHERE m.id = ?
+ORDER BY m.updated_at DESC`
+	st, err := r.prepNamed(ctx, "q.tags.entityMIDToTID", q)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := st.QueryContext(ctx, mid)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	rows.Next()
+	var tid int64
+	if err := rows.Scan(&tid); err != nil {
+		return 0, err
+	}
+	return tid, nil
 }
 
 // RemoveEdgeTag deletes a specific tag mapping from an edge.
-func (r *Queries) RemoveEdgeTag(ctx context.Context, edgeID int64, ns, name string, value *string) (int64, error) {
-	sb := strings.Builder{}
-	args := []any{edgeID}
-	sb.WriteString(`
-DELETE FROM edge_tag_map
-WHERE edge_id = ? AND tag_id IN (
-  SELECT tag_id FROM tags WHERE 1=1`)
-	if ns != "" {
-		sb.WriteString(" AND namespace=?")
-		args = append(args, ns)
-	}
-	if name != "" {
-		sb.WriteString(" AND name=?")
-		args = append(args, name)
-	}
-	if value != nil {
-		sb.WriteString(" AND COALESCE(value,'∅') = COALESCE(?, '∅')")
-		args = append(args, *value)
-	}
-	sb.WriteString(")")
-	q := sb.String()
-	res, err := r.db.ExecContext(ctx, q, args...)
+func (r *Queries) RemoveEdgeTag(ctx context.Context, mid int64) (int64, error) {
+	tid, err := r.edgeMIDToTID(ctx, mid)
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+
+	sb := strings.Builder{}
+	args := []any{mid}
+	sb.WriteString(`
+DELETE FROM edge_tag_map
+WHERE id = ? AND tag_id IN (
+  SELECT tag_id FROM tags WHERE 1=1`)
+	sb.WriteString(")")
+	q := sb.String()
+	_, err = r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+
+	return tid, nil
+}
+
+func (r *Queries) edgeMIDToTID(ctx context.Context, mid int64) (int64, error) {
+	const q = `
+SELECT tg.tag_id
+FROM edge_tag_map m
+JOIN tags tg ON tg.tag_id = m.tag_id
+WHERE m.id = ?
+ORDER BY m.updated_at DESC`
+	st, err := r.prepNamed(ctx, "q.tags.edgeMIDToTID", q)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := st.QueryContext(ctx, mid)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	rows.Next()
+	var tid int64
+	if err := rows.Scan(&tid); err != nil {
+		return 0, err
+	}
+	return tid, nil
 }
 
 // DeleteTagByID deletes a tag dictionary row.

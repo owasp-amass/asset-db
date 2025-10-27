@@ -268,3 +268,57 @@ func queryNodeByAssetKey(varname string, asset oam.Asset) (string, error) {
 
 	return node, nil
 }
+
+func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
+	filter := make(types.ContentFilters)
+
+	switch v := asset.(type) {
+	case *account.Account:
+		filter["unique_id"] = v.ID
+	case *oamreg.AutnumRecord:
+		filter["handle"] = v.Handle
+	case *oamnet.AutonomousSystem:
+		filter["number"] = v.Number
+	case *contact.ContactRecord:
+		filter["discovered_at"] = v.DiscoveredAt
+	case *oamreg.DomainRecord:
+		filter["domain"] = v.Domain
+	case *file.File:
+		filter["url"] = v.URL
+	case *dns.FQDN:
+		filter["name"] = v.Name
+	case *financial.FundsTransfer:
+		filter["unique_id"] = v.ID
+	case *general.Identifier:
+		filter["unique_id"] = v.UniqueID
+	case *oamnet.IPAddress:
+		filter["address"] = v.Address.String()
+	case *oamreg.IPNetRecord:
+		filter["handle"] = v.Handle
+	case *contact.Location:
+		filter["address"] = v.Address
+	case *oamnet.Netblock:
+		filter["cidr"] = v.CIDR.String()
+	case *org.Organization:
+		filter["unique_id"] = v.ID
+	case *people.Person:
+		filter["unique_id"] = v.ID
+	case *contact.Phone:
+		filter["raw"] = v.Raw
+	case *platform.Product:
+		filter["unique_id"] = v.ID
+	case *platform.ProductRelease:
+		filter["name"] = v.Name
+	case *platform.Service:
+		filter["unique_id"] = v.ID
+	case *oamcert.TLSCertificate:
+		filter["serial_number"] = v.SerialNumber
+	case *url.URL:
+		filter["url"] = v.Raw
+	}
+	if len(filter) == 0 {
+		return nil, errors.New("asset type not supported")
+	}
+
+	return filter, nil
+}

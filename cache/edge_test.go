@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"testing"
@@ -40,12 +41,15 @@ func TestCreateEdge(t *testing.T) {
 	assert.WithinRange(t, edge.CreatedAt, before, after)
 	assert.WithinRange(t, edge.LastSeen, before, after)
 
-	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, "cache_create_edge"); err != nil || len(tags) != 1 {
+	ctx := context.Background()
+	if tags, err := c.cache.FindEdgeTags(ctx, edge, time.Time{}, "cache_create_edge"); err != nil || len(tags) != 1 {
 		t.Errorf("failed to create the cache tag:")
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	dbents, err := c.db.FindEntitiesByContent(edge.FromEntity.Asset, before)
+	dbents, err := c.db.FindEntitiesByContent(ctx, "fqdn", before, types.ContentFilters{
+		"name": "www.owasp.org",
+	})
 	assert.NoError(t, err)
 
 	if num := len(dbents); num != 1 {
@@ -53,7 +57,7 @@ func TestCreateEdge(t *testing.T) {
 	}
 	dbent := dbents[0]
 
-	dbedges, err := c.db.OutgoingEdges(dbent, before, "dns_record")
+	dbedges, err := c.db.OutgoingEdges(ctx, dbent, before, "dns_record")
 	assert.NoError(t, err)
 
 	if num := len(dbedges); num != 1 {
@@ -69,7 +73,9 @@ func TestCreateEdge(t *testing.T) {
 }
 
 func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
-	entity1, err := cache.CreateEntity(&types.Entity{
+	ctx := context.Background()
+
+	entity1, err := cache.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Asset:     &dns.FQDN{Name: "owasp.org"},
@@ -78,7 +84,7 @@ func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
 		return nil, err
 	}
 
-	entity2, err := cache.CreateEntity(&types.Entity{
+	entity2, err := cache.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Asset:     &dns.FQDN{Name: "www.owasp.org"},
@@ -87,7 +93,7 @@ func createTestEdge(cache *Cache, ctime time.Time) (*types.Edge, error) {
 		return nil, err
 	}
 
-	edge, err := cache.CreateEdge(&types.Edge{
+	edge, err := cache.CreateEdge(ctx, &types.Edge{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Relation: &dns.BasicDNSRelation{
@@ -129,7 +135,7 @@ func TestFindEdgeById(t *testing.T) {
 	edge, err := createTestEdge(c, ctime)
 	assert.NoError(t, err)
 
-	e, err := c.FindEdgeById(edge.ID)
+	e, err := c.FindEdgeById(context.Background(), edge.ID)
 	assert.NoError(t, err)
 
 	if !reflect.DeepEqual(edge.Relation, e.Relation) {
@@ -151,9 +157,10 @@ func TestIncomingEdges(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
-	from, err := c.CreateEntity(&types.Entity{
+	from, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Asset:     &dns.FQDN{Name: "caffix.com"},
@@ -161,22 +168,25 @@ func TestIncomingEdges(t *testing.T) {
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	dbfrom, err := c.db.FindEntitiesByContent(from.Asset, time.Time{})
+	dbfrom, err := c.db.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
+		"name": "caffix.com",
+	})
 	assert.NoError(t, err)
 
 	set1 := stringset.New()
 	defer set1.Close()
 	// add some old stuff to the database
 	var entities1 []*types.Entity
-	for _, name := range []string{"owasp.org", "utica.edu", "sunypoly.edu"} {
+	names1 := []string{"owasp.org", "utica.edu", "sunypoly.edu"}
+	for _, name := range names1 {
 		set1.Insert(name)
-		e, err := c.db.CreateEntity(&types.Entity{
+		e, err := c.db.CreateEntity(ctx, &types.Entity{
 			CreatedAt: ctime,
 			LastSeen:  ctime,
 			Asset:     &dns.FQDN{Name: name},
 		})
 		assert.NoError(t, err)
-		_, err = c.db.CreateEdge(&types.Edge{
+		_, err = c.db.CreateEdge(ctx, &types.Edge{
 			CreatedAt:  ctime,
 			LastSeen:   ctime,
 			Relation:   general.SimpleRelation{Name: "node"},
@@ -193,9 +203,9 @@ func TestIncomingEdges(t *testing.T) {
 	var entities2 []*types.Entity
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		e, err := c.CreateAsset(&dns.FQDN{Name: name})
+		e, err := c.CreateAsset(ctx, &dns.FQDN{Name: name})
 		assert.NoError(t, err)
-		_, err = c.CreateEdge(&types.Edge{
+		_, err = c.CreateEdge(ctx, &types.Edge{
 			Relation:   general.SimpleRelation{Name: "node"},
 			FromEntity: from,
 			ToEntity:   e,
@@ -206,14 +216,14 @@ func TestIncomingEdges(t *testing.T) {
 	after := time.Now().Add(time.Second)
 
 	// some tests that shouldn't return anything
-	_, err = c.IncomingEdges(entities2[0], after)
+	_, err = c.IncomingEdges(ctx, entities2[0], after)
 	assert.Error(t, err)
 	// there shouldn't be a tag for this entity, since it didn't require the database
-	_, err = c.cache.GetEntityTags(entities2[0], time.Time{}, "cache_incoming_edges")
+	_, err = c.cache.FindEntityTags(ctx, entities2[0], time.Time{}, "cache_incoming_edges")
 	assert.Error(t, err)
 
 	for _, entity := range entities2 {
-		edges, err := c.IncomingEdges(entity, c.StartTime(), "node")
+		edges, err := c.IncomingEdges(ctx, entity, c.StartTime(), "node")
 		assert.NoError(t, err)
 		if len(edges) != 1 {
 			t.Errorf("%s had the incorrect number of incoming edges", entity.Asset.Key())
@@ -226,15 +236,17 @@ func TestIncomingEdges(t *testing.T) {
 		t.Errorf("first request failed to produce the correct edges")
 	}
 	// there shouldn't be a tag for this entity, since it didn't require the database
-	_, err = c.cache.GetEntityTags(entities2[0], time.Time{}, "cache_incoming_edges")
+	_, err = c.cache.FindEntityTags(ctx, entities2[0], time.Time{}, "cache_incoming_edges")
 	assert.Error(t, err)
 
 	var rentity *types.Entity
-	for _, entity := range entities1 {
-		e, err := c.FindEntitiesByContent(entity.Asset, time.Time{})
+	for i, _ := range entities1 {
+		e, err := c.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
+			"name": names1[i],
+		})
 		assert.NoError(t, err)
 		rentity = e[0]
-		edges, err := c.IncomingEdges(rentity, before, "node")
+		edges, err := c.IncomingEdges(ctx, rentity, before, "node")
 		assert.NoError(t, err)
 		if len(edges) != 1 {
 			t.Errorf("%s had the incorrect number of incoming edges", rentity.Asset.Key())
@@ -247,7 +259,7 @@ func TestIncomingEdges(t *testing.T) {
 		t.Errorf("second request failed to produce the correct entities")
 	}
 	// there should be a tag for this entity
-	tags, err := c.cache.GetEntityTags(rentity, time.Time{}, "cache_incoming_edges")
+	tags, err := c.cache.FindEntityTags(ctx, rentity, time.Time{}, "cache_incoming_edges")
 	assert.NoError(t, err)
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of entity tags")
@@ -273,9 +285,10 @@ func TestOutgoingEdges(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
-	from, err := c.CreateEntity(&types.Entity{
+	from, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: ctime,
 		LastSeen:  ctime,
 		Asset:     &dns.FQDN{Name: "caffix.com"},
@@ -283,7 +296,9 @@ func TestOutgoingEdges(t *testing.T) {
 	assert.NoError(t, err)
 	time.Sleep(250 * time.Millisecond)
 
-	dbfrom, err := c.db.FindEntitiesByContent(from.Asset, time.Time{})
+	dbfrom, err := c.db.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
+		"name": "caffix.com",
+	})
 	assert.NoError(t, err)
 
 	set1 := stringset.New()
@@ -291,13 +306,13 @@ func TestOutgoingEdges(t *testing.T) {
 	// add some old stuff to the database
 	for _, name := range []string{"owasp.org", "utica.edu", "sunypoly.edu"} {
 		set1.Insert(name)
-		e, err := c.db.CreateEntity(&types.Entity{
+		e, err := c.db.CreateEntity(ctx, &types.Entity{
 			CreatedAt: ctime,
 			LastSeen:  ctime,
 			Asset:     &dns.FQDN{Name: name},
 		})
 		assert.NoError(t, err)
-		_, err = c.db.CreateEdge(&types.Edge{
+		_, err = c.db.CreateEdge(ctx, &types.Edge{
 			CreatedAt:  ctime,
 			LastSeen:   ctime,
 			Relation:   general.SimpleRelation{Name: "node"},
@@ -312,9 +327,9 @@ func TestOutgoingEdges(t *testing.T) {
 	// add some new stuff to the database
 	for _, name := range []string{"www.owasp.org", "www.utica.edu", "www.sunypoly.edu"} {
 		set2.Insert(name)
-		e, err := c.CreateAsset(&dns.FQDN{Name: name})
+		e, err := c.CreateAsset(ctx, &dns.FQDN{Name: name})
 		assert.NoError(t, err)
-		_, err = c.CreateEdge(&types.Edge{
+		_, err = c.CreateEdge(ctx, &types.Edge{
 			Relation:   general.SimpleRelation{Name: "node"},
 			FromEntity: from,
 			ToEntity:   e,
@@ -324,20 +339,20 @@ func TestOutgoingEdges(t *testing.T) {
 	after := time.Now().Add(time.Second)
 
 	// some tests that shouldn't return anything
-	_, err = c.OutgoingEdges(from, after)
+	_, err = c.OutgoingEdges(ctx, from, after)
 	assert.Error(t, err)
 	// there shouldn't be a tag for this entity, since it didn't require the database
-	_, err = c.cache.GetEntityTags(from, time.Time{}, "cache_outgoing_edges")
+	_, err = c.cache.FindEntityTags(ctx, from, time.Time{}, "cache_outgoing_edges")
 	assert.Error(t, err)
 
-	edges, err := c.OutgoingEdges(from, c.StartTime(), "node")
+	edges, err := c.OutgoingEdges(ctx, from, c.StartTime(), "node")
 	assert.NoError(t, err)
 	if len(edges) != 3 {
 		t.Errorf("incorrect number of outgoing edges")
 	}
 
 	for _, edge := range edges {
-		e, err := c.FindEntityById(edge.ToEntity.ID)
+		e, err := c.FindEntityById(ctx, edge.ToEntity.ID)
 		assert.NoError(t, err)
 		set2.Remove(e.Asset.Key())
 	}
@@ -347,17 +362,17 @@ func TestOutgoingEdges(t *testing.T) {
 		t.Errorf("first request failed to produce the correct edges")
 	}
 	// there shouldn't be a tag for this entity, since it didn't require the database
-	_, err = c.cache.GetEntityTags(from, time.Time{}, "cache_outgoing_edges")
+	_, err = c.cache.FindEntityTags(ctx, from, time.Time{}, "cache_outgoing_edges")
 	assert.Error(t, err)
 
-	edges, err = c.OutgoingEdges(from, before, "node")
+	edges, err = c.OutgoingEdges(ctx, from, before, "node")
 	assert.NoError(t, err)
 	if len(edges) != 6 {
 		t.Errorf("incorrect number of outgoing edges")
 	}
 
 	for _, edge := range edges {
-		e, err := c.FindEntityById(edge.ToEntity.ID)
+		e, err := c.FindEntityById(ctx, edge.ToEntity.ID)
 		assert.NoError(t, err)
 		set1.Remove(e.Asset.Key())
 	}
@@ -367,7 +382,7 @@ func TestOutgoingEdges(t *testing.T) {
 		t.Errorf("second request failed to produce the correct entities")
 	}
 	// there should be a tag for this entity
-	tags, err := c.cache.GetEntityTags(from, time.Time{}, "cache_outgoing_edges")
+	tags, err := c.cache.FindEntityTags(ctx, from, time.Time{}, "cache_outgoing_edges")
 	assert.NoError(t, err)
 	if len(tags) != 1 {
 		t.Errorf("second request failed to produce the expected number of entity tags")
@@ -393,21 +408,24 @@ func TestDeleteEdge(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
+	ctx := context.Background()
 	ctime := now.Add(-8 * time.Hour)
 	before := ctime.Add(-2 * time.Second)
 
 	edge, err := createTestEdge(c, ctime)
 	assert.NoError(t, err)
 
-	err = c.DeleteEdge(edge.ID)
+	err = c.DeleteEdge(ctx, edge.ID)
 	assert.NoError(t, err)
 
-	_, err = c.cache.FindEdgeById(edge.ID)
+	_, err = c.cache.FindEdgeById(ctx, edge.ID)
 	assert.Error(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	dbent, err := c.db.FindEntitiesByContent(edge.FromEntity.Asset, time.Time{})
+	dbent, err := c.db.FindEntitiesByContent(ctx, "fqdn", time.Time{}, types.ContentFilters{
+		"name": "www.owasp.org",
+	})
 	assert.NoError(t, err)
-	_, err = c.db.OutgoingEdges(dbent[0], before, edge.Relation.Label())
+	_, err = c.db.OutgoingEdges(ctx, dbent[0], before, edge.Relation.Label())
 	assert.Error(t, err)
 }

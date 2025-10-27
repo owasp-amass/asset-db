@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -27,7 +28,8 @@ func TestCacheEntityTag(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = c.Close() }()
 
-	db2ent, err := db2.CreateEntity(&types.Entity{
+	ctx := context.Background()
+	db2ent, err := db2.CreateEntity(ctx, &types.Entity{
 		CreatedAt: time.Now(),
 		LastSeen:  time.Now(),
 		Asset:     &dns.FQDN{Name: "owasp.org"},
@@ -39,7 +41,7 @@ func TestCacheEntityTag(t *testing.T) {
 	assert.Nil(t, tag)
 	assert.False(t, ok)
 
-	entity, err := c.CreateEntity(&types.Entity{
+	entity, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: time.Now(),
 		LastSeen:  time.Now(),
 		Asset:     &dns.FQDN{Name: "owasp.org"},
@@ -73,7 +75,8 @@ func TestCacheEdgeTag(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	now := time.Now()
-	db2ent1, err := db2.CreateEntity(&types.Entity{
+	ctx := context.Background()
+	db2ent1, err := db2.CreateEntity(ctx, &types.Entity{
 		CreatedAt: now,
 		LastSeen:  now,
 		Asset:     &dns.FQDN{Name: "owasp.org"},
@@ -82,7 +85,7 @@ func TestCacheEdgeTag(t *testing.T) {
 	assert.NotNil(t, db2ent1)
 
 	now = time.Now()
-	db2ent2, err := db2.CreateEntity(&types.Entity{
+	db2ent2, err := db2.CreateEntity(ctx, &types.Entity{
 		CreatedAt: now,
 		LastSeen:  now,
 		Asset:     &dns.FQDN{Name: "example.com"},
@@ -91,7 +94,7 @@ func TestCacheEdgeTag(t *testing.T) {
 	assert.NotNil(t, db2ent2)
 
 	now = time.Now()
-	db2edge, err := db2.CreateEdge(&types.Edge{
+	db2edge, err := db2.CreateEdge(ctx, &types.Edge{
 		CreatedAt: now,
 		LastSeen:  now,
 		Relation: &dns.BasicDNSRelation{
@@ -113,7 +116,7 @@ func TestCacheEdgeTag(t *testing.T) {
 	assert.False(t, ok)
 
 	now = time.Now()
-	entity1, err := c.CreateEntity(&types.Entity{
+	entity1, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: now,
 		LastSeen:  now,
 		Asset:     &dns.FQDN{Name: "owasp.org"},
@@ -122,7 +125,7 @@ func TestCacheEdgeTag(t *testing.T) {
 	assert.NotNil(t, entity1)
 
 	now = time.Now()
-	entity2, err := c.CreateEntity(&types.Entity{
+	entity2, err := c.CreateEntity(ctx, &types.Entity{
 		CreatedAt: now,
 		LastSeen:  now,
 		Asset:     &dns.FQDN{Name: "example.com"},
@@ -131,7 +134,7 @@ func TestCacheEdgeTag(t *testing.T) {
 	assert.NotNil(t, entity2)
 
 	now = time.Now()
-	edge, err := c.CreateEdge(&types.Edge{
+	edge, err := c.CreateEdge(ctx, &types.Edge{
 		CreatedAt: now,
 		LastSeen:  now,
 		Relation: &dns.BasicDNSRelation{

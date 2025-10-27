@@ -20,7 +20,7 @@ import (
 // It takes an EdgeTag as input and persists it in the database.
 // The property is serialized to JSON and stored in the Content field of the EdgeTag struct.
 // Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
-func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) (*types.EdgeTag, error) {
+func (neo *neoRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, input *types.EdgeTag) (*types.EdgeTag, error) {
 	if input == nil {
 		return nil, errors.New("the input edge tag is nil")
 	}
@@ -36,7 +36,7 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			Property:  input.Property,
 			Edge:      edge,
 		}
-	} else if tags, err := neo.FindEdgeTagsByContent(input.Property, time.Time{}); err == nil && len(tags) > 0 {
+	} else if tags, err := neo.findEdgeTagsByContent(ctx, input.Property, time.Time{}); err == nil && len(tags) > 0 {
 		// ensure that duplicate entities are not entered into the database
 		for _, t := range tags {
 			if t.Edge.ID == edge.ID {
@@ -61,10 +61,10 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			return nil, err
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 			"MATCH (n:EdgeTag {tag_id: $tid}) SET p = $props RETURN p",
 			map[string]interface{}{"tid": tag.ID, "props": props},
 			neo4jdb.EagerResultTransformer,
@@ -105,11 +105,11 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 			return nil, err
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		query := fmt.Sprintf("CREATE (p:EdgeTag:%s $props) RETURN p", input.Property.PropertyType())
-		result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
 			map[string]interface{}{"props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
@@ -144,27 +144,30 @@ func (neo *neoRepository) CreateEdgeTag(edge *types.Edge, input *types.EdgeTag) 
 // It takes an oam.Property as input and persists it in the database.
 // The property is serialized to JSON and stored in the Content field of the EdgeTag struct.
 // Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
-func (neo *neoRepository) CreateEdgeProperty(edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
-	return neo.CreateEdgeTag(edge, &types.EdgeTag{Property: prop})
+func (neo *neoRepository) CreateEdgeProperty(ctx context.Context, edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
+	return neo.CreateEdgeTag(ctx, edge, &types.EdgeTag{Property: prop})
 }
 
 func (neo *neoRepository) uniqueEdgeTagID() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for {
 		id := uuid.New().String()
-		if _, err := neo.FindEdgeTagById(id); err != nil {
+		if _, err := neo.findEdgeTagById(ctx, id); err != nil {
 			return id
 		}
 	}
 }
 
-// FindEdgeTagById finds an edge tag in the database by the ID.
+// findEdgeTagById finds an edge tag in the database by the ID.
 // It takes a string representing the edge tag ID and retrieves the corresponding tag from the database.
 // Returns the discovered tag as a types.EdgeTag or an error if the asset is not found.
-func (neo *neoRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) findEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 		"MATCH (p:EdgeTag {tag_id: $tid}) RETURN p",
 		map[string]interface{}{"tid": id},
 		neo4jdb.EagerResultTransformer,
@@ -187,12 +190,12 @@ func (neo *neoRepository) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 	return nodeToEdgeTag(node)
 }
 
-// FindEdgeTagsByContent finds edge tags in the database that match the provided property data and updated_at after the since parameter.
+// findEdgeTagsByContent finds edge tags in the database that match the provided property data and updated_at after the since parameter.
 // It takes an oam.Property as input and searches for edge tags with matching content in the database.
 // If since.IsZero(), the parameter will be ignored.
 // The property data is serialized to JSON and compared against the Content field of the EdgeTag struct.
 // Returns a slice of matching edge tags as []*types.EdgeTag or an error if the search fails.
-func (neo *neoRepository) FindEdgeTagsByContent(prop oam.Property, since time.Time) ([]*types.EdgeTag, error) {
+func (neo *neoRepository) findEdgeTagsByContent(ctx context.Context, prop oam.Property, since time.Time) ([]*types.EdgeTag, error) {
 	qnode, err := queryNodeByPropertyKeyValue("p", "EdgeTag", prop)
 	if err != nil {
 		return nil, err
@@ -203,10 +206,10 @@ func (neo *neoRepository) FindEdgeTagsByContent(prop oam.Property, since time.Ti
 		query = fmt.Sprintf("MATCH %s WHERE p.updated_at >= localDateTime('%s') RETURN p", qnode, timeToNeo4jTime(since))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query, nil,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -235,19 +238,19 @@ func (neo *neoRepository) FindEdgeTagsByContent(prop oam.Property, since time.Ti
 	return tags, nil
 }
 
-// GetEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.
+// FindEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no names are specified, all tags for the specified edge are returned.
-func (neo *neoRepository) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
+func (neo *neoRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
 	query := fmt.Sprintf("MATCH (p:EdgeTag {edge_id: '%s'}) RETURN p", edge.ID)
 	if !since.IsZero() {
 		query = fmt.Sprintf("MATCH (p:EdgeTag {edge_id: '%s'}) WHERE p.updated_at >= localDateTime('%s') RETURN p", edge.ID, timeToNeo4jTime(since))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query, nil,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -300,11 +303,11 @@ func (neo *neoRepository) GetEdgeTags(edge *types.Edge, since time.Time, names .
 // DeleteEdgeTag removes an edge tag in the database by its ID.
 // It takes a string representing the edge tag ID and removes the corresponding tag from the database.
 // Returns an error if the tag is not found.
-func (neo *neoRepository) DeleteEdgeTag(id string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) DeleteEdgeTag(ctx context.Context, id string) error {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+	_, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 		"MATCH (n:EdgeTag {tag_id: $tid}) DETACH DELETE n",
 		map[string]interface{}{
 			"tid": id,

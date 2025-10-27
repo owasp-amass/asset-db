@@ -5,6 +5,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -20,13 +21,14 @@ func (c *Cache) createCacheEntityTag(entity *types.Entity, name, refID string, s
 		return errors.New("reference ID cannot be empty")
 	}
 	// remove all existing tags with the same name
-	if tags, err := c.cache.GetEntityTags(entity, c.start, name); err == nil {
+	ctx := context.Background()
+	if tags, err := c.cache.FindEntityTags(ctx, entity, c.start, name); err == nil {
 		for _, tag := range tags {
-			_ = c.cache.DeleteEntityTag(tag.ID)
+			_ = c.cache.DeleteEntityTag(ctx, tag.ID)
 		}
 	}
 
-	_, err := c.cache.CreateEntityProperty(entity, &types.CacheProperty{
+	_, err := c.cache.CreateEntityProperty(ctx, entity, &types.CacheProperty{
 		ID:        name,
 		RefID:     refID,
 		Timestamp: since.Format(time.RFC3339Nano),
@@ -39,7 +41,7 @@ func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.E
 		return nil, time.Time{}, false
 	}
 
-	if tags, err := c.cache.GetEntityTags(entity, c.start, name); err == nil && len(tags) == 1 {
+	if tags, err := c.cache.FindEntityTags(context.Background(), entity, c.start, name); err == nil && len(tags) == 1 {
 		tag := tags[0]
 
 		prop, ok := tag.Property.(*types.CacheProperty)
@@ -69,13 +71,14 @@ func (c *Cache) createCacheEdgeTag(edge *types.Edge, name, refID string, since t
 		return errors.New("reference ID cannot be empty")
 	}
 	// remove all existing tags with the same name
-	if tags, err := c.cache.GetEdgeTags(edge, c.start, name); err == nil {
+	ctx := context.Background()
+	if tags, err := c.cache.FindEdgeTags(ctx, edge, c.start, name); err == nil {
 		for _, tag := range tags {
-			_ = c.cache.DeleteEdgeTag(tag.ID)
+			_ = c.cache.DeleteEdgeTag(ctx, tag.ID)
 		}
 	}
 
-	_, err := c.cache.CreateEdgeProperty(edge, &types.CacheProperty{
+	_, err := c.cache.CreateEdgeProperty(ctx, edge, &types.CacheProperty{
 		ID:        name,
 		RefID:     refID,
 		Timestamp: since.Format(time.RFC3339Nano),
@@ -88,7 +91,7 @@ func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag
 		return nil, time.Time{}, false
 	}
 
-	if tags, err := c.cache.GetEdgeTags(edge, c.start, name); err == nil && len(tags) == 1 {
+	if tags, err := c.cache.FindEdgeTags(context.Background(), edge, c.start, name); err == nil && len(tags) == 1 {
 		tag := tags[0]
 
 		prop, ok := tag.Property.(*types.CacheProperty)

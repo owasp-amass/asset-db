@@ -7,6 +7,7 @@
 package neo4j
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -18,7 +19,10 @@ import (
 )
 
 func TestEntityTag(t *testing.T) {
-	entity, err := store.CreateAsset(&dns.FQDN{Name: "utica.edu"})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	entity, err := store.CreateAsset(ctx, &dns.FQDN{Name: "utica.edu"})
 	assert.NoError(t, err)
 
 	now := time.Now().Truncate(time.Second)
@@ -27,7 +31,7 @@ func TestEntityTag(t *testing.T) {
 		PropertyValue: "foo",
 	}
 
-	ct, err := store.CreateEntityProperty(entity, prop)
+	ct, err := store.CreateEntityProperty(ctx, entity, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.Property.Name(), prop.PropertyName)
 	assert.Equal(t, ct.Property.Value(), prop.PropertyValue)
@@ -39,7 +43,7 @@ func TestEntityTag(t *testing.T) {
 		t.Errorf("tag.LastSeen: %s, expected to be after: %s", ct.LastSeen.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
 
-	tag, err := store.FindEntityTagById(ct.ID)
+	tag, err := store.findEntityTagById(ctx, ct.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.CreatedAt, tag.CreatedAt)
 	assert.Equal(t, ct.LastSeen, tag.LastSeen)
@@ -47,7 +51,7 @@ func TestEntityTag(t *testing.T) {
 	assert.Equal(t, ct.Property.Value(), tag.Property.Value())
 
 	time.Sleep(time.Second)
-	ct2, err := store.CreateEntityProperty(entity, prop)
+	ct2, err := store.CreateEntityProperty(ctx, entity, prop)
 	assert.NoError(t, err)
 	if ct2.LastSeen.UnixNano() < ct.LastSeen.UnixNano() {
 		t.Errorf("ct2.LastSeen: %s, ct.LastSeen: %s", ct2.LastSeen.Format(time.RFC3339Nano), ct.LastSeen.Format(time.RFC3339Nano))
@@ -55,7 +59,7 @@ func TestEntityTag(t *testing.T) {
 
 	time.Sleep(time.Second)
 	prop.PropertyValue = "bar"
-	ct3, err := store.CreateEntityProperty(entity, prop)
+	ct3, err := store.CreateEntityProperty(ctx, entity, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct3.Property.Value(), prop.PropertyValue)
 	if ct3.CreatedAt.UnixNano() < ct2.CreatedAt.UnixNano() {
@@ -65,7 +69,7 @@ func TestEntityTag(t *testing.T) {
 		t.Errorf("ct3.LastSeen: %s, ct2.LastSeen: %s", ct3.LastSeen.Format(time.RFC3339Nano), ct2.LastSeen.Format(time.RFC3339Nano))
 	}
 
-	tags, err := store.GetEntityTags(entity, now, "test")
+	tags, err := store.FindEntityTags(ctx, entity, now, "test")
 	assert.NoError(t, err)
 
 	var found bool
@@ -77,18 +81,18 @@ func TestEntityTag(t *testing.T) {
 	}
 	assert.Equal(t, found, true)
 
-	err = store.DeleteEntityTag(ct3.ID)
+	err = store.DeleteEntityTag(ctx, ct3.ID)
 	assert.NoError(t, err)
 
-	_, err = store.FindEntityTagById(ct3.ID)
+	_, err = store.findEntityTagById(ctx, ct3.ID)
 	assert.Error(t, err)
 }
 
 func TestEdgeTag(t *testing.T) {
-	e1, err := store.CreateAsset(&dns.FQDN{Name: "owasp.org"})
+	e1, err := store.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
-	e2, err := store.CreateAsset(&dns.FQDN{Name: "www.owasp.org"})
+	e2, err := store.CreateAsset(ctx, &dns.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err)
 
 	edge, err := store.CreateEdge(&types.Edge{
@@ -107,7 +111,7 @@ func TestEdgeTag(t *testing.T) {
 		PropertyValue: "foo",
 	}
 
-	ct, err := store.CreateEdgeProperty(edge, prop)
+	ct, err := store.CreateEdgeProperty(ctx, edge, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.Property.Name(), prop.PropertyName)
 	assert.Equal(t, ct.Property.Value(), prop.PropertyValue)
@@ -119,7 +123,7 @@ func TestEdgeTag(t *testing.T) {
 		t.Errorf("tag.LastSeen: %s, expected to be after: %s", ct.LastSeen.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	}
 
-	tag, err := store.FindEdgeTagById(ct.ID)
+	tag, err := store.findEdgeTagById(ctx, ct.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, ct.CreatedAt, tag.CreatedAt)
 	assert.Equal(t, ct.LastSeen, tag.LastSeen)
@@ -127,7 +131,7 @@ func TestEdgeTag(t *testing.T) {
 	assert.Equal(t, ct.Property.Value(), tag.Property.Value())
 
 	time.Sleep(time.Second)
-	ct2, err := store.CreateEdgeProperty(edge, prop)
+	ct2, err := store.CreateEdgeProperty(ctx, edge, prop)
 	assert.NoError(t, err)
 	if ct2.LastSeen.UnixNano() < ct.LastSeen.UnixNano() {
 		t.Errorf("ct2.LastSeen: %s, ct.LastSeen: %s", ct2.LastSeen.Format(time.RFC3339Nano), ct.LastSeen.Format(time.RFC3339Nano))
@@ -135,7 +139,7 @@ func TestEdgeTag(t *testing.T) {
 
 	time.Sleep(time.Second)
 	prop.PropertyValue = "bar"
-	ct3, err := store.CreateEdgeProperty(edge, prop)
+	ct3, err := store.CreateEdgeProperty(ctx, edge, prop)
 	assert.NoError(t, err)
 	assert.Equal(t, ct3.Property.Value(), prop.PropertyValue)
 	if ct3.CreatedAt.UnixNano() < ct2.CreatedAt.UnixNano() {
@@ -145,7 +149,7 @@ func TestEdgeTag(t *testing.T) {
 		t.Errorf("ct3.LastSeen: %s, ct2.LastSeen: %s", ct3.LastSeen.Format(time.RFC3339Nano), ct2.LastSeen.Format(time.RFC3339Nano))
 	}
 
-	tags, err := store.GetEdgeTags(edge, now, "test")
+	tags, err := store.FindEdgeTags(ctx, edge, now, "test")
 	assert.NoError(t, err)
 
 	var found bool
@@ -157,9 +161,9 @@ func TestEdgeTag(t *testing.T) {
 	}
 	assert.Equal(t, found, true)
 
-	err = store.DeleteEdgeTag(ct3.ID)
+	err = store.DeleteEdgeTag(ctx, ct3.ID)
 	assert.NoError(t, err)
 
-	_, err = store.FindEdgeTagById(ct3.ID)
+	_, err = store.findEdgeTagById(ctx, ct3.ID)
 	assert.Error(t, err)
 }

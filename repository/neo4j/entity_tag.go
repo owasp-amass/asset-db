@@ -20,7 +20,7 @@ import (
 // It takes an EntityTag as input and persists it in the database.
 // The property is serialized to JSON and stored in the Content field of the EntityTag struct.
 // Returns the created entity tag as a types.EntityTag or an error if the creation fails.
-func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.EntityTag) (*types.EntityTag, error) {
+func (neo *neoRepository) CreateEntityTag(ctx context.Context, entity *types.Entity, input *types.EntityTag) (*types.EntityTag, error) {
 	if input == nil {
 		return nil, errors.New("the input entity tag is nil")
 	}
@@ -36,7 +36,7 @@ func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			Property:  input.Property,
 			Entity:    entity,
 		}
-	} else if tags, err := neo.FindEntityTagsByContent(input.Property, time.Time{}); err == nil && len(tags) > 0 {
+	} else if tags, err := neo.findEntityTagsByContent(ctx, input.Property, time.Time{}); err == nil && len(tags) > 0 {
 		// ensure that duplicate entity tags are not entered into the database
 		for _, t := range tags {
 			if t.Entity.ID == entity.ID {
@@ -61,10 +61,10 @@ func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			return nil, err
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		// update the existing tag
-		result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 			"MATCH (n:EntityTag {tag_id: $tid}) SET p = $props RETURN p",
 			map[string]interface{}{"tid": tag.ID, "props": props},
 			neo4jdb.EagerResultTransformer,
@@ -105,11 +105,11 @@ func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 			return nil, err
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		query := fmt.Sprintf("CREATE (p:EntityTag:%s $props) RETURN p", input.Property.PropertyType())
-		result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query,
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query,
 			map[string]interface{}{"props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
@@ -144,27 +144,30 @@ func (neo *neoRepository) CreateEntityTag(entity *types.Entity, input *types.Ent
 // It takes an oam.Property as input and persists it in the database.
 // The property is serialized to JSON and stored in the Content field of the EntityTag struct.
 // Returns the created entity tag as a types.EntityTag or an error if the creation fails.
-func (neo *neoRepository) CreateEntityProperty(entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
-	return neo.CreateEntityTag(entity, &types.EntityTag{Property: prop})
+func (neo *neoRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
+	return neo.CreateEntityTag(ctx, entity, &types.EntityTag{Property: prop})
 }
 
 func (neo *neoRepository) uniqueEntityTagID() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for {
 		id := uuid.New().String()
-		if _, err := neo.FindEntityTagById(id); err != nil {
+		if _, err := neo.findEntityTagById(ctx, id); err != nil {
 			return id
 		}
 	}
 }
 
-// FindEntityTagById finds an entity tag in the database by the ID.
+// findEntityTagById finds an entity tag in the database by the ID.
 // It takes a string representing the entity tag ID and retrieves the corresponding tag from the database.
 // Returns the discovered tag as a types.EntityTag or an error if the asset is not found.
-func (neo *neoRepository) FindEntityTagById(id string) (*types.EntityTag, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) findEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 		"MATCH (p:EntityTag {tag_id: $tid}) RETURN p",
 		map[string]interface{}{"tid": id},
 		neo4jdb.EagerResultTransformer,
@@ -187,12 +190,12 @@ func (neo *neoRepository) FindEntityTagById(id string) (*types.EntityTag, error)
 	return nodeToEntityTag(node)
 }
 
-// FindEntityTagsByContent finds entity tags in the database that match the provided property data and updated_at after the since parameter.
+// findEntityTagsByContent finds entity tags in the database that match the provided property data and updated_at after the since parameter.
 // It takes an oam.Property as input and searches for entity tags with matching content in the database.
 // If since.IsZero(), the parameter will be ignored.
 // The property data is serialized to JSON and compared against the Content field of the EntityTag struct.
 // Returns a slice of matching entity tags as []*types.EntityTag or an error if the search fails.
-func (neo *neoRepository) FindEntityTagsByContent(prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
+func (neo *neoRepository) findEntityTagsByContent(ctx context.Context, prop oam.Property, since time.Time) ([]*types.EntityTag, error) {
 	qnode, err := queryNodeByPropertyKeyValue("p", "EntityTag", prop)
 	if err != nil {
 		return nil, err
@@ -203,10 +206,10 @@ func (neo *neoRepository) FindEntityTagsByContent(prop oam.Property, since time.
 		query = fmt.Sprintf("MATCH %s WHERE p.updated_at >= localDateTime('%s') RETURN p", qnode, timeToNeo4jTime(since))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query, nil,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -235,19 +238,19 @@ func (neo *neoRepository) FindEntityTagsByContent(prop oam.Property, since time.
 	return tags, nil
 }
 
-// GetEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
+// FindEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
 // If since.IsZero(), the parameter will be ignored.
 // If no names are specified, all tags for the specified entity are returned.
-func (neo *neoRepository) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+func (neo *neoRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
 	query := fmt.Sprintf("MATCH (p:EntityTag {entity_id: '%s'}) RETURN p", entity.ID)
 	if !since.IsZero() {
 		query = fmt.Sprintf("MATCH (p:EntityTag {entity_id: '%s'}) WHERE p.updated_at >= localDateTime('%s') RETURN p", entity.ID, timeToNeo4jTime(since))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(ctx, neo.db, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.db, query, nil,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -300,11 +303,11 @@ func (neo *neoRepository) GetEntityTags(entity *types.Entity, since time.Time, n
 // DeleteEntityTag removes an entity tag in the database by its ID.
 // It takes a string representing the entity tag ID and removes the corresponding tag from the database.
 // Returns an error if the tag is not found.
-func (neo *neoRepository) DeleteEntityTag(id string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (neo *neoRepository) DeleteEntityTag(ctx context.Context, id string) error {
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	_, err := neo4jdb.ExecuteQuery(ctx, neo.db,
+	_, err := neo4jdb.ExecuteQuery(tctx, neo.db,
 		"MATCH (n:EntityTag {tag_id: $tid}) DETACH DELETE n",
 		map[string]interface{}{
 			"tid": id,
