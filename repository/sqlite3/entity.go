@@ -10,8 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -31,6 +29,41 @@ import (
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
+
+// Params: :type_name, :dvalue, :attrs
+const upsertEntitiesEntryText = `
+WITH
+	type_id AS (
+		SELECT id FROM entity_type_lu WHERE name = :type_name LIMIT 1
+	)
+INSERT INTO entities(type_id, display_value, attrs) 
+VALUES ((SELECT id FROM type_id), :dvalue, coalesce(:attrs,'{}')) 
+ON CONFLICT(type_id, display_value) DO UPDATE SET 
+    attrs = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
+    THEN json_patch(entities.attrs, coalesce(:attrs,'{}')) ELSE entities.attrs END,
+    updated_at = strftime('%Y-%m-%d %H:%M:%f','now');`
+
+// Params: :type_name, :dvalue, :row_id
+const upsertEntityRefEntryText = `
+WITH
+	type_id AS (
+		SELECT id FROM entity_type_lu WHERE name = :type_name LIMIT 1
+	),
+	ent_id AS (
+		SELECT entity_id FROM entities
+        WHERE type_id = (SELECT id FROM type_id) 
+		AND display_value = :dvalue LIMIT 1
+	)
+INSERT INTO entity_ref(entity_id, table_name, row_id)
+VALUES ((SELECT entity_id FROM ent_id), :type_name, :row_id)
+ON CONFLICT(table_name, row_id) DO UPDATE SET 
+	entity_id=excluded.entity_id,
+	updated_at=strftime('%Y-%m-%d %H:%M:%f','now');`
+
+// Param: :type_name
+const selectTypeIdByName = `
+SELECT id FROM entity_type_lu
+WHERE name = :type_name;`
 
 // Entity models a row in `entities` plus its inlined concrete Asset.
 // Attrs is raw JSON from entities.attrs (may be nil/"{}").
@@ -100,220 +133,23 @@ func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*t
 	if err != nil {
 		return nil, err
 	}
-	return r.queries.FindEntityByID(ctx, eid)
+	return r.idToEntity(ctx, eid)
 }
 
-// ============================== Registry ==============================
-
-// regEntry describes what content keys are allowed for each table and how
-// they map to columns + normalization.
-type regEntry struct {
-	// keys is a stable slice of allowed external filter keys (e.g., "fqdn", "domain", "ip_address")
-	keys []string
-	// colMap maps external key -> actual column expression (e.g., "fqdn" -> "lower(a.fqdn)")
-	colMap map[string]string
-}
-
-// contentRegistry: per-table filters you can search on.
-// Feel free to expand with more columns if needed.
-var contentRegistry = map[string]regEntry{
-	"fqdn": {
-		keys: []string{"fqdn"},
-		colMap: map[string]string{
-			"fqdn": "lower(a.fqdn)",
-		},
-	},
-	"ipaddress": {
-		keys: []string{"ip_address", "ip_version"},
-		colMap: map[string]string{
-			"ip_address": "a.ip_address",
-			"ip_version": "a.ip_version",
-		},
-	},
-	"domainrecord": {
-		keys: []string{"domain", "record_name", "extension", "punycode"},
-		colMap: map[string]string{
-			"domain":      "lower(a.domain)",
-			"record_name": "lower(a.record_name)",
-			"extension":   "a.extension",
-			"punycode":    "a.punycode",
-		},
-	},
-	"url": {
-		keys: []string{"raw_url", "host", "url_path", "port", "scheme"},
-		colMap: map[string]string{
-			"raw_url":  "a.raw_url",
-			"host":     "a.host",
-			"url_path": "a.url_path",
-			"port":     "a.port",
-			"scheme":   "a.scheme",
-		},
-	},
-	"organization": {
-		keys: []string{"unique_id", "legal_name", "org_name"},
-		colMap: map[string]string{
-			"unique_id":  "a.unique_id",
-			"legal_name": "a.legal_name",
-			"org_name":   "a.org_name",
-		},
-	},
-	"autonomoussystem": {
-		keys: []string{"asn"},
-		colMap: map[string]string{
-			"asn": "a.asn",
-		},
-	},
-	"autnumrecord": {
-		keys: []string{"asn", "handle", "record_name"},
-		colMap: map[string]string{
-			"asn":         "a.asn",
-			"handle":      "a.handle",
-			"record_name": "a.record_name",
-		},
-	},
-	"ipnetrecord": {
-		keys: []string{"record_cidr", "handle", "ip_version", "country"},
-		colMap: map[string]string{
-			"record_cidr": "a.record_cidr",
-			"handle":      "a.handle",
-			"ip_version":  "a.ip_version",
-			"country":     "a.country",
-		},
-	},
-	"netblock": {
-		keys: []string{"netblock_cidr", "ip_version"},
-		colMap: map[string]string{
-			"netblock_cidr": "a.netblock_cidr",
-			"ip_version":    "a.ip_version",
-		},
-	},
-	"file": {
-		keys: []string{"file_url", "basename", "file_type"},
-		colMap: map[string]string{
-			"file_url":  "a.file_url",
-			"basename":  "a.basename",
-			"file_type": "a.file_type",
-		},
-	},
-	"service": {
-		keys: []string{"unique_id", "service_type"},
-		colMap: map[string]string{
-			"unique_id":    "a.unique_id",
-			"service_type": "a.service_type",
-		},
-	},
-	"identifier": {
-		keys: []string{"unique_id", "id_type"},
-		colMap: map[string]string{
-			"unique_id": "a.unique_id",
-			"id_type":   "a.id_type",
-		},
-	},
-	"account": {
-		keys: []string{"unique_id", "account_type", "username", "account_number"},
-		colMap: map[string]string{
-			"unique_id":      "a.unique_id",
-			"account_type":   "a.account_type",
-			"username":       "a.username",
-			"account_number": "a.account_number",
-		},
-	},
-	"fundstransfer": {
-		keys: []string{"unique_id", "reference_number", "currency", "transfer_method"},
-		colMap: map[string]string{
-			"unique_id":        "a.unique_id",
-			"reference_number": "a.reference_number",
-			"currency":         "a.currency",
-			"transfer_method":  "a.transfer_method",
-		},
-	},
-	"location": {
-		keys: []string{"street_address", "city", "country", "postal_code"},
-		colMap: map[string]string{
-			"street_address": "a.street_address",
-			"city":           "a.city",
-			"country":        "a.country",
-			"postal_code":    "a.postal_code",
-		},
-	},
-	"person": {
-		keys: []string{"unique_id", "full_name", "first_name", "family_name"},
-		colMap: map[string]string{
-			"unique_id":   "a.unique_id",
-			"full_name":   "a.full_name",
-			"first_name":  "a.first_name",
-			"family_name": "a.family_name",
-		},
-	},
-	"phone": {
-		keys: []string{"e164", "raw_number", "country_abbrev"},
-		colMap: map[string]string{
-			"e164":           "a.e164",
-			"raw_number":     "a.raw_number",
-			"country_abbrev": "a.country_abbrev",
-		},
-	},
-	"product": {
-		keys: []string{"unique_id", "product_name", "product_type", "category"},
-		colMap: map[string]string{
-			"unique_id":    "a.unique_id",
-			"product_name": "a.product_name",
-			"product_type": "a.product_type",
-			"category":     "a.category",
-		},
-	},
-	"productrelease": {
-		keys: []string{"release_name"},
-		colMap: map[string]string{
-			"release_name": "a.release_name",
-		},
-	},
-	"tlscertificate": {
-		keys: []string{"serial_number", "subject_common_name", "issuer_common_name"},
-		colMap: map[string]string{
-			"serial_number":       "a.serial_number",
-			"subject_common_name": "a.subject_common_name",
-			"issuer_common_name":  "a.issuer_common_name",
-		},
-	},
-}
-
-// buildWhere validates the provided filters and builds "col = ?" AND ... with args.
-// It honors case-insensitive matching for columns that already use lower() in colMap.
-func buildWhere(table string, reg regEntry, filters types.ContentFilters) (string, []any, error) {
-	if len(filters) == 0 {
-		// No filters — allow full scan over that table via entity_ref (but still ordered by updated_at).
-		// Usually caller should set a LIMIT in this case.
-		return "", nil, nil
+func (r *SqliteRepository) typeIdByName(ctx context.Context, tname string) (int64, error) {
+	const keySel = "entity.type_id"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, selectTypeIdByName)
+	if err != nil {
+		return 0, err
 	}
-	// Validate keys and order them stably for deterministic SQL key (cache)
-	allowed := map[string]struct{}{}
-	for _, k := range reg.keys {
-		allowed[k] = struct{}{}
-	}
-	keys := slices.Sorted(maps.Keys(filters))
 
-	parts := make([]string, 0, len(keys))
-	args := make([]any, 0, len(keys))
-	for _, k := range keys {
-		if _, ok := allowed[k]; !ok {
-			return "", nil, fmt.Errorf("unsupported filter %q for table %s (allowed: %v)", k, table, reg.keys)
-		}
-		col := reg.colMap[k]
-		if col == "" {
-			return "", nil, fmt.Errorf("no column mapping for filter %q on table %s", k, table)
-		}
-		// For lower(a.col) use normalized string value if possible
-		val := filters[k]
-		if strings.HasPrefix(col, "lower(") {
-			if s, ok := val.(string); ok {
-				val = strings.ToLower(s)
-			}
-		}
-		parts = append(parts, col+" = ?")
-		args = append(args, val)
+	var id int64
+	if err := stmt.QueryRowContext(ctx,
+		sql.Named("type_name", normalizeType(tname))).Scan(&id); err != nil {
+		return 0, err
 	}
-	return strings.Join(parts, " AND "), args, nil
+
+	return id, nil
 }
 
 // ============================== Asset hydration ==============================
@@ -363,29 +199,34 @@ func validateAssetTable(tableName string) string {
 	}
 }
 
-func (r *Queries) loadEntityCore(ctx context.Context, entityID int64) (*Entity, error) {
+func (r *SqliteRepository) loadEntityCore(ctx context.Context, entityID int64) (*Entity, error) {
 	var e Entity
 	var raw string
-	if err := r.stmtEntityByID.QueryRowContext(ctx, entityID).Scan(&e.EntityID, &e.Type, &e.DisplayValue, &raw); err != nil {
+
+	if err := r.queries.stmtEntityByID.QueryRowContext(ctx,
+		entityID).Scan(&e.EntityID, &e.Type, &e.DisplayValue, &raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("entity %d not found", entityID)
 		}
 		return nil, err
 	}
+
 	if strings.TrimSpace(raw) != "" {
 		e.Attrs = json.RawMessage(raw)
 	}
+
 	return &e, nil
 }
 
-func (r *Queries) fetchCompleteRepoEntity(ctx context.Context, e *Entity) (*types.Entity, error) {
+func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entity) (*types.Entity, error) {
 	table := e.Type
 	if table == "" {
 		return nil, fmt.Errorf("no table mapping for entity type %q", e.Type)
 	}
+
 	// Resolve the row id in that concrete table via entity_ref
 	var rowID int64
-	if err := r.stmtRefRowByEntityTable.QueryRowContext(ctx, e.EntityID, table).Scan(&rowID); err != nil {
+	if err := r.queries.stmtRefRowByEntityTable.QueryRowContext(ctx, e.EntityID, table).Scan(&rowID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Entity exists but does not have a ref to the expected table (data drift)
 			return nil, fmt.Errorf("entity %d has no %s row mapping", e.EntityID, table)
@@ -398,7 +239,7 @@ func (r *Queries) fetchCompleteRepoEntity(ctx context.Context, e *Entity) (*type
 
 // fetchEntityAssetByTableID selects the concrete asset row and scans into its struct.
 // Statements are prepared lazily and cached per table name.
-func (r *Queries) fetchEntityAssetByTableID(ctx context.Context, entity_id int64, table string, id int64) (*types.Entity, error) {
+func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity_id int64, table string, id int64) (*types.Entity, error) {
 	switch table {
 	case "account":
 		return r.fetchAccountByRowID(ctx, entity_id, id)

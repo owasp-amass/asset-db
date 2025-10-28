@@ -9,6 +9,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,16 +20,27 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
+// FindEntityById implements the Repository interface.
 func (r *SqliteRepository) FindEntityById(ctx context.Context, id string) (*types.Entity, error) {
-	entityId, err := strconv.ParseUint(id, 10, 64)
+	entityId, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return nil, err
 	}
-	return r.queries.FindEntityByID(ctx, int64(entityId))
+
+	return r.idToEntity(ctx, entityId)
+}
+
+func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*types.Entity, error) {
+	e, err := r.loadEntityCore(ctx, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.fetchCompleteRepoEntity(ctx, e)
 }
 
 func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
-	ents, err := r.queries.FindByContent(ctx, etype, filters, 0)
+	ents, err := r.findByContent(ctx, etype, filters, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +62,7 @@ func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype stri
 }
 
 func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
-	ent, err := r.queries.FindOneByContent(ctx, etype, filters)
+	ent, err := r.findOneByContent(ctx, etype, filters)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +73,7 @@ func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype str
 }
 
 func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
-	ents, err := r.queries.FindEntitiesByType(ctx, string(atype), 0)
+	ents, err := r.findByType(ctx, string(atype), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -80,50 +93,27 @@ func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.Ass
 	return filtered, nil
 }
 
-// FindEntityByID returns the Entity (with Asset populated) for a given entity_id.
-func (r *Queries) FindEntityByID(ctx context.Context, entityID int64) (*types.Entity, error) {
-	e, err := r.loadEntityCore(ctx, entityID)
-	if err != nil {
-		return nil, err
-	}
-	return r.fetchCompleteRepoEntity(ctx, e)
-}
-
-// FindByAssetPK returns Entity/Asset for a specific table primary key id.
-func (r *Queries) FindByAssetPK(ctx context.Context, tableName string, rowID int64) (*types.Entity, error) {
+// findIdByAssetPK returns Entity/Asset for a specific table primary key id.
+func (r *SqliteRepository) findIdByAssetPK(ctx context.Context, tableName string, rowID int64) (int64, error) {
 	table := normalizeTable(tableName)
-	var eid int64
-	if err := r.stmtEntityIDByAssetPK.QueryRowContext(ctx, table, rowID).Scan(&eid); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("no entity for %s(%d)", table, rowID)
-		}
-		return nil, err
-	}
-	return r.FindEntityByID(ctx, eid)
-}
-
-// FindByTypeAndValue returns Entity/Asset by asset type and its display value.
-// For types requiring normalization (fqdn/domainrecord), normalization is applied.
-func (r *Queries) FindByTypeAndValue(ctx context.Context, assetType, value string) (*types.Entity, error) {
-	t := normalizeType(assetType)
-	v := normalizeValueForType(t, value)
 
 	var eid int64
-	if err := r.stmtEntityIDByTypeValue.QueryRowContext(ctx, t, v).Scan(&eid); err != nil {
+	if err := r.queries.stmtEntityIDByAssetPK.QueryRowContext(ctx, table, rowID).Scan(&eid); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("no entity for type=%s value=%q", t, value)
+			return 0, fmt.Errorf("no entity for %s(%d)", table, rowID)
 		}
-		return nil, err
+		return 0, err
 	}
-	return r.FindEntityByID(ctx, eid)
+
+	return eid, nil
 }
 
-// FindByContent builds the SQL WHERE from a registry of allowed columns per
+// findByContent builds the SQL WHERE from a registry of allowed columns per
 // asset type, and returns Entity+Asset. Supports multiple matches.
 
-// FindOneByContent returns exactly one (first by updated_at desc)
-func (r *Queries) FindOneByContent(ctx context.Context, assetType string, filters types.ContentFilters) (*types.Entity, error) {
-	ents, err := r.FindByContent(ctx, assetType, filters, 1)
+// findOneByContent returns exactly one (first by updated_at desc)
+func (r *SqliteRepository) findOneByContent(ctx context.Context, assetType string, filters types.ContentFilters) (*types.Entity, error) {
+	ents, err := r.findByContent(ctx, assetType, filters, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -133,9 +123,9 @@ func (r *Queries) FindOneByContent(ctx context.Context, assetType string, filter
 	return ents[0], nil
 }
 
-// FindByContent finds entities for asset type with given filters (on the asset table).
+// findByContent finds entities for asset type with given filters (on the asset table).
 // limit <= 0 => no explicit LIMIT.
-func (r *Queries) FindByContent(ctx context.Context, assetType string, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
+func (r *SqliteRepository) findByContent(ctx context.Context, assetType string, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
 	table := normalizeType(assetType)
 	if table == "" {
 		return nil, fmt.Errorf("unknown asset type %q", assetType)
@@ -171,7 +161,7 @@ JOIN ` + table + ` a ON a.id = r.row_id
 
 	q := sb.String()
 	key := "q.findByContent." + table + "." + strings.Join(reg.keys, ",") // stable key per table/registry
-	st, err := r.getOrPrepare(ctx, key, q)
+	st, err := r.queries.getOrPrepare(ctx, key, q)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +178,7 @@ JOIN ` + table + ` a ON a.id = r.row_id
 		if err := rows.Scan(&eid); err != nil {
 			return nil, err
 		}
-		ent, err := r.FindEntityByID(ctx, eid)
+		ent, err := r.idToEntity(ctx, eid)
 		if err != nil {
 			return nil, err
 		}
@@ -197,11 +187,11 @@ JOIN ` + table + ` a ON a.id = r.row_id
 	return out, rows.Err()
 }
 
-// FindEntitiesByType returns up to `limit` Entities of the given asset type,
+// findByType returns up to `limit` Entities of the given asset type,
 // ordered by most recently updated (DESC). Each Entity has its concrete Asset populated.
 //
 // If limit <= 0, it returns all (be careful on large datasets).
-func (r *Queries) FindEntitiesByType(ctx context.Context, assetType string, limit int) ([]*types.Entity, error) {
+func (r *SqliteRepository) findByType(ctx context.Context, assetType string, limit int) ([]*types.Entity, error) {
 	t := normalizeType(assetType)
 
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
@@ -219,7 +209,7 @@ ORDER BY e.updated_at DESC, e.entity_id DESC`
 		q = base + " LIMIT ?"
 		key = "q.entities.byType.base.limit"
 	}
-	if st, err = r.getOrPrepare(ctx, key, q); err != nil {
+	if st, err = r.queries.getOrPrepare(ctx, key, q); err != nil {
 		return nil, err
 	}
 
@@ -243,7 +233,7 @@ ORDER BY e.updated_at DESC, e.entity_id DESC`
 			return nil, err
 		}
 		// Hydrate via existing logic (populates Type + Asset)
-		ent, err := r.FindEntityByID(ctx, eid)
+		ent, err := r.idToEntity(ctx, eid)
 		if err != nil {
 			return nil, err
 		}
@@ -252,84 +242,223 @@ ORDER BY e.updated_at DESC, e.entity_id DESC`
 	return out, rows.Err()
 }
 
-// FindEntitiesByTypePaged is an optional cursor-based paginator.
-// Pass since to only return entities updated_at >= since.
-// Pass afterEntityID to continue after a prior page (stable on updated_at,entity_id).
-// Set limit <= 0 for no explicit cap.
-func (r *Queries) FindEntitiesByTypePaged(ctx context.Context, assetType string, since time.Time, afterEntityID int64, limit int) ([]*types.Entity, error) {
-	t := normalizeType(assetType)
-
-	sb := strings.Builder{}
-	sb.WriteString(`
-SELECT e.entity_id, e.display_value, e.attrs
-FROM entities e
-JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?`)
-	args := []any{t}
-
-	if !since.IsZero() || afterEntityID > 0 {
-		sb.WriteString(" WHERE 1=1")
-		if !since.IsZero() {
-			// Use the same format parseTS expects on reads
-			args = append(args, since.UTC().Format("2006-01-02 15:04:05.000"))
-			sb.WriteString(" AND e.updated_at >= ?")
-		}
-		if afterEntityID > 0 {
-			// Continue *after* a known entity_id (useful when updated_at ties are common)
-			args = append(args, afterEntityID)
-			sb.WriteString(" AND e.entity_id < ?")
-		}
-	}
-	sb.WriteString(" ORDER BY e.updated_at DESC, e.entity_id DESC")
-	if limit > 0 {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", limit)) // LIMIT can be bound, but we keep key stability here
-	}
-
-	q := sb.String()
-	key := "q.entities.byType.paged:" + boolKey(!since.IsZero()) + ":" + boolKey(afterEntityID > 0) + ":" + limitKey(limit)
-	st, err := r.getOrPrepare(ctx, key, q)
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := st.QueryContext(ctx, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []*types.Entity
-	for rows.Next() {
-		var eid int64
-		var disp string
-		var raw *string
-		if err := rows.Scan(&eid, &disp, &raw); err != nil {
-			return nil, err
-		}
-		ent, err := r.FindEntityByID(ctx, eid)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, ent)
-	}
-	return out, rows.Err()
-}
-
-// --- tiny helpers used above ---
+// --- tiny helper used above ---
 func max(a, b int) int {
 	if a > b {
 		return a
 	}
 	return b
 }
-func boolKey(b bool) string {
-	if b {
-		return "1"
-	}
-	return "0"
+
+// ============================== Registry ==============================
+
+// regEntry describes what content keys are allowed for each table and how
+// they map to columns + normalization.
+type regEntry struct {
+	// keys is a stable slice of allowed external filter keys (e.g., "fqdn", "domain", "ip_address")
+	keys []string
+	// colMap maps external key -> actual column expression (e.g., "fqdn" -> "lower(a.fqdn)")
+	colMap map[string]string
 }
-func limitKey(n int) string {
-	if n <= 0 {
-		return "all"
+
+// contentRegistry: per-table filters you can search on.
+// Feel free to expand with more columns if needed.
+var contentRegistry = map[string]regEntry{
+	"fqdn": {
+		keys: []string{"fqdn"},
+		colMap: map[string]string{
+			"fqdn": "lower(a.fqdn)",
+		},
+	},
+	"ipaddress": {
+		keys: []string{"ip_address", "ip_version"},
+		colMap: map[string]string{
+			"ip_address": "a.ip_address",
+			"ip_version": "a.ip_version",
+		},
+	},
+	"domainrecord": {
+		keys: []string{"domain", "record_name", "extension", "punycode"},
+		colMap: map[string]string{
+			"domain":      "lower(a.domain)",
+			"record_name": "lower(a.record_name)",
+			"extension":   "a.extension",
+			"punycode":    "a.punycode",
+		},
+	},
+	"url": {
+		keys: []string{"raw_url", "host", "url_path", "port", "scheme"},
+		colMap: map[string]string{
+			"raw_url":  "a.raw_url",
+			"host":     "a.host",
+			"url_path": "a.url_path",
+			"port":     "a.port",
+			"scheme":   "a.scheme",
+		},
+	},
+	"organization": {
+		keys: []string{"unique_id", "legal_name", "org_name"},
+		colMap: map[string]string{
+			"unique_id":  "a.unique_id",
+			"legal_name": "a.legal_name",
+			"org_name":   "a.org_name",
+		},
+	},
+	"autonomoussystem": {
+		keys: []string{"asn"},
+		colMap: map[string]string{
+			"asn": "a.asn",
+		},
+	},
+	"autnumrecord": {
+		keys: []string{"asn", "handle", "record_name"},
+		colMap: map[string]string{
+			"asn":         "a.asn",
+			"handle":      "a.handle",
+			"record_name": "a.record_name",
+		},
+	},
+	"ipnetrecord": {
+		keys: []string{"record_cidr", "handle", "ip_version", "country"},
+		colMap: map[string]string{
+			"record_cidr": "a.record_cidr",
+			"handle":      "a.handle",
+			"ip_version":  "a.ip_version",
+			"country":     "a.country",
+		},
+	},
+	"netblock": {
+		keys: []string{"netblock_cidr", "ip_version"},
+		colMap: map[string]string{
+			"netblock_cidr": "a.netblock_cidr",
+			"ip_version":    "a.ip_version",
+		},
+	},
+	"file": {
+		keys: []string{"file_url", "basename", "file_type"},
+		colMap: map[string]string{
+			"file_url":  "a.file_url",
+			"basename":  "a.basename",
+			"file_type": "a.file_type",
+		},
+	},
+	"service": {
+		keys: []string{"unique_id", "service_type"},
+		colMap: map[string]string{
+			"unique_id":    "a.unique_id",
+			"service_type": "a.service_type",
+		},
+	},
+	"identifier": {
+		keys: []string{"unique_id", "id_type"},
+		colMap: map[string]string{
+			"unique_id": "a.unique_id",
+			"id_type":   "a.id_type",
+		},
+	},
+	"account": {
+		keys: []string{"unique_id", "account_type", "username", "account_number"},
+		colMap: map[string]string{
+			"unique_id":      "a.unique_id",
+			"account_type":   "a.account_type",
+			"username":       "a.username",
+			"account_number": "a.account_number",
+		},
+	},
+	"fundstransfer": {
+		keys: []string{"unique_id", "reference_number", "currency", "transfer_method"},
+		colMap: map[string]string{
+			"unique_id":        "a.unique_id",
+			"reference_number": "a.reference_number",
+			"currency":         "a.currency",
+			"transfer_method":  "a.transfer_method",
+		},
+	},
+	"location": {
+		keys: []string{"street_address", "city", "country", "postal_code"},
+		colMap: map[string]string{
+			"street_address": "a.street_address",
+			"city":           "a.city",
+			"country":        "a.country",
+			"postal_code":    "a.postal_code",
+		},
+	},
+	"person": {
+		keys: []string{"unique_id", "full_name", "first_name", "family_name"},
+		colMap: map[string]string{
+			"unique_id":   "a.unique_id",
+			"full_name":   "a.full_name",
+			"first_name":  "a.first_name",
+			"family_name": "a.family_name",
+		},
+	},
+	"phone": {
+		keys: []string{"e164", "raw_number", "country_abbrev"},
+		colMap: map[string]string{
+			"e164":           "a.e164",
+			"raw_number":     "a.raw_number",
+			"country_abbrev": "a.country_abbrev",
+		},
+	},
+	"product": {
+		keys: []string{"unique_id", "product_name", "product_type", "category"},
+		colMap: map[string]string{
+			"unique_id":    "a.unique_id",
+			"product_name": "a.product_name",
+			"product_type": "a.product_type",
+			"category":     "a.category",
+		},
+	},
+	"productrelease": {
+		keys: []string{"release_name"},
+		colMap: map[string]string{
+			"release_name": "a.release_name",
+		},
+	},
+	"tlscertificate": {
+		keys: []string{"serial_number", "subject_common_name", "issuer_common_name"},
+		colMap: map[string]string{
+			"serial_number":       "a.serial_number",
+			"subject_common_name": "a.subject_common_name",
+			"issuer_common_name":  "a.issuer_common_name",
+		},
+	},
+}
+
+// buildWhere validates the provided filters and builds "col = ?" AND ... with args.
+// It honors case-insensitive matching for columns that already use lower() in colMap.
+func buildWhere(table string, reg regEntry, filters types.ContentFilters) (string, []any, error) {
+	if len(filters) == 0 {
+		// No filters — allow full scan over that table via entity_ref (but still ordered by updated_at).
+		// Usually caller should set a LIMIT in this case.
+		return "", nil, nil
 	}
-	return fmt.Sprintf("%d", n)
+	// Validate keys and order them stably for deterministic SQL key (cache)
+	allowed := map[string]struct{}{}
+	for _, k := range reg.keys {
+		allowed[k] = struct{}{}
+	}
+	keys := slices.Sorted(maps.Keys(filters))
+
+	parts := make([]string, 0, len(keys))
+	args := make([]any, 0, len(keys))
+	for _, k := range keys {
+		if _, ok := allowed[k]; !ok {
+			return "", nil, fmt.Errorf("unsupported filter %q for table %s (allowed: %v)", k, table, reg.keys)
+		}
+		col := reg.colMap[k]
+		if col == "" {
+			return "", nil, fmt.Errorf("no column mapping for filter %q on table %s", k, table)
+		}
+		// For lower(a.col) use normalized string value if possible
+		val := filters[k]
+		if strings.HasPrefix(col, "lower(") {
+			if s, ok := val.(string); ok {
+				val = strings.ToLower(s)
+			}
+		}
+		parts = append(parts, col+" = ?")
+		args = append(args, val)
+	}
+	return strings.Join(parts, " AND "), args, nil
 }

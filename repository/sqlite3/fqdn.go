@@ -17,7 +17,7 @@ import (
 )
 
 // Params: :fqdn_text
-const upsertFQDN = `
+const upsertFQDNText = `
 INSERT INTO fqdn (fqdn)
 VALUES (:fqdn_text)
 ON CONFLICT(fqdn) DO UPDATE SET
@@ -33,60 +33,40 @@ const selectFQDNByID = `
 SELECT id, created_at, updated_at, fqdn FROM fqdn
 WHERE id = :fqdn_id;`
 
-type fqdnStatements struct {
-	UpsertFQDNStmt         *sql.Stmt
-	SelectFQDNIDByFQDNStmt *sql.Stmt
-	SelectFQDNByIDStmt     *sql.Stmt
-}
-
-func (r *SqliteRepository) prepareFQDNStatements(ctx context.Context) error {
-	var err error
-	stmts := new(fqdnStatements)
-
-	if stmts.UpsertFQDNStmt, err = r.DB.PrepareContext(ctx, upsertFQDN); err != nil {
-		return err
-	}
-	if stmts.SelectFQDNIDByFQDNStmt, err = r.DB.PrepareContext(ctx, selectFQDNIDByFQDN); err != nil {
-		return err
-	}
-	if stmts.SelectFQDNByIDStmt, err = r.DB.PrepareContext(ctx, selectFQDNByID); err != nil {
-		return err
-	}
-
-	r.fqdnStmts = stmts
-	return nil
-}
-func (r *SqliteRepository) closeFQDNStatements() error {
-	if r.fqdnStmts == nil {
-		return nil
-	}
-	if r.fqdnStmts.UpsertFQDNStmt != nil {
-		r.fqdnStmts.UpsertFQDNStmt.Close()
-	}
-	if r.fqdnStmts.SelectFQDNIDByFQDNStmt != nil {
-		r.fqdnStmts.SelectFQDNIDByFQDNStmt.Close()
-	}
-	if r.fqdnStmts.SelectFQDNByIDStmt != nil {
-		r.fqdnStmts.SelectFQDNByIDStmt.Close()
-	}
-	return nil
-}
-
 func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
-	_ = r.fqdnStmts.UpsertFQDNStmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name))
+	const keySel = "asset.fqdn.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertFQDNText)
+	if err != nil {
+		return 0, err
+	}
 
-	row := r.fqdnStmts.SelectFQDNIDByFQDNStmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name))
+	_ = stmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name))
+
+	const keySel2 = "asset.fqdn.by_name"
+	stmt, err = r.queries.getOrPrepare(ctx, keySel2, selectFQDNIDByFQDN)
+	if err != nil {
+		return 0, err
+	}
 
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name)).Scan(&id); err != nil {
+		return 0, err
+	}
+
+	return id, nil
 }
 
 func (r *SqliteRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+	const keySel = "asset.fqdn.by_id"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, selectFQDNByID)
+	if err != nil {
+		return nil, err
+	}
+
 	var id int64
 	var fqdn string
 	var c, u *string
-
-	if err := r.fqdnStmts.SelectFQDNByIDStmt.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &fqdn); err != nil {
+	if err := stmt.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &fqdn); err != nil {
 		return nil, err
 	}
 
