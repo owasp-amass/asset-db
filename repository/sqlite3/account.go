@@ -16,71 +16,31 @@ import (
 	oamacct "github.com/owasp-amass/open-asset-model/account"
 )
 
-// ACCOUNT --------------------------------------------------------------------
-// Params: :unique_id, :account_type, :username, :account_number, :balance, :active, :attrs
-const tmplUpsertAccount = `
-WITH
-  row_try AS (
-    INSERT INTO account(unique_id, account_type, username, account_number, balance, active)
-    VALUES (:unique_id, :account_type, :username, :account_number, :balance, :active)
-    ON CONFLICT(unique_id) DO UPDATE SET
-      account_type   = COALESCE(excluded.account_type,   account.account_type),
-      username       = COALESCE(excluded.username,       account.username),
-      account_number = COALESCE(excluded.account_number, account.account_number),
-      balance        = COALESCE(excluded.balance,        account.balance),
-      active         = COALESCE(excluded.active,         account.active),
-      updated_at     = CASE WHEN
-        (excluded.account_type   IS NOT account.account_type) OR
-        (excluded.username       IS NOT account.username) OR
-        (excluded.account_number IS NOT account.account_number) OR
-        (excluded.balance        IS NOT account.balance) OR
-        (excluded.active         IS NOT account.active)
-      THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE account.updated_at END
-    WHERE (excluded.account_type   IS NOT account.account_type) OR
-          (excluded.username       IS NOT account.username) OR
-          (excluded.account_number IS NOT account.account_number) OR
-          (excluded.balance        IS NOT account.balance) OR
-          (excluded.active         IS NOT account.active)
-    RETURNING id
-  ),
-  row_id_cte AS (
-    SELECT id AS row_id FROM row_try
-    UNION ALL SELECT id AS row_id FROM account WHERE unique_id = :unique_id LIMIT 1
-  ),
-  ensure_type AS (
-    INSERT INTO entity_type_lu(name) VALUES ('account')
-    ON CONFLICT(name) DO NOTHING
-    RETURNING id
-  ),
-  type_id AS (
-    SELECT id FROM ensure_type
-    UNION ALL SELECT id FROM entity_type_lu WHERE name='account' LIMIT 1
-  ),
-  ent_ins AS (
-    INSERT INTO entities(type_id, display_value, attrs)
-    SELECT (SELECT id FROM type_id), :unique_id, coalesce(:attrs,'{}')
-    ON CONFLICT(type_id, display_value) DO UPDATE SET
-      attrs = CASE
-        WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN json_patch(entities.attrs, coalesce(:attrs,'{}')) ELSE entities.attrs END,
-      updated_at = CASE
-        WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entities.updated_at END
-    WHERE json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    RETURNING entity_id
-  ),
-  ent_id AS (
-    SELECT entity_id FROM ent_ins
-    UNION ALL SELECT entity_id FROM entities
-    WHERE type_id=(SELECT id FROM type_id) AND display_value=:unique_id LIMIT 1
-  ),
-  ref_up AS (
-    INSERT INTO entity_ref(entity_id, table_name, row_id)
-    VALUES ((SELECT entity_id FROM ent_id), 'account', (SELECT row_id FROM row_id_cte))
-    ON CONFLICT(table_name,row_id) DO UPDATE SET entity_id=excluded.entity_id,updated_at=strftime('%Y-%m-%d %H:%M:%f','now')
-    WHERE entity_ref.entity_id IS NOT excluded.entity_id
-  )
-SELECT entity_id FROM ent_id;`
+// Params: :unique_id, :account_type, :username, :account_number, :balance, :active
+const upsertAccountText = `
+INSERT INTO account(unique_id, account_type, username, account_number, balance, active)
+VALUES (:unique_id, :account_type, :username, :account_number, :balance, :active)
+ON CONFLICT(unique_id) DO UPDATE SET
+	account_type   = COALESCE(excluded.account_type,   account.account_type),
+    username       = COALESCE(excluded.username,       account.username),
+    account_number = COALESCE(excluded.account_number, account.account_number),
+    balance        = COALESCE(excluded.balance,        account.balance),
+    active         = COALESCE(excluded.active,         account.active),
+    updated_at     = CURRENT_TIMESTAMP;`
+
+// Param: :unique_id
+const selectEntityIDByAccountText = `
+SELECT entity_id FROM entities
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'account')
+  AND display_value = :unique_id
+LIMIT 1;`
+
+// Param: :row_id
+const selectAccountByID = `
+SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, balance, active 
+FROM account
+WHERE id = :row_id
+LIMIT 1;`
 
 type account struct {
 	ID          int64      `json:"id"`
@@ -94,25 +54,38 @@ type account struct {
 	Active      *bool      `json:"active,omitempty"`
 }
 
-func (s *Statements) UpsertAccount(ctx context.Context, a *oamacct.Account) (int64, error) {
-	row := s.UpsertAccountStmt.QueryRowContext(ctx,
+func (r *SqliteRepository) upsertAccount(ctx context.Context, a *oamacct.Account) (int64, error) {
+	const keySel = "asset.account.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertAccountText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("unique_id", a.ID),
 		sql.Named("account_type", a.Type),
 		sql.Named("username", a.Username),
 		sql.Named("account_number", a.Number),
 		sql.Named("balance", a.Balance),
 		sql.Named("active", a.Active),
-		sql.Named("attrs", "{}"),
 	)
+
+	const keySel2 = "asset.account.entity_id_by_account"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByAccountText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx, sql.Named("unique_id", a.ID)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (r *Queries) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	query := `SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, balance, active
-		      FROM account WHERE id = ?`
-
-	st, err := r.getOrPrepare(ctx, "account", query)
+func (r *SqliteRepository) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+	const keySel = "asset.account.by_id"
+	st, err := r.queries.getOrPrepare(ctx, keySel, selectAccountByID)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +93,7 @@ func (r *Queries) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*t
 	var a account
 	var c, u *string
 	var act *int64
-	if err := st.QueryRowContext(ctx, rowID).Scan(
+	if err := st.QueryRowContext(ctx, sql.Named("row_id", rowID)).Scan(
 		&a.ID, &c, &u, &a.UniqueID, &a.AccountType, &a.Username, &a.AccountNo, &a.Balance, &act,
 	); err != nil {
 		return nil, err
@@ -155,8 +128,8 @@ func (r *Queries) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*t
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
-		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
 		Asset: &oamacct.Account{
 			ID:       a.UniqueID,
 			Type:     a.AccountType,

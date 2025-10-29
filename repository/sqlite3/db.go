@@ -13,6 +13,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Normalized Property Graph (NPG) implemented on SQLite
+
 const (
 	SQLite       string = "sqlite"
 	SQLiteMemory string = "sqlite_memory"
@@ -20,11 +22,9 @@ const (
 
 // SqliteRepository is a repository implementation.
 type SqliteRepository struct {
-	DB            *sql.DB
-	queries       *Queries
-	fqdnStmts     *fqdnStatements
-	netblockStmts *netblockStatements
-	dbtype        string
+	DB      *sql.DB
+	queries *Queries
+	dbtype  string
 }
 
 // New creates a new instance of the asset database repository.
@@ -41,10 +41,6 @@ func New(dbtype, dsn string) (*SqliteRepository, error) {
 func (sql *SqliteRepository) Prepare(ctx context.Context) error {
 	err := ApplyPragmas(context.Background(), sql.DB)
 	if err != nil {
-		return err
-	}
-
-	if err := sql.prepareNetblockStatements(ctx); err != nil {
 		return err
 	}
 
@@ -74,12 +70,6 @@ func sqliteDatabase(dsn string, conns, idles int) (*SqliteRepository, error) {
 func (sql *SqliteRepository) Close() error {
 	if sql.queries != nil {
 		_ = sql.queries.Close()
-	}
-
-	if sql.netblockStmts != nil {
-		if err := sql.closeNetblockStatements(); err != nil {
-			return err
-		}
 	}
 
 	if sql.DB != nil {

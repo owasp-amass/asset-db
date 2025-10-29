@@ -16,66 +16,57 @@ import (
 	oamfile "github.com/owasp-amass/open-asset-model/file"
 )
 
-// FILE -----------------------------------------------------------------------
-// Params: :file_url, :basename, :file_type, :attrs
-const tmplUpsertFile = `
-WITH
-  row_try AS (
-    INSERT INTO file(file_url, basename, file_type)
-    VALUES (:file_url, :basename, :file_type)
-    ON CONFLICT(file_url) DO UPDATE SET
-      basename   = COALESCE(excluded.basename,  file.basename),
-      file_type  = COALESCE(excluded.file_type, file.file_type),
-      updated_at = CASE WHEN
-        (excluded.basename IS NOT file.basename) OR
-        (excluded.file_type IS NOT file.file_type)
-      THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE file.updated_at END
-    WHERE (excluded.basename IS NOT file.basename) OR
-          (excluded.file_type IS NOT file.file_type)
-    RETURNING id
-  ),
-  row_id_cte AS (SELECT id AS row_id FROM row_try
-                 UNION ALL SELECT id AS row_id FROM file WHERE file_url=:file_url LIMIT 1),
-  ensure_type AS (
-    INSERT INTO entity_type_lu(name) VALUES ('file')
-    ON CONFLICT(name) DO NOTHING RETURNING id
-  ),
-  type_id AS (SELECT id FROM ensure_type UNION ALL SELECT id FROM entity_type_lu WHERE name='file' LIMIT 1),
-  ent_ins AS (
-    INSERT INTO entities(type_id, display_value, attrs)
-    SELECT (SELECT id FROM type_id), :file_url, coalesce(:attrs,'{}')
-    ON CONFLICT(type_id, display_value) DO UPDATE SET
-      attrs = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN json_patch(entities.attrs, coalesce(:attrs,'{}')) ELSE entities.attrs END,
-      updated_at = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entities.updated_at END
-    WHERE json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    RETURNING entity_id
-  ),
-  ent_id AS (SELECT entity_id FROM ent_ins
-             UNION ALL SELECT entity_id FROM entities
-             WHERE type_id=(SELECT id FROM type_id) AND display_value=:file_url LIMIT 1),
-  ref_up AS (INSERT INTO entity_ref(entity_id, table_name, row_id)
-             VALUES ((SELECT entity_id FROM ent_id),'file',(SELECT row_id FROM row_id_cte))
-             ON CONFLICT(table_name,row_id) DO UPDATE SET entity_id=excluded.entity_id,updated_at=strftime('%Y-%m-%d %H:%M:%f','now')
-             WHERE entity_ref.entity_id IS NOT excluded.entity_id)
-SELECT entity_id FROM ent_id;`
+// Params: :file_url, :basename, :file_type
+const upsertFileText = `
+INSERT INTO file(file_url, basename, file_type)
+VALUES (lower(:file_url), :basename, :file_type)
+ON CONFLICT(file_url) DO UPDATE SET
+    basename   = COALESCE(excluded.basename,  file.basename),
+    file_type  = COALESCE(excluded.file_type, file.file_type),
+    updated_at = CURRENT_TIMESTAMP;`
 
-func (s *Statements) UpsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
-	row := s.UpsertFileStmt.QueryRowContext(ctx,
+// Param: :file_url
+const selectEntityIDByFileText = `
+SELECT entity_id FROM entities
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'file')
+  AND display_value = lower(:file_url)
+LIMIT 1;`
+
+// Param: :row_id
+const selectFileByID = `
+SELECT id, created_at, updated_at, file_url, basename, file_type FROM file
+WHERE id = :row_id
+LIMIT 1;`
+
+func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
+	const keySel = "asset.file.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertFileText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("file_url", a.URL),
 		sql.Named("basename", a.Name),
 		sql.Named("file_type", a.Type),
-		sql.Named("attrs", ""),
 	)
+
+	const keySel2 = "asset.file.entity_id_by_file"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByFileText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx, sql.Named("file_url", a.URL)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (r *Queries) fetchFileByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	query := `SELECT id, created_at, updated_at, file_url, basename, file_type FROM file WHERE id = ?`
-
-	st, err := r.getOrPrepare(ctx, "file", query)
+func (r *SqliteRepository) fetchFileByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+	const keySel = "asset.file.by_id"
+	st, err := r.queries.getOrPrepare(ctx, keySel, selectFileByID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,8 +96,8 @@ func (r *Queries) fetchFileByRowID(ctx context.Context, eid, rowID int64) (*type
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: (*created).In(time.UTC).Local(),
-		LastSeen:  (*updated).In(time.UTC).Local(),
+		CreatedAt: created.In(time.UTC).Local(),
+		LastSeen:  updated.In(time.UTC).Local(),
 		Asset: &oamfile.File{
 			URL:  url,
 			Name: fname,

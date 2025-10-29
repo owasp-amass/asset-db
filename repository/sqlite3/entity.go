@@ -85,47 +85,47 @@ func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*t
 
 	switch asset.AssetType() {
 	case oam.Account:
-		eid, err = r.stmts.UpsertAccount(ctx, asset.(*oamacct.Account))
+		eid, err = r.upsertAccount(ctx, asset.(*oamacct.Account))
 	case oam.AutnumRecord:
-		eid, err = r.stmts.UpsertAutnumRecord(ctx, asset.(*oamreg.AutnumRecord))
+		eid, err = r.upsertAutnumRecord(ctx, asset.(*oamreg.AutnumRecord))
 	case oam.AutonomousSystem:
-		eid, err = r.stmts.UpsertAutonomousSystem(ctx, asset.(*oamnet.AutonomousSystem))
+		eid, err = r.upsertAutonomousSystem(ctx, asset.(*oamnet.AutonomousSystem))
 	case oam.ContactRecord:
-		eid, err = r.stmts.UpsertContactRecord(ctx, asset.(*contact.ContactRecord))
+		eid, err = r.upsertContactRecord(ctx, asset.(*contact.ContactRecord))
 	case oam.DomainRecord:
-		eid, err = r.stmts.UpsertDomainRecord(ctx, asset.(*oamreg.DomainRecord))
+		eid, err = r.upsertDomainRecord(ctx, asset.(*oamreg.DomainRecord))
 	case oam.File:
-		eid, err = r.stmts.UpsertFile(ctx, asset.(*oamfile.File))
+		eid, err = r.upsertFile(ctx, asset.(*oamfile.File))
 	case oam.FQDN:
 		eid, err = r.upsertFQDN(ctx, asset.(*oamdns.FQDN))
 	case oam.FundsTransfer:
-		eid, err = r.stmts.UpsertFundsTransfer(ctx, asset.(*oamfin.FundsTransfer))
+		eid, err = r.upsertFundsTransfer(ctx, asset.(*oamfin.FundsTransfer))
 	case oam.Identifier:
-		eid, err = r.stmts.UpsertIdentifier(ctx, asset.(*oamgen.Identifier))
+		eid, err = r.upsertIdentifier(ctx, asset.(*oamgen.Identifier))
 	case oam.IPAddress:
-		eid, err = r.stmts.UpsertIPAddress(ctx, asset.(*oamnet.IPAddress))
+		eid, err = r.upsertIPAddress(ctx, asset.(*oamnet.IPAddress))
 	case oam.IPNetRecord:
-		eid, err = r.stmts.UpsertIPNetRecord(ctx, asset.(*oamreg.IPNetRecord))
+		eid, err = r.upsertIPNetRecord(ctx, asset.(*oamreg.IPNetRecord))
 	case oam.Location:
-		eid, err = r.stmts.UpsertLocation(ctx, asset.(*contact.Location))
+		eid, err = r.upsertLocation(ctx, asset.(*contact.Location))
 	case oam.Netblock:
 		eid, err = r.upsertNetblock(ctx, asset.(*oamnet.Netblock))
 	case oam.Organization:
-		eid, err = r.stmts.UpsertOrganization(ctx, asset.(*oamorg.Organization))
+		eid, err = r.upsertOrganization(ctx, asset.(*oamorg.Organization))
 	case oam.Person:
-		eid, err = r.stmts.UpsertPerson(ctx, asset.(*people.Person))
+		eid, err = r.upsertPerson(ctx, asset.(*people.Person))
 	case oam.Phone:
-		eid, err = r.stmts.UpsertPhone(ctx, asset.(*contact.Phone))
+		eid, err = r.upsertPhone(ctx, asset.(*contact.Phone))
 	case oam.Product:
-		eid, err = r.stmts.UpsertProduct(ctx, asset.(*oamplat.Product))
+		eid, err = r.upsertProduct(ctx, asset.(*oamplat.Product))
 	case oam.ProductRelease:
-		eid, err = r.stmts.UpsertProductRelease(ctx, asset.(*oamplat.ProductRelease))
+		eid, err = r.upsertProductRelease(ctx, asset.(*oamplat.ProductRelease))
 	case oam.Service:
-		eid, err = r.stmts.UpsertService(ctx, asset.(*oamplat.Service))
+		eid, err = r.upsertService(ctx, asset.(*oamplat.Service))
 	case oam.TLSCertificate:
-		eid, err = r.stmts.UpsertTLSCertificate(ctx, asset.(*oamcert.TLSCertificate))
+		eid, err = r.upsertTLSCertificate(ctx, asset.(*oamcert.TLSCertificate))
 	case oam.URL:
-		eid, err = r.stmts.UpsertURL(ctx, asset.(*oamurl.URL))
+		eid, err = r.upsertURL(ctx, asset.(*oamurl.URL))
 	default:
 		return nil, fmt.Errorf("unsupported asset type %q", asset.AssetType())
 	}
