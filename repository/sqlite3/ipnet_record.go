@@ -17,88 +17,45 @@ import (
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
-// IPNETRECORD ----------------------------------------------------------------
-// Params: :record_cidr, :record_name, :ip_version, :handle, :method, :record_status,
+// Params: :record_cidr, :record_name, :ip_version, :handle, :method, :record_status, :created_date,
 //
-//	:created_date, :updated_date, :whois_server, :parent_handle, :start_address, :end_address, :country, :attrs
-const tmplUpsertIPNetRecord = `
-WITH
-  row_try AS (
-    INSERT INTO ipnetrecord(
-      record_cidr, record_name, ip_version, handle, method, record_status,
-      created_date, updated_date, whois_server, parent_handle, start_address, end_address, country
-    ) VALUES (
-      :record_cidr, :record_name, :ip_version, :handle, :method, :record_status,
-      :created_date, :updated_date, :whois_server, :parent_handle, :start_address, :end_address, :country
-    )
-    ON CONFLICT(record_cidr) DO UPDATE SET
-      record_name   = COALESCE(excluded.record_name,   ipnetrecord.record_name),
-      ip_version    = COALESCE(excluded.ip_version,    ipnetrecord.ip_version),
-      handle        = COALESCE(excluded.handle,        ipnetrecord.handle),
-      method        = COALESCE(excluded.method,        ipnetrecord.method),
-      record_status = COALESCE(excluded.record_status, ipnetrecord.record_status),
-      created_date  = COALESCE(excluded.created_date,  ipnetrecord.created_date),
-      updated_date  = COALESCE(excluded.updated_date,  ipnetrecord.updated_date),
-      whois_server  = COALESCE(excluded.whois_server,  ipnetrecord.whois_server),
-      parent_handle = COALESCE(excluded.parent_handle, ipnetrecord.parent_handle),
-      start_address = COALESCE(excluded.start_address, ipnetrecord.start_address),
-      end_address   = COALESCE(excluded.end_address,   ipnetrecord.end_address),
-      country       = COALESCE(excluded.country,       ipnetrecord.country),
-      updated_at    = CASE WHEN
-        (excluded.record_name IS NOT ipnetrecord.record_name) OR
-        (excluded.ip_version  IS NOT ipnetrecord.ip_version) OR
-        (excluded.handle      IS NOT ipnetrecord.handle) OR
-        (excluded.method      IS NOT ipnetrecord.method) OR
-        (excluded.record_status IS NOT ipnetrecord.record_status) OR
-        (excluded.created_date IS NOT ipnetrecord.created_date) OR
-        (excluded.updated_date IS NOT ipnetrecord.updated_date) OR
-        (excluded.whois_server IS NOT ipnetrecord.whois_server) OR
-        (excluded.parent_handle IS NOT ipnetrecord.parent_handle) OR
-        (excluded.start_address IS NOT ipnetrecord.start_address) OR
-        (excluded.end_address IS NOT ipnetrecord.end_address) OR
-        (excluded.country IS NOT ipnetrecord.country)
-      THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE ipnetrecord.updated_at END
-    WHERE (excluded.record_name IS NOT ipnetrecord.record_name) OR
-          (excluded.ip_version  IS NOT ipnetrecord.ip_version) OR
-          (excluded.handle      IS NOT ipnetrecord.handle) OR
-          (excluded.method      IS NOT ipnetrecord.method) OR
-          (excluded.record_status IS NOT ipnetrecord.record_status) OR
-          (excluded.created_date IS NOT ipnetrecord.created_date) OR
-          (excluded.updated_date IS NOT ipnetrecord.updated_date) OR
-          (excluded.whois_server IS NOT ipnetrecord.whois_server) OR
-          (excluded.parent_handle IS NOT ipnetrecord.parent_handle) OR
-          (excluded.start_address IS NOT ipnetrecord.start_address) OR
-          (excluded.end_address IS NOT ipnetrecord.end_address) OR
-          (excluded.country IS NOT ipnetrecord.country)
-    RETURNING id
-  ),
-  row_id_cte AS (
-    SELECT id AS row_id FROM row_try
-    UNION ALL SELECT id AS row_id FROM ipnetrecord WHERE record_cidr=:record_cidr OR handle=:handle LIMIT 1
-  ),
-  ensure_type AS (
-    INSERT INTO entity_type_lu(name) VALUES ('ipnetrecord')
-    ON CONFLICT(name) DO NOTHING RETURNING id
-  ),
-  type_id AS (SELECT id FROM ensure_type UNION ALL SELECT id FROM entity_type_lu WHERE name='ipnetrecord' LIMIT 1),
-  ent_ins AS (
-    INSERT INTO entities(type_id, display_value, attrs)
-    SELECT (SELECT id FROM type_id), :record_cidr, coalesce(:attrs,'{}')
-    ON CONFLICT(type_id, display_value) DO UPDATE SET
-      attrs = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN json_patch(entities.attrs, coalesce(:attrs,'{}')) ELSE entities.attrs END,
-      updated_at = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entities.updated_at END
-    WHERE json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    RETURNING entity_id
-  ),
-  ent_id AS (SELECT entity_id FROM ent_ins UNION ALL
-             SELECT entity_id FROM entities WHERE type_id=(SELECT id FROM type_id) AND display_value=:record_cidr LIMIT 1),
-  ref_up AS (INSERT INTO entity_ref(entity_id, table_name, row_id)
-             VALUES ((SELECT entity_id FROM ent_id),'ipnetrecord',(SELECT row_id FROM row_id_cte))
-             ON CONFLICT(table_name,row_id) DO UPDATE SET entity_id=excluded.entity_id,updated_at=strftime('%Y-%m-%d %H:%M:%f','now')
-             WHERE entity_ref.entity_id IS NOT excluded.entity_id)
-SELECT entity_id FROM ent_id;`
+//	:updated_date, :whois_server, :parent_handle, :start_address, :end_address, :country
+const upsertIPNetRecordText = `
+INSERT INTO ipnetrecord(
+	record_cidr, record_name, ip_version, handle, method, record_status, created_date, 
+	updated_date, whois_server, parent_handle, start_address, end_address, country) 
+VALUES (
+	:record_cidr, :record_name, :ip_version, :handle, :method, :record_status, :created_date, 
+	:updated_date, :whois_server, :parent_handle, :start_address, :end_address, :country)
+ON CONFLICT(handle) DO UPDATE SET
+	record_cidr 	= COALESCE(excluded.record_cidr,   ipnetrecord.record_cidr),
+    record_name   	= COALESCE(excluded.record_name,   ipnetrecord.record_name),
+    ip_version    	= COALESCE(excluded.ip_version,    ipnetrecord.ip_version),
+    method        	= COALESCE(excluded.method,        ipnetrecord.method),
+    record_status 	= COALESCE(excluded.record_status, ipnetrecord.record_status),
+    created_date  	= COALESCE(excluded.created_date,  ipnetrecord.created_date),
+    updated_date  	= COALESCE(excluded.updated_date,  ipnetrecord.updated_date),
+    whois_server  	= COALESCE(excluded.whois_server,  ipnetrecord.whois_server),
+    parent_handle 	= COALESCE(excluded.parent_handle, ipnetrecord.parent_handle),
+    start_address 	= COALESCE(excluded.start_address, ipnetrecord.start_address),
+    end_address   	= COALESCE(excluded.end_address,   ipnetrecord.end_address),
+    country       	= COALESCE(excluded.country,       ipnetrecord.country),
+    updated_at    	= CURRENT_TIMESTAMP;`
+
+// Param: :handle
+const selectEntityIDByIPNetRecordText = `
+SELECT entity_id FROM entities
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipnetrecord')
+  AND display_value = :handle
+LIMIT 1;`
+
+// Param: :row_id
+const selectIPNetRecordByID = `
+SELECT id, created_at, updated_at, record_cidr, record_name, ip_version, handle, method, record_status,
+	   created_date, updated_date, whois_server, parent_handle, start_address, end_address, country 
+FROM ipnetrecord
+WHERE id = :row_id
+LIMIT 1;`
 
 type IPNetRecord struct {
 	ID           int64      `json:"id"`
@@ -119,8 +76,14 @@ type IPNetRecord struct {
 	Country      *string    `json:"country,omitempty"`
 }
 
-func (s *Statements) UpsertIPNetRecord(ctx context.Context, a *oamreg.IPNetRecord) (int64, error) {
-	row := s.UpsertIPNetRecordStmt.QueryRowContext(ctx,
+func (r *SqliteRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IPNetRecord) (int64, error) {
+	const keySel = "asset.ipnet_record.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertIPNetRecordText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("record_cidr", a.CIDR.String()),
 		sql.Named("record_name", a.Name),
 		sql.Named("ip_version", a.Type),
@@ -134,18 +97,24 @@ func (s *Statements) UpsertIPNetRecord(ctx context.Context, a *oamreg.IPNetRecor
 		sql.Named("start_address", a.StartAddress.String()),
 		sql.Named("end_address", a.EndAddress.String()),
 		sql.Named("country", a.Country),
-		sql.Named("attrs", "{}"),
 	)
+
+	const keySel2 = "asset.ipnet_record.entity_id_by_ipnet_record"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByIPNetRecordText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx, sql.Named("handle", a.Handle)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (r *Queries) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	query := `SELECT id, created_at, updated_at, record_cidr, record_name, ip_version, handle, method, record_status,
-		      created_date, updated_date, whois_server, parent_handle, start_address, end_address, country
-		      FROM ipnetrecord WHERE id = ?`
-
-	st, err := r.getOrPrepare(ctx, "ipnetrecord", query)
+func (r *SqliteRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+	const keySel = "asset.fqdn.by_id"
+	st, err := r.queries.getOrPrepare(ctx, keySel, selectIPNetRecordByID)
 	if err != nil {
 		return nil, err
 	}
@@ -227,8 +196,8 @@ func (r *Queries) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64)
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
-		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
 		Asset: &oamreg.IPNetRecord{
 			CIDR:         ipnet,
 			Handle:       a.Handle,

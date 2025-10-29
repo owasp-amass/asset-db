@@ -16,58 +16,32 @@ import (
 	oamfin "github.com/owasp-amass/open-asset-model/financial"
 )
 
-// FUNDSTRANSFER --------------------------------------------------------------
-// Params: :unique_id, :amount, :reference_number, :currency, :transfer_method, :exchange_date, :exchange_rate, :attrs
-const tmplUpsertFundsTransfer = `
-WITH
-  row_try AS (
-    INSERT INTO fundstransfer(unique_id, amount, reference_number, currency, transfer_method, exchange_date, exchange_rate)
-    VALUES (:unique_id, :amount, :reference_number, :currency, :transfer_method, :exchange_date, :exchange_rate)
-    ON CONFLICT(unique_id) DO UPDATE SET
-      amount           = COALESCE(excluded.amount,           fundstransfer.amount),
-      reference_number = COALESCE(excluded.reference_number, fundstransfer.reference_number),
-      currency         = COALESCE(excluded.currency,         fundstransfer.currency),
-      transfer_method  = COALESCE(excluded.transfer_method,  fundstransfer.transfer_method),
-      exchange_date    = COALESCE(excluded.exchange_date,    fundstransfer.exchange_date),
-      exchange_rate    = COALESCE(excluded.exchange_rate,    fundstransfer.exchange_rate),
-      updated_at       = CASE WHEN
-        (excluded.amount           IS NOT fundstransfer.amount) OR
-        (excluded.reference_number IS NOT fundstransfer.reference_number) OR
-        (excluded.currency         IS NOT fundstransfer.currency) OR
-        (excluded.transfer_method  IS NOT fundstransfer.transfer_method) OR
-        (excluded.exchange_date    IS NOT fundstransfer.exchange_date) OR
-        (excluded.exchange_rate    IS NOT fundstransfer.exchange_rate)
-      THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE fundstransfer.updated_at END
-    WHERE (excluded.amount           IS NOT fundstransfer.amount) OR
-          (excluded.reference_number IS NOT fundstransfer.reference_number) OR
-          (excluded.currency         IS NOT fundstransfer.currency) OR
-          (excluded.transfer_method  IS NOT fundstransfer.transfer_method) OR
-          (excluded.exchange_date    IS NOT fundstransfer.exchange_date) OR
-          (excluded.exchange_rate    IS NOT fundstransfer.exchange_rate)
-    RETURNING id
-  ),
-  row_id_cte AS (SELECT id AS row_id FROM row_try
-                 UNION ALL SELECT id AS row_id FROM fundstransfer WHERE unique_id=:unique_id LIMIT 1),
-  ensure_type AS (INSERT INTO entity_type_lu(name) VALUES ('fundstransfer') ON CONFLICT(name) DO NOTHING RETURNING id),
-  type_id AS (SELECT id FROM ensure_type UNION ALL SELECT id FROM entity_type_lu WHERE name='fundstransfer' LIMIT 1),
-  ent_ins AS (
-    INSERT INTO entities(type_id, display_value, attrs)
-    SELECT (SELECT id FROM type_id), :unique_id, coalesce(:attrs,'{}')
-    ON CONFLICT(type_id, display_value) DO UPDATE SET
-      attrs = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN json_patch(entities.attrs, coalesce(:attrs,'{}')) ELSE entities.attrs END,
-      updated_at = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entities.updated_at END
-    WHERE json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    RETURNING entity_id
-  ),
-  ent_id AS (SELECT entity_id FROM ent_ins UNION ALL
-             SELECT entity_id FROM entities WHERE type_id=(SELECT id FROM type_id) AND display_value=:unique_id LIMIT 1),
-  ref_up AS (INSERT INTO entity_ref(entity_id, table_name, row_id)
-             VALUES ((SELECT entity_id FROM ent_id),'fundstransfer',(SELECT row_id FROM row_id_cte))
-             ON CONFLICT(table_name,row_id) DO UPDATE SET entity_id=excluded.entity_id,updated_at=strftime('%Y-%m-%d %H:%M:%f','now')
-             WHERE entity_ref.entity_id IS NOT excluded.entity_id)
-SELECT entity_id FROM ent_id;`
+// Params: :unique_id, :amount, :reference_number, :currency, :transfer_method, :exchange_date, :exchange_rate
+const upsertFundsTransferText = `
+INSERT INTO fundstransfer(unique_id, amount, reference_number, currency, transfer_method, exchange_date, exchange_rate)
+VALUES (:unique_id, :amount, :reference_number, :currency, :transfer_method, :exchange_date, :exchange_rate)
+ON CONFLICT(unique_id) DO UPDATE SET
+    amount           = COALESCE(excluded.amount,           fundstransfer.amount),
+    reference_number = COALESCE(excluded.reference_number, fundstransfer.reference_number),
+    currency         = COALESCE(excluded.currency,         fundstransfer.currency),
+    transfer_method  = COALESCE(excluded.transfer_method,  fundstransfer.transfer_method),
+    exchange_date    = COALESCE(excluded.exchange_date,    fundstransfer.exchange_date),
+    exchange_rate    = COALESCE(excluded.exchange_rate,    fundstransfer.exchange_rate),
+    updated_at       = CURRENT_TIMESTAMP;`
+
+// Param: :unique_id
+const selectEntityIDByFundsTransferText = `
+SELECT entity_id FROM entities
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fundstransfer')
+  AND display_value = :unique_id
+LIMIT 1;`
+
+// Param: :row_id
+const selectFundsTransferByID = `
+SELECT id, created_at, updated_at, unique_id, amount, reference_number, currency, transfer_method, exchange_date, exchange_rate 
+FROM fundstransfer 
+WHERE id = :row_id
+LIMIT 1;`
 
 type funds struct {
 	ID              int64      `json:"id"`
@@ -82,8 +56,14 @@ type funds struct {
 	ExchangeRate    *float64   `json:"exchange_rate,omitempty"`
 }
 
-func (s *Statements) UpsertFundsTransfer(ctx context.Context, a *oamfin.FundsTransfer) (int64, error) {
-	row := s.UpsertFundsTransferStmt.QueryRowContext(ctx,
+func (r *SqliteRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.FundsTransfer) (int64, error) {
+	const keySel = "asset.funds_transfer.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertFundsTransferText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("unique_id", a.ID),
 		sql.Named("amount", a.Amount),
 		sql.Named("reference_number", a.ReferenceNumber),
@@ -92,15 +72,23 @@ func (s *Statements) UpsertFundsTransfer(ctx context.Context, a *oamfin.FundsTra
 		sql.Named("exchange_date", a.ExchangeDate),
 		sql.Named("exchange_rate", a.ExchangeRate),
 	)
+
+	const keySel2 = "asset.funds_transfer.entity_id_by_funds_transfer"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByFundsTransferText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx, sql.Named("unique_id", a.ID)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (r *Queries) fetchFundsTransferByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	query := `SELECT id, created_at, updated_at, unique_id, amount, reference_number, currency, transfer_method, exchange_date, exchange_rate
-		      FROM fundstransfer WHERE id = ?`
-
-	st, err := r.getOrPrepare(ctx, "fundstransfer", query)
+func (r *SqliteRepository) fetchFundsTransferByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+	const keySel = "asset.funds_transfer.by_id"
+	st, err := r.queries.getOrPrepare(ctx, keySel, selectFundsTransferByID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,8 +134,8 @@ func (r *Queries) fetchFundsTransferByRowID(ctx context.Context, eid, rowID int6
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
-		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
 		Asset: &oamfin.FundsTransfer{
 			ID:              a.UniqueID,
 			Amount:          a.Amount,

@@ -257,7 +257,7 @@ CREATE TRIGGER IF NOT EXISTS trg_domainrecord_ai
 AFTER INSERT ON domainrecord
 BEGIN
   INSERT INTO entities(type_id, display_value, attrs)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), lower(NEW.domain), '{}')
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), lower(NEW.unique_id), '{}')
   ON CONFLICT(type_id, display_value) DO UPDATE SET updated_at=CURRENT_TIMESTAMP;
 
   INSERT INTO entity_ref(entity_id, table_name, row_id)
@@ -272,7 +272,7 @@ CREATE TRIGGER IF NOT EXISTS trg_domainrecord_au
 AFTER UPDATE ON domainrecord
 BEGIN
   INSERT INTO entities(type_id, display_value, attrs)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), lower(NEW.domain), '{}')
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), lower(NEW.unique_id), '{}')
   ON CONFLICT(type_id, display_value) DO UPDATE SET updated_at=CURRENT_TIMESTAMP;
 
   INSERT INTO entity_ref(entity_id, table_name, row_id)
@@ -533,12 +533,12 @@ CREATE TRIGGER IF NOT EXISTS trg_ipnetrecord_ai
 AFTER INSERT ON ipnetrecord
 BEGIN
   INSERT INTO entities(type_id, display_value, attrs)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='ipnetrecord'), NEW.record_cidr, '{}')
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='ipnetrecord'), NEW.handle, '{}')
   ON CONFLICT(type_id, display_value) DO UPDATE SET updated_at=CURRENT_TIMESTAMP;
 
   INSERT INTO entity_ref(entity_id, table_name, row_id)
   VALUES (
-    (SELECT entity_id FROM entities WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='ipnetrecord') AND display_value=NEW.record_cidr),
+    (SELECT entity_id FROM entities WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='ipnetrecord') AND display_value=NEW.handle),
     'ipnetrecord', NEW.id
   )
   ON CONFLICT(entity_id, table_name, row_id) DO NOTHING;
@@ -548,12 +548,12 @@ CREATE TRIGGER IF NOT EXISTS trg_ipnetrecord_au
 AFTER UPDATE ON ipnetrecord
 BEGIN
   INSERT INTO entities(type_id, display_value, attrs)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='ipnetrecord'), NEW.record_cidr, '{}')
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='ipnetrecord'), NEW.handle, '{}')
   ON CONFLICT(type_id, display_value) DO UPDATE SET updated_at=CURRENT_TIMESTAMP;
 
   INSERT INTO entity_ref(entity_id, table_name, row_id)
   VALUES (
-    (SELECT entity_id FROM entities WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='ipnetrecord') AND display_value=NEW.record_cidr),
+    (SELECT entity_id FROM entities WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='ipnetrecord') AND display_value=NEW.handle),
     'ipnetrecord', NEW.id
   )
   ON CONFLICT(entity_id, table_name, row_id) DO NOTHING;

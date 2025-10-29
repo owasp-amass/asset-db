@@ -17,78 +17,56 @@ import (
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// IPADDRESS ------------------------------------------------------------------
-// Params: :ip_version, :ip_address_text, :attrs
-const tmplUpsertIPAddress = `
-WITH
-  row_try AS (
-    INSERT INTO ipaddress(ip_version, ip_address)
-    VALUES (:ip_version, :ip_address_text)
-    ON CONFLICT(ip_address) DO UPDATE SET
-      ip_version = COALESCE(excluded.ip_version, ipaddress.ip_version),
-      updated_at = CASE WHEN (excluded.ip_version IS NOT ipaddress.ip_version)
-                   THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE ipaddress.updated_at END
-    WHERE (excluded.ip_version IS NOT ipaddress.ip_version)
-    RETURNING id
-  ),
-  row_id_cte AS (
-    SELECT id AS row_id FROM row_try
-    UNION ALL SELECT id AS row_id FROM ipaddress WHERE ip_address = :ip_address_text LIMIT 1
-  ),
-  ensure_type AS (
-    INSERT INTO entity_type_lu(name) VALUES ('ipaddress')
-    ON CONFLICT(name) DO NOTHING
-    RETURNING id
-  ),
-  type_id AS (
-    SELECT id FROM ensure_type
-    UNION ALL SELECT id FROM entity_type_lu WHERE name = 'ipaddress' LIMIT 1
-  ),
-  ent_ins AS (
-    INSERT INTO entities(type_id, display_value, attrs)
-    SELECT (SELECT id FROM type_id), :ip_address_text, coalesce(:attrs,'{}')
-    ON CONFLICT(type_id, display_value) DO UPDATE SET
-      attrs = CASE
-        WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN json_patch(entities.attrs, coalesce(:attrs,'{}'))
-        ELSE entities.attrs
-      END,
-      updated_at = CASE
-        WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entities.updated_at END
-    WHERE json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    RETURNING entity_id
-  ),
-  ent_id AS (
-    SELECT entity_id FROM ent_ins
-    UNION ALL SELECT entity_id FROM entities
-    WHERE type_id = (SELECT id FROM type_id) AND display_value = :ip_address_text
-    LIMIT 1
-  ),
-  ref_up AS (
-    INSERT INTO entity_ref(entity_id, table_name, row_id)
-    VALUES ((SELECT entity_id FROM ent_id), 'ipaddress', (SELECT row_id FROM row_id_cte))
-    ON CONFLICT(table_name, row_id) DO UPDATE SET
-      entity_id  = excluded.entity_id,
-      updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
-    WHERE entity_ref.entity_id IS NOT excluded.entity_id
-  )
-SELECT entity_id FROM ent_id;`
+// Params: :ip_version, :ip_address_text
+const upsertIPAddressText = `
+INSERT INTO ipaddress(ip_version, ip_address)
+VALUES (:ip_version, :ip_address_text)
+ON CONFLICT(ip_address) DO UPDATE SET
+    ip_version = COALESCE(excluded.ip_version, ipaddress.ip_version),
+    updated_at = CURRENT_TIMESTAMP;`
 
-func (s *Statements) UpsertIPAddress(ctx context.Context, a *oamnet.IPAddress) (int64, error) {
-	row := s.UpsertIPAddressStmt.QueryRowContext(ctx,
+// Param: :ip_address_text
+const selectEntityIDByIPAddressText = `
+SELECT entity_id FROM entities
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipaddress')
+  AND display_value = :ip_address_text
+LIMIT 1;`
+
+// Param: :row_id
+const selectIPAddressByID = `
+SELECT id, created_at, updated_at, ip_version, ip_address 
+FROM ipaddress 
+WHERE id = :row_id
+LIMIT 1;`
+
+func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddress) (int64, error) {
+	const keySel = "asset.ip_address.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertIPAddressText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("ip_version", a.Type),
 		sql.Named("ip_address", a.Address),
-		sql.Named("attrs", "{}"),
 	)
+
+	const keySel2 = "asset.ip_address.entity_id_by_ip_address"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByFQDNText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx, sql.Named("ip_address_text", a.Address.String())).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (r *Queries) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	query := `SELECT id, created_at, updated_at, ip_version, ip_address FROM ipaddress WHERE id = ?`
-
-	st, err := r.getOrPrepare(ctx, "ipaddress", query)
+func (r *SqliteRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+	const keySel = "asset.ip_address.upsert"
+	st, err := r.queries.getOrPrepare(ctx, keySel, selectIPAddressByID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,8 +91,8 @@ func (r *Queries) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: (*created).In(time.UTC).Local(),
-		LastSeen:  (*updated).In(time.UTC).Local(),
+		CreatedAt: created.In(time.UTC).Local(),
+		LastSeen:  updated.In(time.UTC).Local(),
 		Asset: &oamnet.IPAddress{
 			Address: addr,
 			Type:    iptype,

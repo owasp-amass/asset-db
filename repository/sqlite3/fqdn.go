@@ -31,8 +31,9 @@ WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn')
 LIMIT 1;`
 
 // Param: :row_id
-const selectFQDNByID = `
-SELECT id, created_at, updated_at, fqdn FROM fqdn
+const selectFQDNByIDText = `
+SELECT id, created_at, updated_at, fqdn 
+FROM fqdn
 WHERE id = :row_id
 LIMIT 1;`
 
@@ -42,6 +43,7 @@ func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int6
 	if err != nil {
 		return 0, err
 	}
+
 	_ = stmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name))
 
 	const keySel2 = "asset.fqdn.entity_id_by_fqdn"
@@ -59,7 +61,7 @@ func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int6
 
 func (r *SqliteRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	const keySel = "asset.fqdn.by_id"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, selectFQDNByID)
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, selectFQDNByIDText)
 	if err != nil {
 		return nil, err
 	}

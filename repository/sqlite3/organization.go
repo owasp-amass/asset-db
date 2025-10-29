@@ -16,58 +16,32 @@ import (
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
-// ORGANIZATION ----------------------------------------------------------------
-// Params: :unique_id, :legal_name, :org_name, :active, :jurisdiction, :founding_date, :registration_id, :attrs
-const tmplUpsertOrganization = `
-WITH
-  row_try AS (
-    INSERT INTO organization(unique_id, legal_name, org_name, active, jurisdiction, founding_date, registration_id)
-    VALUES (:unique_id, :legal_name, :org_name, :active, :jurisdiction, :founding_date, :registration_id)
-    ON CONFLICT(unique_id) DO UPDATE SET
-      legal_name      = COALESCE(excluded.legal_name,      organization.legal_name),
-      org_name        = COALESCE(excluded.org_name,        organization.org_name),
-      active          = COALESCE(excluded.active,          organization.active),
-      jurisdiction    = COALESCE(excluded.jurisdiction,    organization.jurisdiction),
-      founding_date   = COALESCE(excluded.founding_date,   organization.founding_date),
-      registration_id = COALESCE(excluded.registration_id, organization.registration_id),
-      updated_at      = CASE WHEN
-        (excluded.legal_name      IS NOT organization.legal_name) OR
-        (excluded.org_name        IS NOT organization.org_name) OR
-        (excluded.active          IS NOT organization.active) OR
-        (excluded.jurisdiction    IS NOT organization.jurisdiction) OR
-        (excluded.founding_date   IS NOT organization.founding_date) OR
-        (excluded.registration_id IS NOT organization.registration_id)
-      THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE organization.updated_at END
-    WHERE (excluded.legal_name      IS NOT organization.legal_name) OR
-          (excluded.org_name        IS NOT organization.org_name) OR
-          (excluded.active          IS NOT organization.active) OR
-          (excluded.jurisdiction    IS NOT organization.jurisdiction) OR
-          (excluded.founding_date   IS NOT organization.founding_date) OR
-          (excluded.registration_id IS NOT organization.registration_id)
-    RETURNING id
-  ),
-  row_id_cte AS (SELECT id AS row_id FROM row_try
-                 UNION ALL SELECT id AS row_id FROM organization WHERE unique_id=:unique_id LIMIT 1),
-  ensure_type AS (INSERT INTO entity_type_lu(name) VALUES ('organization') ON CONFLICT(name) DO NOTHING RETURNING id),
-  type_id AS (SELECT id FROM ensure_type UNION ALL SELECT id FROM entity_type_lu WHERE name='organization' LIMIT 1),
-  ent_ins AS (
-    INSERT INTO entities(type_id, display_value, attrs)
-    SELECT (SELECT id FROM type_id), COALESCE(:legal_name,:unique_id), coalesce(:attrs,'{}')
-    ON CONFLICT(type_id, display_value) DO UPDATE SET
-      attrs = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN json_patch(entities.attrs, coalesce(:attrs,'{}')) ELSE entities.attrs END,
-      updated_at = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entities.updated_at END
-    WHERE json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    RETURNING entity_id
-  ),
-  ent_id AS (SELECT entity_id FROM ent_ins UNION ALL
-             SELECT entity_id FROM entities WHERE type_id=(SELECT id FROM type_id) AND display_value=COALESCE(:legal_name,:unique_id) LIMIT 1),
-  ref_up AS (INSERT INTO entity_ref(entity_id, table_name, row_id)
-             VALUES ((SELECT entity_id FROM ent_id),'organization',(SELECT row_id FROM row_id_cte))
-             ON CONFLICT(table_name,row_id) DO UPDATE SET entity_id=excluded.entity_id,updated_at=strftime('%Y-%m-%d %H:%M:%f','now')
-             WHERE entity_ref.entity_id IS NOT excluded.entity_id)
-SELECT entity_id FROM ent_id;`
+// Params: :unique_id, :legal_name, :org_name, :active, :jurisdiction, :founding_date, :registration_id
+const upsertOrganizationText = `
+INSERT INTO organization(unique_id, legal_name, org_name, active, jurisdiction, founding_date, registration_id)
+VALUES (:unique_id, :legal_name, :org_name, :active, :jurisdiction, :founding_date, :registration_id)
+ON CONFLICT(unique_id) DO UPDATE SET
+    legal_name      = COALESCE(excluded.legal_name,      organization.legal_name),
+    org_name        = COALESCE(excluded.org_name,        organization.org_name),
+    active          = COALESCE(excluded.active,          organization.active),
+    jurisdiction    = COALESCE(excluded.jurisdiction,    organization.jurisdiction),
+    founding_date   = COALESCE(excluded.founding_date,   organization.founding_date),
+    registration_id = COALESCE(excluded.registration_id, organization.registration_id),
+    updated_at      = CURRENT_TIMESTAMP;`
+
+// Param: :unique_id
+const selectEntityIDByOrganizationText = `
+SELECT entity_id FROM entities
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'organization')
+  AND display_value = :unique_id
+LIMIT 1;`
+
+// Param: :row_id
+const selectOrganizationByIDText = `
+SELECT id, created_at, updated_at, org_name, active, unique_id, legal_name, jurisdiction, founding_date, registration_id 
+FROM organization 
+WHERE id = :row_id
+LIMIT 1;`
 
 type organization struct {
 	ID             int64      `json:"id"`
@@ -82,8 +56,14 @@ type organization struct {
 	RegistrationID *string    `json:"registration_id,omitempty"`
 }
 
-func (s *Statements) UpsertOrganization(ctx context.Context, a *oamorg.Organization) (int64, error) {
-	row := s.UpsertOrganizationStmt.QueryRowContext(ctx,
+func (r *SqliteRepository) upsertOrganization(ctx context.Context, a *oamorg.Organization) (int64, error) {
+	const keySel = "asset.organization.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertOrganizationText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("unique_id", a.ID),
 		sql.Named("org_name", a.Name),
 		sql.Named("legal_name", a.LegalName),
@@ -91,17 +71,24 @@ func (s *Statements) UpsertOrganization(ctx context.Context, a *oamorg.Organizat
 		sql.Named("jurisdiction", a.Jurisdiction),
 		sql.Named("registration_id", a.RegistrationID),
 		sql.Named("active", a.Active),
-		sql.Named("attrs", "{}"),
 	)
+
+	const keySel2 = "asset.organization.entity_id_by_organization"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByOrganizationText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx, sql.Named("unique_id", a.ID)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (r *Queries) fetchOrganizationByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	query := `SELECT id, created_at, updated_at, org_name, active, unique_id, legal_name, jurisdiction, founding_date, registration_id
-		      FROM organization WHERE id = ?`
-
-	st, err := r.getOrPrepare(ctx, "organization", query)
+func (r *SqliteRepository) fetchOrganizationByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+	const keySel = "asset.organization.by_id"
+	st, err := r.queries.getOrPrepare(ctx, keySel, selectOrganizationByIDText)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +135,8 @@ func (r *Queries) fetchOrganizationByRowID(ctx context.Context, eid, rowID int64
 
 	return &types.Entity{
 		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: (*a.CreatedAt).In(time.UTC).Local(),
-		LastSeen:  (*a.UpdatedAt).In(time.UTC).Local(),
+		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
 		Asset: &oamorg.Organization{
 			ID:             a.UniqueID,
 			Name:           orgname,
