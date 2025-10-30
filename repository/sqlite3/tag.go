@@ -22,109 +22,53 @@ import (
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
-// UPSERT TAG DICTIONARY (returns tag_id) -------------------------------------
-// Params: :namespace, :name, :value, :meta(JSON)
-const tmplUpsertTag = `
-WITH
-  t AS (
-    INSERT INTO tags(namespace, name, value, meta)
-    VALUES (coalesce(:namespace,'default'), :name, :value, coalesce(:meta,'{}'))
-    ON CONFLICT(namespace, name, coalesce(value,'∅')) DO UPDATE SET
-      meta = CASE
-        WHEN json_patch(tags.meta, coalesce(excluded.meta,'{}')) IS NOT tags.meta
-        THEN json_patch(tags.meta, coalesce(excluded.meta,'{}'))
-        ELSE tags.meta
-      END,
-      updated_at = CASE
-        WHEN json_patch(tags.meta, coalesce(excluded.meta,'{}')) IS NOT tags.meta
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE tags.updated_at END
-    WHERE json_patch(tags.meta, coalesce(excluded.meta,'{}')) IS NOT tags.meta
-    RETURNING tag_id
-  )
-SELECT tag_id FROM t
-UNION ALL
+// Params: :ttype_name, :property_name, :property_value, :content(JSON)
+const upsertTagText = `
+INSERT INTO tags(ttype_id, property_name, property_value, content)
+VALUES ((SELECT id FROM tag_type_lu WHERE name=:ttype_name LIMIT 1), 
+	:property_name, :property_value, coalesce(:content,'{}'))
+ON CONFLICT(ttype_id, property_name, property_value) DO UPDATE SET
+    content = CASE
+        WHEN json_patch(tags.content, coalesce(excluded.content,'{}')) IS NOT tags.content
+        THEN json_patch(tags.content, coalesce(excluded.content,'{}'))
+        ELSE tags.content
+    END,
+    updated_at = CURRENT_TIMESTAMP;`
+
+// Params: :ttype_name, :property_name, :property_value
+const selectTagIDByTagText = `
 SELECT tag_id FROM tags
-WHERE namespace = coalesce(:namespace,'default')
-  AND name = :name
-  AND coalesce(value,'∅') = coalesce(:value,'∅')
+WHERE ttype_id = (SELECT id FROM tag_type_lu WHERE name = :ttype_name LIMIT 1)
+  AND property_name = :property_name
+  AND coalesce(property_value,'∅') = coalesce(:property_value,'∅')
 LIMIT 1;`
 
-// TAG ENTITY (returns mapping id) --------------------------------------------
-// Params: :entity_id, :namespace, :name, :value, :details(JSON)
-const tmplTagEntity = `
-WITH
-  tid AS (
-    WITH t AS (
-      INSERT INTO tags(namespace, name, value, meta)
-      VALUES (coalesce(:namespace,'default'), :name, :value, '{}')
-      ON CONFLICT(namespace, name, coalesce(value,'∅')) DO NOTHING
-      RETURNING tag_id
-    )
-    SELECT tag_id FROM t
-    UNION ALL
-    SELECT tag_id FROM tags
-    WHERE namespace = coalesce(:namespace,'default')
-      AND name = :name
-      AND coalesce(value,'∅') = coalesce(:value,'∅')
-    LIMIT 1
-  ),
-  map AS (
-    INSERT INTO entity_tag_map(entity_id, tag_id, details)
-    SELECT :entity_id, (SELECT tag_id FROM tid), coalesce(:details,'{}')
-    ON CONFLICT(entity_id, tag_id) DO UPDATE SET
-      details = CASE
-        WHEN json_patch(entity_tag_map.details, coalesce(excluded.details,'{}')) IS NOT entity_tag_map.details
-        THEN json_patch(entity_tag_map.details, coalesce(excluded.details,'{}'))
-        ELSE entity_tag_map.details
-      END,
-      updated_at = CASE
-        WHEN json_patch(entity_tag_map.details, coalesce(excluded.details,'{}')) IS NOT entity_tag_map.details
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE entity_tag_map.updated_at END
-    WHERE json_patch(entity_tag_map.details, coalesce(excluded.details,'{}')) IS NOT entity_tag_map.details
-    RETURNING id
-  )
-SELECT id FROM map
-UNION ALL
-SELECT id FROM entity_tag_map WHERE entity_id = :entity_id AND tag_id = (SELECT tag_id FROM tid)
+// Params: :entity_id, :tag_id
+const tagEntityText = `
+INSERT INTO entity_tag_map(entity_id, tag_id)
+VALUES (:entity_id, :tag_id)
+ON CONFLICT(entity_id, tag_id) DO UPDATE SET
+    updated_at = CURRENT_TIMESTAMP;`
+
+// Params: :entity_id, :tag_id
+const selectEntityTagMapIDText = `
+SELECT id FROM entity_tag_map
+WHERE entity_id = :entity_id
+  AND tag_id = :tag_id
 LIMIT 1;`
 
-// TAG EDGE (returns mapping id) ----------------------------------------------
-// Params: :edge_id, :namespace, :name, :value, :details(JSON)
-const tmplTagEdge = `
-WITH
-  tid AS (
-    WITH t AS (
-      INSERT INTO tags(namespace, name, value, meta)
-      VALUES (coalesce(:namespace,'default'), :name, :value, '{}')
-      ON CONFLICT(namespace, name, coalesce(value,'∅')) DO NOTHING
-      RETURNING tag_id
-    )
-    SELECT tag_id FROM t
-    UNION ALL
-    SELECT tag_id FROM tags
-    WHERE namespace = coalesce(:namespace,'default')
-      AND name = :name
-      AND coalesce(value,'∅') = coalesce(:value,'∅')
-    LIMIT 1
-  ),
-  map AS (
-    INSERT INTO edge_tag_map(edge_id, tag_id, details)
-    SELECT :edge_id, (SELECT tag_id FROM tid), coalesce(:details,'{}')
-    ON CONFLICT(edge_id, tag_id) DO UPDATE SET
-      details = CASE
-        WHEN json_patch(edge_tag_map.details, coalesce(excluded.details,'{}')) IS NOT edge_tag_map.details
-        THEN json_patch(edge_tag_map.details, coalesce(excluded.details,'{}'))
-        ELSE edge_tag_map.details
-      END,
-      updated_at = CASE
-        WHEN json_patch(edge_tag_map.details, coalesce(excluded.details,'{}')) IS NOT edge_tag_map.details
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE edge_tag_map.updated_at END
-    WHERE json_patch(edge_tag_map.details, coalesce(excluded.details,'{}')) IS NOT edge_tag_map.details
-    RETURNING id
-  )
-SELECT id FROM map
-UNION ALL
-SELECT id FROM edge_tag_map WHERE edge_id = :edge_id AND tag_id = (SELECT tag_id FROM tid)
+// Params: :edge_id, :tag_id
+const tagEdgeText = `
+INSERT INTO edge_tag_map(edge_id, tag_id)
+VALUES (:edge_id, :tag_id)
+ON CONFLICT(edge_id, tag_id) DO UPDATE SET
+    updated_at = CURRENT_TIMESTAMP;`
+
+// Params: :edge_id, :tag_id
+const selectEdgeTagMapIDText = `
+SELECT id FROM edge_tag_map
+WHERE edge_id = :edge_id
+  AND tag_id = :tag_id
 LIMIT 1;`
 
 type Tag struct {
@@ -137,11 +81,10 @@ type Tag struct {
 }
 
 type TagAssignment struct {
-	ID        int64           `json:"id"`
-	Tag       Tag             `json:"tag"`
-	Details   json.RawMessage `json:"details,omitempty"`
-	CreatedAt *time.Time      `json:"created_at,omitempty"`
-	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
+	ID        int64      `json:"id"`
+	Tag       Tag        `json:"tag"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 func (r *SqliteRepository) CreateEntityTag(ctx context.Context, entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error) {
@@ -149,7 +92,12 @@ func (r *SqliteRepository) CreateEntityTag(ctx context.Context, entity *types.En
 }
 
 func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
-	_, err := r.stmts.UpsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), "{}")
+	content, err := property.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	tid, err := r.upsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), string(content))
 	if err != nil {
 		return nil, err
 	}
@@ -159,17 +107,12 @@ func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *typ
 		return nil, err
 	}
 
-	details, err := property.JSON()
+	mid, err := r.tagEntity(ctx, eid, tid)
 	if err != nil {
 		return nil, err
 	}
 
-	mid, err := r.stmts.TagEntity(ctx, eid, string(property.PropertyType()), property.Name(), property.Value(), string(details))
-	if err != nil {
-		return nil, err
-	}
-
-	tags, err := r.queries.TagsForEntity(ctx, eid)
+	tags, err := r.tagsForEntity(ctx, eid)
 	if err != nil {
 		return nil, err
 	}
@@ -187,8 +130,8 @@ func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *typ
 
 	return &types.EntityTag{
 		ID:        strconv.FormatInt(mid, 10),
-		CreatedAt: (*assignment).CreatedAt.In(time.UTC).Local(),
-		LastSeen:  (*assignment).UpdatedAt.In(time.UTC).Local(),
+		CreatedAt: assignment.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  assignment.UpdatedAt.In(time.UTC).Local(),
 		Property:  property,
 		Entity:    entity,
 	}, nil
@@ -196,17 +139,23 @@ func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *typ
 
 func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
 	const q = `
-SELECT m.id, m.entity_id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
+SELECT m.id, m.entity_id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
+	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM entity_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
-ORDER BY m.updated_at DESC`
-	st, err := r.queries.prepNamed(ctx, "q.tags.entityTagById", q)
+ORDER BY m.updated_at DESC;`
+	st, err := r.queries.getOrPrepare(ctx, "tag.entity_tag_by_id", q)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := st.QueryContext(ctx, id)
+	mid, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := st.QueryContext(ctx, mid)
 	if err != nil {
 		return nil, err
 	}
@@ -217,19 +166,16 @@ ORDER BY m.updated_at DESC`
 	var ta TagAssignment
 	var created, updated, tupdated *string
 	var v *string
-	var meta, det *string
+	var meta *string
 	if err := rows.Scan(
 		&ta.ID, &eid, &ta.Tag.TagID, &ta.Tag.Namespace,
-		&ta.Tag.Name, &v, &meta, &det, &created, &updated, &tupdated,
+		&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated,
 	); err != nil {
 		return nil, err
 	}
 	ta.Tag.Value = v
 	if meta != nil && strings.TrimSpace(*meta) != "" {
 		ta.Tag.Meta = json.RawMessage(*meta)
-	}
-	if det != nil && strings.TrimSpace(*det) != "" {
-		ta.Details = json.RawMessage(*det)
 	}
 
 	ta.CreatedAt = parseTS(created)
@@ -259,7 +205,7 @@ func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *types.Ent
 		return nil, err
 	}
 
-	tags, err := r.queries.TagsForEntity(ctx, eid)
+	tags, err := r.tagsForEntity(ctx, eid)
 	if err != nil {
 		return nil, err
 	}
@@ -309,25 +255,25 @@ func convertSQLitePropertyToOAMProperty(ta *TagAssignment) (oam.Property, error)
 	switch strings.ToLower(ta.Tag.Namespace) {
 	case strings.ToLower(string(oam.DNSRecordProperty)):
 		var dp oamdns.DNSRecordProperty
-		if err := json.Unmarshal(ta.Details, &dp); err != nil {
+		if err := json.Unmarshal(ta.Tag.Meta, &dp); err != nil {
 			return nil, err
 		}
 		p = &dp
 	case strings.ToLower(string(oam.SimpleProperty)):
 		var sp oamgen.SimpleProperty
-		if err := json.Unmarshal(ta.Details, &sp); err != nil {
+		if err := json.Unmarshal(ta.Tag.Meta, &sp); err != nil {
 			return nil, err
 		}
 		p = &sp
 	case strings.ToLower(string(oam.SourceProperty)):
 		var sp oamgen.SourceProperty
-		if err := json.Unmarshal(ta.Details, &sp); err != nil {
+		if err := json.Unmarshal(ta.Tag.Meta, &sp); err != nil {
 			return nil, err
 		}
 		p = &sp
 	case strings.ToLower(string(oam.VulnProperty)):
 		var vp oamplat.VulnProperty
-		if err := json.Unmarshal(ta.Details, &vp); err != nil {
+		if err := json.Unmarshal(ta.Tag.Meta, &vp); err != nil {
 			return nil, err
 		}
 		p = &vp
@@ -344,12 +290,12 @@ func (r *SqliteRepository) DeleteEntityTag(ctx context.Context, id string) error
 		return err
 	}
 
-	tid, err := r.queries.RemoveEntityTag(ctx, mid)
+	tid, err := r.removeEntityTag(ctx, mid)
 	if err != nil {
 		return err
 	}
 
-	_, err = r.queries.DeleteTagByID(ctx, tid, true)
+	_, err = r.deleteTagByID(ctx, tid, true)
 	return err
 }
 
@@ -358,7 +304,12 @@ func (r *SqliteRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, 
 }
 
 func (r *SqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.Edge, property oam.Property) (*types.EdgeTag, error) {
-	_, err := r.stmts.UpsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), "{}")
+	content, err := property.JSON()
+	if err != nil {
+		return nil, err
+	}
+
+	tid, err := r.upsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), string(content))
 	if err != nil {
 		return nil, err
 	}
@@ -368,17 +319,12 @@ func (r *SqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.E
 		return nil, err
 	}
 
-	details, err := property.JSON()
+	mid, err := r.tagEdge(ctx, eid, tid)
 	if err != nil {
 		return nil, err
 	}
 
-	mid, err := r.stmts.TagEdge(ctx, eid, string(property.PropertyType()), property.Name(), property.Value(), string(details))
-	if err != nil {
-		return nil, err
-	}
-
-	tags, err := r.queries.TagsForEdge(ctx, eid)
+	tags, err := r.tagsForEdge(ctx, eid)
 	if err != nil {
 		return nil, err
 	}
@@ -396,26 +342,33 @@ func (r *SqliteRepository) CreateEdgeProperty(ctx context.Context, edge *types.E
 
 	return &types.EdgeTag{
 		ID:        strconv.FormatInt(mid, 10),
-		CreatedAt: (*assignment).CreatedAt.In(time.UTC).Local(),
-		LastSeen:  (*assignment).UpdatedAt.In(time.UTC).Local(),
+		CreatedAt: assignment.CreatedAt.In(time.UTC).Local(),
+		LastSeen:  assignment.UpdatedAt.In(time.UTC).Local(),
 		Property:  property,
 		Edge:      edge,
 	}, nil
 }
 
+// FindEdgeTagById implements the Repository interface.
 func (r *SqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
 	const q = `
-SELECT m.id, m.edge_id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
+SELECT m.id, m.edge_id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
+	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM edge_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
-ORDER BY m.updated_at DESC`
-	st, err := r.queries.prepNamed(ctx, "q.tags.edgeTagById", q)
+ORDER BY m.updated_at DESC;`
+	st, err := r.queries.getOrPrepare(ctx, "tag.edge_tag_by_id", q)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := st.QueryContext(ctx, id)
+	mid, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := st.QueryContext(ctx, mid)
 	if err != nil {
 		return nil, err
 	}
@@ -426,19 +379,16 @@ ORDER BY m.updated_at DESC`
 	var ta TagAssignment
 	var created, updated, tupdated *string
 	var v *string
-	var meta, det *string
+	var meta *string
 	if err := rows.Scan(
 		&ta.ID, &eid, &ta.Tag.TagID, &ta.Tag.Namespace,
-		&ta.Tag.Name, &v, &meta, &det, &created, &updated, &tupdated,
+		&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated,
 	); err != nil {
 		return nil, err
 	}
 	ta.Tag.Value = v
 	if meta != nil && strings.TrimSpace(*meta) != "" {
 		ta.Tag.Meta = json.RawMessage(*meta)
-	}
-	if det != nil && strings.TrimSpace(*det) != "" {
-		ta.Details = json.RawMessage(*det)
 	}
 
 	ta.CreatedAt = parseTS(created)
@@ -468,7 +418,7 @@ func (r *SqliteRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, s
 		return nil, err
 	}
 
-	tags, err := r.queries.TagsForEdge(ctx, eid)
+	tags, err := r.tagsForEdge(ctx, eid)
 	if err != nil {
 		return nil, err
 	}
@@ -518,59 +468,109 @@ func (r *SqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
 		return err
 	}
 
-	tid, err := r.queries.RemoveEdgeTag(ctx, mid)
+	tid, err := r.removeEdgeTag(ctx, mid)
 	if err != nil {
 		return err
 	}
 
-	_, err = r.queries.DeleteTagByID(ctx, tid, true)
+	_, err = r.deleteTagByID(ctx, tid, true)
 	return err
 }
 
-func (s *Statements) UpsertTag(ctx context.Context, ns, name, value, metaJSON string) (int64, error) {
-	row := s.UpsertTagStmt.QueryRowContext(ctx,
-		sql.Named("namespace", ns),
-		sql.Named("name", name),
-		sql.Named("value", value),
-		sql.Named("meta", metaJSON),
+func (r *SqliteRepository) upsertTag(ctx context.Context, ttype, name, value, content string) (int64, error) {
+	const keySel = "tag.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertTagText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
+		sql.Named("ttype_name", ttype),
+		sql.Named("property_name", name),
+		sql.Named("property_value", value),
+		sql.Named("content", content),
 	)
+
+	const keySel2 = "tag.id_by_tag"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectTagIDByTagText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx,
+		sql.Named("ttype_name", ttype),
+		sql.Named("property_name", name),
+		sql.Named("property_value", value)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (s *Statements) TagEntity(ctx context.Context, entityID int64, ns, name, value, detailsJSON string) (int64, error) {
-	row := s.TagEntityStmt.QueryRowContext(ctx,
+func (r *SqliteRepository) tagEntity(ctx context.Context, entityID, tagID int64) (int64, error) {
+	const keySel = "tag.upsert_entity_tag_mapping"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, tagEntityText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("entity_id", entityID),
-		sql.Named("namespace", ns),
-		sql.Named("name", name),
-		sql.Named("value", value),
-		sql.Named("details", detailsJSON),
+		sql.Named("tag_id", tagID),
 	)
+
+	const keySel2 = "tag.entity_tag_mapping_id_by_ids"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityTagMapIDText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx,
+		sql.Named("entity_id", entityID),
+		sql.Named("tag_id", tagID)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-func (s *Statements) TagEdge(ctx context.Context, edgeID int64, ns, name, value, detailsJSON string) (int64, error) {
-	row := s.TagEdgeStmt.QueryRowContext(ctx,
+func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID, tagID int64) (int64, error) {
+	const keySel = "tag.upsert_edge_tag_mapping"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, tagEdgeText)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = stmt.QueryRowContext(ctx,
 		sql.Named("edge_id", edgeID),
-		sql.Named("namespace", ns),
-		sql.Named("name", name),
-		sql.Named("value", value),
-		sql.Named("details", detailsJSON),
+		sql.Named("tag_id", tagID),
 	)
+
+	const keySel2 = "tag.edge_tag_mapping_id_by_ids"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEdgeTagMapIDText)
+	if err != nil {
+		return 0, err
+	}
+
 	var id int64
-	return id, row.Scan(&id)
+	if err := stmt2.QueryRowContext(ctx,
+		sql.Named("edge_id", edgeID),
+		sql.Named("tag_id", tagID)).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
-// TagsForEntity lists all tag assignments for an entity (namespaced).
-func (r *Queries) TagsForEntity(ctx context.Context, entityID int64) ([]TagAssignment, error) {
+// tagsForEntity lists all tag assignments for an entity (namespaced).
+func (r *SqliteRepository) tagsForEntity(ctx context.Context, entityID int64) ([]TagAssignment, error) {
 	const q = `
-SELECT m.id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
+SELECT m.id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
+	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM entity_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.entity_id = ?
-ORDER BY m.updated_at DESC`
-	st, err := r.prepNamed(ctx, "q.tags.forEntity", q)
+ORDER BY m.updated_at DESC;`
+	st, err := r.queries.getOrPrepare(ctx, "tag.for_entity", q)
 	if err != nil {
 		return nil, err
 	}
@@ -585,10 +585,10 @@ ORDER BY m.updated_at DESC`
 		var ta TagAssignment
 		var created, updated, tupdated *string
 		var v *string
-		var meta, det *string
+		var meta *string
 		if err := rows.Scan(
 			&ta.ID, &ta.Tag.TagID, &ta.Tag.Namespace,
-			&ta.Tag.Name, &v, &meta, &det, &tupdated, &created, &updated,
+			&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated,
 		); err != nil {
 			return nil, err
 		}
@@ -596,9 +596,7 @@ ORDER BY m.updated_at DESC`
 		if meta != nil && strings.TrimSpace(*meta) != "" {
 			ta.Tag.Meta = json.RawMessage(*meta)
 		}
-		if det != nil && strings.TrimSpace(*det) != "" {
-			ta.Details = json.RawMessage(*det)
-		}
+
 		ta.CreatedAt = parseTS(created)
 		ta.UpdatedAt = parseTS(updated)
 		ta.Tag.UpdatedAt = parseTS(tupdated)
@@ -607,15 +605,16 @@ ORDER BY m.updated_at DESC`
 	return out, rows.Err()
 }
 
-// TagsForEdge lists all tags assigned to an edge.
-func (r *Queries) TagsForEdge(ctx context.Context, edgeID int64) ([]TagAssignment, error) {
+// tagsForEdge lists all tags assigned to an edge.
+func (r *SqliteRepository) tagsForEdge(ctx context.Context, edgeID int64) ([]TagAssignment, error) {
 	const q = `
-SELECT m.id, tg.tag_id, tg.namespace, tg.name, tg.value, tg.meta, m.details, tg.updated_at, m.created_at, m.updated_at
+SELECT m.id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
+	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM edge_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.edge_id = ?
-ORDER BY m.updated_at DESC`
-	st, err := r.prepNamed(ctx, "q.tags.forEdge", q)
+ORDER BY m.updated_at DESC;`
+	st, err := r.queries.getOrPrepare(ctx, "tag.for_edge", q)
 	if err != nil {
 		return nil, err
 	}
@@ -630,19 +629,16 @@ ORDER BY m.updated_at DESC`
 		var ta TagAssignment
 		var created, updated, tupdated *string
 		var v *string
-		var meta, det *string
+		var meta *string
 		if err := rows.Scan(
 			&ta.ID, &ta.Tag.TagID, &ta.Tag.Namespace,
-			&ta.Tag.Name, &v, &meta, &det, &created, &updated, &tupdated,
+			&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated,
 		); err != nil {
 			return nil, err
 		}
 		ta.Tag.Value = v
 		if meta != nil && strings.TrimSpace(*meta) != "" {
 			ta.Tag.Meta = json.RawMessage(*meta)
-		}
-		if det != nil && strings.TrimSpace(*det) != "" {
-			ta.Details = json.RawMessage(*det)
 		}
 		ta.CreatedAt = parseTS(created)
 		ta.UpdatedAt = parseTS(updated)
@@ -652,63 +648,21 @@ ORDER BY m.updated_at DESC`
 	return out, rows.Err()
 }
 
-// EntitiesByTag finds entities that have a tag (namespace, name, optional value).
-// If value is nil -> any value for the tag. If non-nil and empty string, matches tags whose value is NULL/empty? We treat NULL vs "" separately.
-func (r *Queries) EntitiesByTag(ctx context.Context, namespace, name string, value *string, limit int) ([]int64, error) {
-	sb := strings.Builder{}
-	args := []any{namespace, name}
-	sb.WriteString(`
-SELECT m.entity_id
-FROM tags tg
-JOIN entity_tag_map m ON m.tag_id = tg.tag_id
-WHERE tg.namespace = ? AND tg.name = ?`)
-	if value != nil {
-		sb.WriteString(" AND COALESCE(tg.value,'∅') = COALESCE(?, '∅')")
-		args = append(args, *value)
-	}
-	sb.WriteString(" ORDER BY m.updated_at DESC")
-	if limit > 0 {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", limit))
-	}
-	q := sb.String()
-	st, err := r.prepNamed(ctx, "q.entities.byTag", q)
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := st.QueryContext(ctx, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
-// RemoveEntityTag deletes a specific tag mapping from an entity.
-func (r *Queries) RemoveEntityTag(ctx context.Context, mid int64) (int64, error) {
+// removeEntityTag deletes a specific tag mapping from an entity.
+func (r *SqliteRepository) removeEntityTag(ctx context.Context, mid int64) (int64, error) {
 	tid, err := r.entityMIDToTID(ctx, mid)
 	if err != nil {
 		return 0, err
 	}
 
-	sb := strings.Builder{}
+	const q = `DELETE FROM entity_tag_map WHERE id = ?;`
+	stmt, err := r.queries.getOrPrepare(ctx, "tag.remove_entity_tag", q)
+	if err != nil {
+		return 0, err
+	}
+
 	args := []any{mid}
-	sb.WriteString(`
-DELETE FROM entity_tag_map
-WHERE id = ? AND tag_id IN (
-  SELECT tag_id FROM tags WHERE 1=1`)
-	sb.WriteString(")")
-	q := sb.String()
-	_, err = r.db.ExecContext(ctx, q, args...)
+	_, err = stmt.ExecContext(ctx, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -716,14 +670,14 @@ WHERE id = ? AND tag_id IN (
 	return tid, nil
 }
 
-func (r *Queries) entityMIDToTID(ctx context.Context, mid int64) (int64, error) {
+func (r *SqliteRepository) entityMIDToTID(ctx context.Context, mid int64) (int64, error) {
 	const q = `
 SELECT tg.tag_id
 FROM entity_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
-ORDER BY m.updated_at DESC`
-	st, err := r.prepNamed(ctx, "q.tags.entityMIDToTID", q)
+ORDER BY m.updated_at DESC;`
+	st, err := r.queries.getOrPrepare(ctx, "tag.entity_mid_to_tid", q)
 	if err != nil {
 		return 0, err
 	}
@@ -741,22 +695,21 @@ ORDER BY m.updated_at DESC`
 	return tid, nil
 }
 
-// RemoveEdgeTag deletes a specific tag mapping from an edge.
-func (r *Queries) RemoveEdgeTag(ctx context.Context, mid int64) (int64, error) {
+// removeEdgeTag deletes a specific tag mapping from an edge.
+func (r *SqliteRepository) removeEdgeTag(ctx context.Context, mid int64) (int64, error) {
 	tid, err := r.edgeMIDToTID(ctx, mid)
 	if err != nil {
 		return 0, err
 	}
 
-	sb := strings.Builder{}
+	const q = `DELETE FROM edge_tag_map WHERE id = ?;`
+	stmt, err := r.queries.getOrPrepare(ctx, "tag.remove_edge_tag", q)
+	if err != nil {
+		return 0, err
+	}
+
 	args := []any{mid}
-	sb.WriteString(`
-DELETE FROM edge_tag_map
-WHERE id = ? AND tag_id IN (
-  SELECT tag_id FROM tags WHERE 1=1`)
-	sb.WriteString(")")
-	q := sb.String()
-	_, err = r.db.ExecContext(ctx, q, args...)
+	_, err = stmt.ExecContext(ctx, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -764,14 +717,14 @@ WHERE id = ? AND tag_id IN (
 	return tid, nil
 }
 
-func (r *Queries) edgeMIDToTID(ctx context.Context, mid int64) (int64, error) {
+func (r *SqliteRepository) edgeMIDToTID(ctx context.Context, mid int64) (int64, error) {
 	const q = `
 SELECT tg.tag_id
 FROM edge_tag_map m
 JOIN tags tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
-ORDER BY m.updated_at DESC`
-	st, err := r.prepNamed(ctx, "q.tags.edgeMIDToTID", q)
+ORDER BY m.updated_at DESC;`
+	st, err := r.queries.getOrPrepare(ctx, "tag.edge_mid_to_tid", q)
 	if err != nil {
 		return 0, err
 	}
@@ -789,17 +742,17 @@ ORDER BY m.updated_at DESC`
 	return tid, nil
 }
 
-// DeleteTagByID deletes a tag dictionary row.
+// deleteTagByID deletes a tag dictionary row.
 // If onlyIfOrphaned is true, it deletes only when the tag is unused by any entity/edge mapping.
 // Returns affected rows (0 if not deleted).
-func (r *Queries) DeleteTagByID(ctx context.Context, tagID int64, onlyIfOrphaned bool) (int64, error) {
+func (r *SqliteRepository) deleteTagByID(ctx context.Context, tagID int64, onlyIfOrphaned bool) (int64, error) {
 	if onlyIfOrphaned {
 		const q = `
 DELETE FROM tags
 WHERE tag_id = ?
   AND NOT EXISTS (SELECT 1 FROM entity_tag_map WHERE tag_id = tags.tag_id)
-  AND NOT EXISTS (SELECT 1 FROM edge_tag_map   WHERE tag_id = tags.tag_id)`
-		res, err := r.db.ExecContext(ctx, q, tagID)
+  AND NOT EXISTS (SELECT 1 FROM edge_tag_map   WHERE tag_id = tags.tag_id);`
+		res, err := r.DB.ExecContext(ctx, q, tagID)
 		if err != nil {
 			return 0, err
 		}
@@ -807,19 +760,19 @@ WHERE tag_id = ?
 	}
 
 	// Unconditional delete (FK CASCADE should clean maps if configured; else do it manually)
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM entity_tag_map WHERE tag_id = ?`, tagID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM entity_tag_map WHERE tag_id = ?;`, tagID); err != nil {
 		return 0, err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM edge_tag_map WHERE tag_id = ?`, tagID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM edge_tag_map WHERE tag_id = ?;`, tagID); err != nil {
 		return 0, err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE tag_id = ?`, tagID)
+	res, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE tag_id = ?;`, tagID)
 	if err != nil {
 		return 0, err
 	}

@@ -35,7 +35,7 @@ func (r *Queries) DeleteEntityByID(ctx context.Context, entityID int64, alsoDele
 	// Optionally remove the concrete asset row (requires looking up its table + row_id)
 	if alsoDeleteAsset {
 		const keySel = "del.entity.refRow"
-		const qSel = `SELECT table_name, row_id FROM entity_ref WHERE entity_id = ?`
+		const qSel = `SELECT table_name, row_id FROM entity_ref WHERE entity_id = ?;`
 		stSel, err := r.getOrPrepare(ctx, keySel, qSel)
 		if err != nil {
 			return err
@@ -66,7 +66,7 @@ func (r *Queries) DeleteEntityByID(ctx context.Context, entityID int64, alsoDele
 				// unknown table: skip instead of failing the whole deletion
 				continue
 			}
-			delQ := fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, tbl)
+			delQ := fmt.Sprintf(`DELETE FROM %s WHERE id = ?;`, tbl)
 			key := "del.asset." + tbl
 			st, err := r.getOrPrepare(ctx, key, delQ)
 			if err != nil {
@@ -80,7 +80,7 @@ func (r *Queries) DeleteEntityByID(ctx context.Context, entityID int64, alsoDele
 
 	// Delete the entity (FKs should take care of edges, entity_ref, tag maps if schema has CASCADE)
 	const keyDel = "del.entity.byID"
-	const qDel = `DELETE FROM entities WHERE entity_id = ?`
+	const qDel = `DELETE FROM entities WHERE entity_id = ?;`
 	stDel, err := r.getOrPrepare(ctx, keyDel, qDel)
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func (r *Queries) DeleteByAssetPK(ctx context.Context, tableName string, rowID i
 
 	// Resolve entity_id
 	const keySel = "del.entityID.byAssetPK"
-	const qSel = `SELECT entity_id FROM entity_ref WHERE table_name = ? AND row_id = ? LIMIT 1`
+	const qSel = `SELECT entity_id FROM entity_ref WHERE table_name = ? AND row_id = ? LIMIT 1;`
 	stSel, err := r.getOrPrepare(ctx, keySel, qSel)
 	if err != nil {
 		return err
@@ -121,7 +121,7 @@ func (r *Queries) DeleteByAssetPK(ctx context.Context, tableName string, rowID i
 	if err := tx.Stmt(stSel).QueryRowContext(ctx, tbl, rowID).Scan(&eid); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// If no mapping exists, just delete the asset row
-			delQ := fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, tbl)
+			delQ := fmt.Sprintf(`DELETE FROM %s WHERE id = ?;`, tbl)
 			key := "del.asset.only." + tbl
 			st, e2 := r.getOrPrepare(ctx, key, delQ)
 			if e2 != nil {
@@ -136,7 +136,7 @@ func (r *Queries) DeleteByAssetPK(ctx context.Context, tableName string, rowID i
 	}
 
 	// Delete asset row first (to avoid leaving an orphan if entity delete somehow fails)
-	delQ := fmt.Sprintf(`DELETE FROM %s WHERE id = ?`, tbl)
+	delQ := fmt.Sprintf(`DELETE FROM %s WHERE id = ?;`, tbl)
 	keyDelAsset := "del.asset." + tbl
 	stDelAsset, err := r.getOrPrepare(ctx, keyDelAsset, delQ)
 	if err != nil {
@@ -148,7 +148,7 @@ func (r *Queries) DeleteByAssetPK(ctx context.Context, tableName string, rowID i
 
 	// Delete the entity (will cascade to entity_ref, edges, and tag maps if CASCADE is enabled)
 	const keyDelEnt = "del.entity.byID"
-	const qDelEnt = `DELETE FROM entities WHERE entity_id = ?`
+	const qDelEnt = `DELETE FROM entities WHERE entity_id = ?;`
 	stDelEnt, err := r.getOrPrepare(ctx, keyDelEnt, qDelEnt)
 	if err != nil {
 		return err

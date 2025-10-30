@@ -52,7 +52,7 @@ func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddr
 	)
 
 	const keySel2 = "asset.ip_address.entity_id_by_ip_address"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByFQDNText)
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByIPAddressText)
 	if err != nil {
 		return 0, err
 	}

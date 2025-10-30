@@ -21,41 +21,35 @@ import (
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
-// ENSURE EDGE (returns edge_id) ----------------------------------------------
-// Params: :etype_name, :from_entity_id, :to_entity_id, :content(JSON)
-const tmplEnsureEdge = `
-WITH
-  ensure_etype AS (
-    INSERT INTO edge_type_lu(name) VALUES (:etype_name)
-    ON CONFLICT(name) DO NOTHING
-    RETURNING id
-  ),
-  etype_id AS (
-    SELECT id FROM ensure_etype
-    UNION ALL SELECT id FROM edge_type_lu WHERE name=:etype_name LIMIT 1
-  ),
-  edge_try AS (
-    INSERT INTO edges(etype_id, from_entity_id, to_entity_id, content)
-    SELECT (SELECT id FROM etype_id), :from_entity_id, :to_entity_id, coalesce(:content,'{}')
-    ON CONFLICT(etype_id, from_entity_id, to_entity_id) DO UPDATE SET
-      content = CASE
+// Params: :etype_name, :label, :from_entity_id, :to_entity_id, :content(JSON)
+const ensureEdgeText = `
+INSERT INTO edges(etype_id, label, from_entity_id, to_entity_id, content)
+SELECT (SELECT id FROM edge_type_lu WHERE name=:etype_name LIMIT 1), 
+	:label, :from_entity_id, :to_entity_id, coalesce(:content,'{}')
+ON CONFLICT(etype_id, from_entity_id, to_entity_id, label) DO UPDATE SET
+    content = CASE
         WHEN json_patch(edges.content, coalesce(excluded.content,'{}')) IS NOT edges.content
         THEN json_patch(edges.content, coalesce(excluded.content,'{}'))
         ELSE edges.content
       END,
-      updated_at = CASE
-        WHEN json_patch(edges.content, coalesce(excluded.content,'{}')) IS NOT edges.content
-        THEN strftime('%Y-%m-%d %H:%M:%f','now') ELSE edges.updated_at END
-    WHERE json_patch(edges.content, coalesce(excluded.content,'{}')) IS NOT edges.content
-    RETURNING edge_id
-  )
-SELECT edge_id FROM edge_try
-UNION ALL
-SELECT edge_id FROM edges
-WHERE etype_id = (SELECT id FROM etype_id)
-  AND from_entity_id = :from_entity_id
-  AND to_entity_id = :to_entity_id
-LIMIT 1;`
+    updated_at = CURRENT_TIMESTAMP;`
+
+// Params: :etype_name, :label, :from_entity_id, :to_entity_id
+const selectEdgeIDBetweenText = `
+SELECT e.edge_id
+FROM edges e
+JOIN edge_type_lu t ON t.id = e.etype_id
+WHERE t.name = :etype_name
+  AND e.label = :label
+  AND e.from_entity_id = :from_entity_id
+  AND e.to_entity_id = :to_entity_id;`
+
+// Params: edge_id
+const selectEdgeByIDText = `
+SELECT e.edge_id, e.created_at, e.updated_at, t.name, e.from_entity_id, e.to_entity_id, e.content
+FROM edges e
+JOIN edge_type_lu t ON t.id = e.etype_id
+WHERE e.edge_id = :edge_id;`
 
 type Edge struct {
 	EdgeID       int64           `json:"edge_id"`
@@ -97,12 +91,41 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*t
 		return nil, fmt.Errorf("failed to marshal edge relation to JSON: %v", err)
 	}
 
-	edgeID, err := r.stmts.EnsureEdge(ctx, string(edge.Relation.RelationType()), fromID, toID, string(content))
+	const keySel = "edge.upsert"
+	stmt, err := r.queries.getOrPrepare(ctx, keySel, ensureEdgeText)
 	if err != nil {
-		return nil, fmt.Errorf("failed to ensure edge: %v", err)
+		return nil, err
 	}
 
-	return r.FindEdgeById(ctx, fmt.Sprintf("%d", edgeID))
+	_ = stmt.QueryRowContext(ctx,
+		sql.Named("etype_name", string(edge.Relation.RelationType())),
+		sql.Named("label", edge.Relation.Label()),
+		sql.Named("from_entity_id", fromID),
+		sql.Named("to_entity_id", toID),
+		sql.Named("content", string(content)),
+	)
+
+	const keySel2 = "edge.id_between"
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEdgeIDBetweenText)
+	if err != nil {
+		return nil, err
+	}
+
+	var id int64
+	if err := stmt2.QueryRowContext(ctx,
+		sql.Named("etype_name", string(edge.Relation.RelationType())),
+		sql.Named("label", edge.Relation.Label()),
+		sql.Named("from_entity_id", fromID),
+		sql.Named("to_entity_id", toID)).Scan(&id); err != nil {
+		return nil, err
+	}
+
+	sqlEdge, err := r.idToEdge(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve created edge: %v", err)
+	}
+
+	return convertSQLiteEdgeToOAMEdge(sqlEdge)
 }
 
 func (r *SqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
@@ -111,12 +134,43 @@ func (r *SqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.
 		return nil, fmt.Errorf("invalid edge ID: %v", err)
 	}
 
-	sqlEdge, err := r.queries.FindEdgeByID(ctx, edgeID)
+	sqlEdge, err := r.idToEdge(ctx, edgeID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve created edge: %v", err)
 	}
 
 	return convertSQLiteEdgeToOAMEdge(sqlEdge)
+}
+
+func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*Edge, error) {
+	const keySel = "edge.by_id"
+	st, err := r.queries.getOrPrepare(ctx, keySel, selectEdgeByIDText)
+	if err != nil {
+		return nil, err
+	}
+
+	var eg Edge
+	var cAt, uAt *string
+	var content *string
+	if err := st.QueryRowContext(ctx, id).Scan(&eg.EdgeID, &cAt,
+		&uAt, &eg.EType, &eg.FromEntityID, &eg.ToEntityID, &content); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("edge %d not found", id)
+		}
+		return nil, err
+	}
+
+	if content != nil && strings.TrimSpace(*content) != "" {
+		eg.Content = json.RawMessage(*content)
+	}
+
+	eg.CreatedAt = parseTS(cAt)
+	eg.UpdatedAt = parseTS(uAt)
+	if eg.CreatedAt == nil || eg.UpdatedAt == nil {
+		return nil, fmt.Errorf("failed to obtain the timestamps for edge %d", id)
+	}
+
+	return &eg, nil
 }
 
 func convertSQLiteEdgeToOAMEdge(e *Edge) (*types.Edge, error) {
@@ -162,8 +216,8 @@ func convertSQLiteEdgeToOAMEdge(e *Edge) (*types.Edge, error) {
 
 	return &types.Edge{
 		ID:         fmt.Sprintf("%d", e.EdgeID),
-		CreatedAt:  (*e.CreatedAt).In(time.UTC).Local(),
-		LastSeen:   (*e.UpdatedAt).In(time.UTC).Local(),
+		CreatedAt:  e.CreatedAt.In(time.UTC).Local(),
+		LastSeen:   e.UpdatedAt.In(time.UTC).Local(),
 		Relation:   rel,
 		FromEntity: &types.Entity{ID: fmt.Sprintf("%d", e.FromEntityID)},
 		ToEntity:   &types.Entity{ID: fmt.Sprintf("%d", e.ToEntityID)},
@@ -176,7 +230,7 @@ func (r *SqliteRepository) IncomingEdges(ctx context.Context, entity *types.Enti
 		return nil, fmt.Errorf("invalid entity ID: %v", err)
 	}
 
-	edges, err := r.queries.FindEdgesForEntity(ctx, eid, "in", "", since, 0)
+	edges, err := r.findEdgesForEntity(ctx, eid, "in", "", since, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve incoming edges: %v", err)
 	}
@@ -211,7 +265,7 @@ func (r *SqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Enti
 		return nil, fmt.Errorf("invalid entity ID: %v", err)
 	}
 
-	edges, err := r.queries.FindEdgesForEntity(ctx, eid, "out", "", since, 0)
+	edges, err := r.findEdgesForEntity(ctx, eid, "out", "", since, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve outgoing edges: %v", err)
 	}
@@ -245,54 +299,14 @@ func (r *SqliteRepository) DeleteEdge(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("invalid edge ID: %v", err)
 	}
-	return r.queries.DeleteEdgeByID(ctx, edgeID)
+	return r.deleteEdgeByID(ctx, edgeID)
 }
 
-func (s *Statements) EnsureEdge(ctx context.Context, etype string, fromID, toID int64, contentJSON string) (int64, error) {
-	row := s.EnsureEdgeStmt.QueryRowContext(ctx,
-		sql.Named("etype_name", etype),
-		sql.Named("from_entity_id", fromID),
-		sql.Named("to_entity_id", toID),
-		sql.Named("content", contentJSON),
-	)
-	var id int64
-	return id, row.Scan(&id)
-}
-
-// FindEdgeByID loads a single edge (with type name) by edge_id.
-func (r *Queries) FindEdgeByID(ctx context.Context, edgeID int64) (*Edge, error) {
-	const q = `
-SELECT e.edge_id, t.name, e.from_entity_id, e.to_entity_id, e.content, e.created_at, e.updated_at
-FROM edges e
-JOIN edge_type_lu t ON t.id=e.etype_id
-WHERE e.edge_id = ?`
-	st, err := r.prepNamed(ctx, "q.edge.byID", q)
-	if err != nil {
-		return nil, err
-	}
-
-	var eg Edge
-	var cAt, uAt *string
-	var content *string
-	if err := st.QueryRowContext(ctx, edgeID).Scan(&eg.EdgeID, &eg.EType, &eg.FromEntityID, &eg.ToEntityID, &content, &cAt, &uAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("edge %d not found", edgeID)
-		}
-		return nil, err
-	}
-	if content != nil && strings.TrimSpace(*content) != "" {
-		eg.Content = json.RawMessage(*content)
-	}
-	eg.CreatedAt = parseTS(cAt)
-	eg.UpdatedAt = parseTS(uAt)
-	return &eg, nil
-}
-
-// FindEdgesForEntity returns edges incident to entityID.
+// findEdgesForEntity returns edges incident to entityID.
 // dir = "out", "in", or "" (both). etype optional ("" = any).
 // since limits by updated_at >= since (zero time => no limit).
 // limit <= 0 => no explicit LIMIT.
-func (r *Queries) FindEdgesForEntity(ctx context.Context, entityID int64, dir, etype string, since time.Time, limit int) ([]EdgeWithTypes, error) {
+func (r *SqliteRepository) findEdgesForEntity(ctx context.Context, entityID int64, dir, etype string, since time.Time, limit int) ([]EdgeWithTypes, error) {
 	where := []string{}
 	args := []any{}
 
@@ -307,32 +321,41 @@ JOIN entities b ON b.entity_id = e.to_entity_id
 JOIN entity_type_lu tf ON tf.id = a.type_id
 JOIN entity_type_lu tt ON tt.id = b.type_id
 `
+
+	var name string
 	switch strings.ToLower(strings.TrimSpace(dir)) {
 	case "out":
+		name = "edge.outgoing"
 		where = append(where, "e.from_entity_id = ?")
 		args = append(args, entityID)
 	case "in":
+		name = "edge.incoming"
 		where = append(where, "e.to_entity_id = ?")
 		args = append(args, entityID)
 	default:
+		name = "edge.both"
 		where = append(where, "(e.from_entity_id = ? OR e.to_entity_id = ?)")
 		args = append(args, entityID, entityID)
 	}
 	if etype = strings.TrimSpace(etype); etype != "" {
+		name += ".etype"
 		where = append(where, "te.name = ?")
 		args = append(args, etype)
 	}
 	if !since.IsZero() {
+		name += ".since"
 		where = append(where, "e.updated_at >= ?")
 		// Use the same format parseTS() expects
 		args = append(args, since.UTC().Format("2006-01-02 15:04:05.000"))
 	}
-
 	q := base + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.updated_at DESC"
+
 	if limit > 0 {
+		name += fmt.Sprintf(".limit%d", limit)
 		q += fmt.Sprintf(" LIMIT %d", limit)
 	}
-	st, err := r.prepNamed(ctx, "q.edges.forEntity:"+dir, q)
+
+	st, err := r.queries.getOrPrepare(ctx, name, q+";")
 	if err != nil {
 		return nil, err
 	}
@@ -363,66 +386,15 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	return out, rows.Err()
 }
 
-// FindEdgesBetween returns all edges between two entities (both directions if bothDir=true).
-// Optional etype filter (""=any).
-func (r *Queries) FindEdgesBetween(ctx context.Context, a, b int64, bothDir bool, etype string) ([]Edge, error) {
-	sb := strings.Builder{}
-	sb.WriteString(`
-SELECT e.edge_id, t.name, e.from_entity_id, e.to_entity_id, e.content, e.created_at, e.updated_at
-FROM edges e
-JOIN edge_type_lu t ON t.id = e.etype_id
-WHERE `)
-	args := []any{a, b}
-	if bothDir {
-		sb.WriteString("(e.from_entity_id = ? AND e.to_entity_id = ?) OR (e.from_entity_id = ? AND e.to_entity_id = ?)")
-		args = append(args, b, a)
-	} else {
-		sb.WriteString("e.from_entity_id = ? AND e.to_entity_id = ?")
-	}
-	if etype != "" {
-		sb.WriteString(" AND t.name = ?")
-		args = append(args, etype)
-	}
-	sb.WriteString(" ORDER BY e.updated_at DESC")
-
-	q := sb.String()
-	st, err := r.prepNamed(ctx, "q.edges.between", q)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := st.QueryContext(ctx, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []Edge
-	for rows.Next() {
-		var eg Edge
-		var cAt, uAt *string
-		var content *string
-		if err := rows.Scan(&eg.EdgeID, &eg.EType, &eg.FromEntityID, &eg.ToEntityID, &content, &cAt, &uAt); err != nil {
-			return nil, err
-		}
-		if content != nil && strings.TrimSpace(*content) != "" {
-			eg.Content = json.RawMessage(*content)
-		}
-		eg.CreatedAt = parseTS(cAt)
-		eg.UpdatedAt = parseTS(uAt)
-		out = append(out, eg)
-	}
-	return out, rows.Err()
-}
-
-// DeleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).
-func (r *Queries) DeleteEdgeByID(ctx context.Context, edgeID int64) error {
-	const key = "del.edge.byID"
-	const q = `DELETE FROM edges WHERE edge_id = ?`
-	st, err := r.getOrPrepare(ctx, key, q)
+// deleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).
+func (r *SqliteRepository) deleteEdgeByID(ctx context.Context, id int64) error {
+	const key = "edge.del_by_id"
+	const q = `DELETE FROM edges WHERE edge_id = ?;`
+	st, err := r.queries.getOrPrepare(ctx, key, q)
 	if err != nil {
 		return err
 	}
-	res, err := st.ExecContext(ctx, edgeID) // direct exec is fine; same q
+	res, err := st.ExecContext(ctx, id) // direct exec is fine; same q
 	if err != nil {
 		return err
 	}
@@ -431,56 +403,4 @@ func (r *Queries) DeleteEdgeByID(ctx context.Context, edgeID int64) error {
 		return sql.ErrNoRows
 	}
 	return nil
-}
-
-// DeleteEdgesBetween deletes edges from a->b; if bothDir is true, also b->a.
-// If etype is non-empty, limits deletion to that edge type.
-// Returns the number of rows deleted.
-func (r *Queries) DeleteEdgesBetween(ctx context.Context, a, b int64, bothDir bool, etype string) (int64, error) {
-	args := []any{a, b}
-	sb := strings.Builder{}
-	sb.WriteString(`DELETE FROM edges WHERE (from_entity_id=? AND to_entity_id=?)`)
-	if bothDir {
-		sb.WriteString(` OR (from_entity_id=? AND to_entity_id=?)`)
-		args = append(args, b, a)
-	}
-	if etype != "" {
-		// Restrict by edge type name through a subquery match on etype_id.
-		sb.WriteString(` AND etype_id = (SELECT id FROM edge_type_lu WHERE name = ?)`)
-		args = append(args, etype)
-	}
-	q := sb.String()
-	res, err := r.db.ExecContext(ctx, q, args...)
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
-}
-
-// DeleteEdgesForEntity deletes incident edges to/from an entity.
-// dir="out","in","" (both). Optional etype filter. Returns deleted count.
-func (r *Queries) DeleteEdgesForEntity(ctx context.Context, entityID int64, dir string, etype string) (int64, error) {
-	var cond string
-	args := []any{entityID}
-	switch strings.ToLower(strings.TrimSpace(dir)) {
-	case "out":
-		cond = "from_entity_id = ?"
-	case "in":
-		cond = "to_entity_id = ?"
-	default:
-		cond = "(from_entity_id = ? OR to_entity_id = ?)"
-		args = append(args, entityID)
-	}
-	sb := strings.Builder{}
-	sb.WriteString(`DELETE FROM edges WHERE ` + cond)
-	if etype != "" {
-		sb.WriteString(` AND etype_id = (SELECT id FROM edge_type_lu WHERE name = ?)`)
-		args = append(args, etype)
-	}
-	q := sb.String()
-	res, err := r.db.ExecContext(ctx, q, args...)
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
 }

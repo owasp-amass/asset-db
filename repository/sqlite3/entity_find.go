@@ -93,21 +93,6 @@ func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.Ass
 	return filtered, nil
 }
 
-// findIdByAssetPK returns Entity/Asset for a specific table primary key id.
-func (r *SqliteRepository) findIdByAssetPK(ctx context.Context, tableName string, rowID int64) (int64, error) {
-	table := normalizeTable(tableName)
-
-	var eid int64
-	if err := r.queries.stmtEntityIDByAssetPK.QueryRowContext(ctx, table, rowID).Scan(&eid); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, fmt.Errorf("no entity for %s(%d)", table, rowID)
-		}
-		return 0, err
-	}
-
-	return eid, nil
-}
-
 // findByContent builds the SQL WHERE from a registry of allowed columns per
 // asset type, and returns Entity+Asset. Supports multiple matches.
 
@@ -161,7 +146,7 @@ JOIN ` + table + ` a ON a.id = r.row_id
 
 	q := sb.String()
 	key := "q.findByContent." + table + "." + strings.Join(reg.keys, ",") // stable key per table/registry
-	st, err := r.queries.getOrPrepare(ctx, key, q)
+	st, err := r.queries.getOrPrepare(ctx, key, q+";")
 	if err != nil {
 		return nil, err
 	}
@@ -200,16 +185,16 @@ SELECT e.entity_id, e.display_value, e.attrs
 FROM entities e
 JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?
 ORDER BY e.updated_at DESC, e.entity_id DESC`
-	key := "q.entities.byType.base"
+	key := "entity.by_type.base"
 	q := base
 	var st *sql.Stmt
 	var err error
 
 	if limit > 0 {
 		q = base + " LIMIT ?"
-		key = "q.entities.byType.base.limit"
+		key = "entity.by_type.base.limit"
 	}
-	if st, err = r.queries.getOrPrepare(ctx, key, q); err != nil {
+	if st, err = r.queries.getOrPrepare(ctx, key, q+";"); err != nil {
 		return nil, err
 	}
 

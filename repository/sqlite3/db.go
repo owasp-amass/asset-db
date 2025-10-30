@@ -34,16 +34,16 @@ func New(dbtype, dsn string) (*SqliteRepository, error) {
 		return nil, err
 	}
 
+	err = ApplyPragmas(context.Background(), repo.DB)
+	if err != nil {
+		return nil, err
+	}
+
 	repo.dbtype = dbtype
 	return repo, nil
 }
 
 func (sql *SqliteRepository) Prepare(ctx context.Context) error {
-	err := ApplyPragmas(context.Background(), sql.DB)
-	if err != nil {
-		return err
-	}
-
 	queries, err := NewQueries(sql.DB)
 	if err != nil {
 		return err

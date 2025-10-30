@@ -30,41 +30,6 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-// Params: :type_name, :dvalue, :attrs
-const upsertEntitiesEntryText = `
-WITH
-	type_id AS (
-		SELECT id FROM entity_type_lu WHERE name = :type_name LIMIT 1
-	)
-INSERT INTO entities(type_id, display_value, attrs) 
-VALUES ((SELECT id FROM type_id), :dvalue, coalesce(:attrs,'{}')) 
-ON CONFLICT(type_id, display_value) DO UPDATE SET 
-    attrs = CASE WHEN json_patch(entities.attrs, coalesce(:attrs,'{}')) IS NOT entities.attrs
-    THEN json_patch(entities.attrs, coalesce(:attrs,'{}')) ELSE entities.attrs END,
-    updated_at = strftime('%Y-%m-%d %H:%M:%f','now');`
-
-// Params: :type_name, :dvalue, :row_id
-const upsertEntityRefEntryText = `
-WITH
-	type_id AS (
-		SELECT id FROM entity_type_lu WHERE name = :type_name LIMIT 1
-	),
-	ent_id AS (
-		SELECT entity_id FROM entities
-        WHERE type_id = (SELECT id FROM type_id) 
-		AND display_value = :dvalue LIMIT 1
-	)
-INSERT INTO entity_ref(entity_id, table_name, row_id)
-VALUES ((SELECT entity_id FROM ent_id), :type_name, :row_id)
-ON CONFLICT(table_name, row_id) DO UPDATE SET 
-	entity_id=excluded.entity_id,
-	updated_at=strftime('%Y-%m-%d %H:%M:%f','now');`
-
-// Param: :type_name
-const selectTypeIdByName = `
-SELECT id FROM entity_type_lu
-WHERE name = :type_name;`
-
 // Entity models a row in `entities` plus its inlined concrete Asset.
 // Attrs is raw JSON from entities.attrs (may be nil/"{}").
 type Entity struct {
@@ -136,37 +101,9 @@ func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*t
 	return r.idToEntity(ctx, eid)
 }
 
-func (r *SqliteRepository) typeIdByName(ctx context.Context, tname string) (int64, error) {
-	const keySel = "entity.type_id"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, selectTypeIdByName)
-	if err != nil {
-		return 0, err
-	}
-
-	var id int64
-	if err := stmt.QueryRowContext(ctx,
-		sql.Named("type_name", normalizeType(tname))).Scan(&id); err != nil {
-		return 0, err
-	}
-
-	return id, nil
-}
-
 // ============================== Asset hydration ==============================
 
-func normalizeTable(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
-func normalizeType(name string) string  { return strings.ToLower(strings.TrimSpace(name)) }
-
-// normalizeValueForType applies display_value normalization the same way
-// your ingestion does (lowercase for fqdn/domainrecord; others exact).
-func normalizeValueForType(t, v string) string {
-	switch t {
-	case "fqdn", "domainrecord":
-		return strings.ToLower(v)
-	default:
-		return v
-	}
-}
+func normalizeType(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
 
 // validateAssetTable ensures we only allow deletion against known asset tables.
 // Returns normalized table name or "" if unsupported.
@@ -199,14 +136,25 @@ func validateAssetTable(tableName string) string {
 	}
 }
 
-func (r *SqliteRepository) loadEntityCore(ctx context.Context, entityID int64) (*Entity, error) {
+func (r *SqliteRepository) loadEntityCore(ctx context.Context, id int64) (*Entity, error) {
 	var e Entity
 	var raw string
 
-	if err := r.queries.stmtEntityByID.QueryRowContext(ctx,
-		entityID).Scan(&e.EntityID, &e.Type, &e.DisplayValue, &raw); err != nil {
+	const key = "entity.by_id"
+	query := `
+	SELECT e.entity_id, t.name, e.display_value, e.attrs
+	FROM entities e
+	JOIN entity_type_lu t ON t.id = e.type_id
+	WHERE e.entity_id = ?;`
+
+	stmt, err := r.queries.getOrPrepare(ctx, key, query)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := stmt.QueryRowContext(ctx, id).Scan(&e.EntityID, &e.Type, &e.DisplayValue, &raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("entity %d not found", entityID)
+			return nil, fmt.Errorf("entity %d not found", id)
 		}
 		return nil, err
 	}
@@ -224,9 +172,20 @@ func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entit
 		return nil, fmt.Errorf("no table mapping for entity type %q", e.Type)
 	}
 
+	const key = "entity.ref.row_by_entity_table"
+	const query = `
+	SELECT row_id FROM entity_ref
+	WHERE entity_id = ? AND table_name = ?
+	LIMIT 1;`
+
+	stmt, err := r.queries.getOrPrepare(ctx, key, query)
+	if err != nil {
+		return nil, err
+	}
+
 	// Resolve the row id in that concrete table via entity_ref
 	var rowID int64
-	if err := r.queries.stmtRefRowByEntityTable.QueryRowContext(ctx, e.EntityID, table).Scan(&rowID); err != nil {
+	if err := stmt.QueryRowContext(ctx, e.EntityID, table).Scan(&rowID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Entity exists but does not have a ref to the expected table (data drift)
 			return nil, fmt.Errorf("entity %d has no %s row mapping", e.EntityID, table)

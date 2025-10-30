@@ -40,6 +40,8 @@ func ApplyPragmas(ctx context.Context, db *sql.DB) error {
 		PRAGMA mmap_size = 268435456;        -- 256 MiB map if available
 		PRAGMA page_size = 4096;
 		PRAGMA cache_size = -1048576;        -- ~1 GiB cache (negative = KiB units)
+		PRAGMA journal_mode = WAL;
+		PRAGMA busy_timeout = 5000;  		 -- or higher under heavy load
 	`)
 	return err
 }
@@ -47,102 +49,51 @@ func ApplyPragmas(ctx context.Context, db *sql.DB) error {
 // Queries provides prepared query helpers. Safe for concurrent use.
 type Queries struct {
 	db *sql.DB
-
-	// Core prepared statements
-	stmtEntityByID          *sql.Stmt
-	stmtEntityIDByTypeValue *sql.Stmt
-	stmtEntityIDByAssetPK   *sql.Stmt
-	stmtRefRowByEntityTable *sql.Stmt
-
 	// Cache of "select asset by id" statements, keyed by table name.
-	mu         sync.RWMutex
-	assetStmts map[string]*sql.Stmt
+	mu    sync.RWMutex
+	stmts map[string]*sql.Stmt
 }
 
 // NewQueries prepares the core statements. Additional per-table statements are prepared lazily.
 func NewQueries(db *sql.DB) (*Queries, error) {
-	r := &Queries{db: db, assetStmts: make(map[string]*sql.Stmt)}
-
-	var err error
-	if r.stmtEntityByID, err = db.Prepare(`
-SELECT e.entity_id, t.name, e.display_value, e.attrs
-FROM entities e
-JOIN entity_type_lu t ON t.id = e.type_id
-WHERE e.entity_id = ?`); err != nil {
-		return nil, err
-	}
-
-	// Lookup by asset type + content (display_value). Normalization is handled outside for types that need it.
-	if r.stmtEntityIDByTypeValue, err = db.Prepare(`
-SELECT e.entity_id
-FROM entities e
-JOIN entity_type_lu t ON t.id = e.type_id
-WHERE t.name = ? AND e.display_value = ? LIMIT 1`); err != nil {
-		return nil, err
-	}
-
-	// Find entity by asset primary key (table_name, row_id) via entity_ref.
-	if r.stmtEntityIDByAssetPK, err = db.Prepare(`
-SELECT entity_id
-FROM entity_ref
-WHERE table_name = ? AND row_id = ?
-LIMIT 1`); err != nil {
-		return nil, err
-	}
-
-	// Map entity -> row_id in a specific table_name (for the entity's concrete asset).
-	if r.stmtRefRowByEntityTable, err = db.Prepare(`
-SELECT row_id
-FROM entity_ref
-WHERE entity_id = ? AND table_name = ?
-LIMIT 1`); err != nil {
-		return nil, err
-	}
-
-	return r, nil
+	return &Queries{db: db, stmts: make(map[string]*sql.Stmt)}, nil
 }
 
 func (r *Queries) Close() error {
-	var first error
-	for _, st := range []*sql.Stmt{r.stmtEntityByID, r.stmtEntityIDByTypeValue, r.stmtEntityIDByAssetPK, r.stmtRefRowByEntityTable} {
-		if st != nil {
-			if err := st.Close(); err != nil && first == nil {
-				first = err
-			}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, st := range r.stmts {
+		if err := st.Close(); err != nil {
+			return err
 		}
 	}
-	r.mu.Lock()
-	for _, st := range r.assetStmts {
-		_ = st.Close()
-	}
-	r.assetStmts = nil
-	r.mu.Unlock()
-	return first
-}
 
-func (r *Queries) prepNamed(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
-	// Reuse existing per-table cache map for simplicity (key namespace differs).
-	return r.getOrPrepare(ctx, key, sqlText)
+	r.stmts = nil
+	return nil
 }
 
 func (r *Queries) getOrPrepare(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
 	r.mu.RLock()
-	st := r.assetStmts[key]
+	st := r.stmts[key]
 	r.mu.RUnlock()
 	if st != nil {
 		return st, nil
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// double check
-	if st = r.assetStmts[key]; st != nil {
+	if st = r.stmts[key]; st != nil {
 		return st, nil
 	}
+
 	ps, err := r.db.PrepareContext(ctx, sqlText)
 	if err != nil {
 		return nil, err
 	}
-	r.assetStmts[key] = ps
+
+	r.stmts[key] = ps
 	return ps, nil
 }
 

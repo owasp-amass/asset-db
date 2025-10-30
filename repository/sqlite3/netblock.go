@@ -52,7 +52,7 @@ func (r *SqliteRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbloc
 	)
 
 	const keySel2 = "asset.netblock.entity_id_by_netblock"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByFQDNText)
+	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByNetblockText)
 	if err != nil {
 		return 0, err
 	}

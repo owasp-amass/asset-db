@@ -27,7 +27,7 @@ import (
 // It initializes the asset database with the specified database type and DSN.
 func New(dbtype, dsn string) (repository.Repository, error) {
 	if dbtype == sqlite3.SQLiteMemory {
-		dsn = fmt.Sprintf("file:mem%d?mode=memory&cache=shared&_busy_timeout=15000&_foreign_keys=on&_journal_mode=WAL", rand.Intn(1000))
+		dsn = fmt.Sprintf("file:mem%d?mode=memory&_synchronous=NORMAL&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL", rand.Intn(1000))
 	}
 
 	db, err := repository.New(dbtype, dsn)

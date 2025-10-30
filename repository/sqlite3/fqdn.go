@@ -26,7 +26,7 @@ ON CONFLICT(fqdn_norm) DO UPDATE SET
 // Param: :fqdn_text
 const selectEntityIDByFQDNText = `
 SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn')
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn' LIMIT 1)
   AND display_value = lower(:fqdn_text)
 LIMIT 1;`
 
