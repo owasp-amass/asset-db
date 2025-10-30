@@ -30,13 +30,13 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-// Entity models a row in `entities` plus its inlined concrete Asset.
-// Attrs is raw JSON from entities.attrs (may be nil/"{}").
+// Entity models a row in `entity` plus its inlined concrete Asset.
+// Attrs is raw JSON from entity.attrs (may be nil/"{}").
 type Entity struct {
 	EntityID     int64           `json:"entity_id"`
 	Type         string          `json:"type"`          // entity_type_lu.name
-	DisplayValue string          `json:"display_value"` // entities.display_value (normalized for some types)
-	Attrs        json.RawMessage `json:"attrs"`         // entities.attrs
+	DisplayValue string          `json:"display_value"` // entity.display_value (normalized for some types)
+	Attrs        json.RawMessage `json:"attrs"`         // entity.attrs
 	Asset        any             `json:"asset"`         // concrete asset struct
 }
 
@@ -143,9 +143,9 @@ func (r *SqliteRepository) loadEntityCore(ctx context.Context, id int64) (*Entit
 	const key = "entity.by_id"
 	query := `
 	SELECT e.entity_id, t.name, e.display_value, e.attrs
-	FROM entities e
+	FROM entity e
 	JOIN entity_type_lu t ON t.id = e.type_id
-	WHERE e.entity_id = ?;`
+	WHERE e.entity_id = ? ;`
 
 	stmt, err := r.queries.getOrPrepare(ctx, key, query)
 	if err != nil {

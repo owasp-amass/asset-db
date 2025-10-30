@@ -19,20 +19,20 @@ import (
 // Params: :discovered_at
 const upsertContactRecord = `
 INSERT INTO contactrecord(discovered_at) VALUES (lower(:discovered_at))
-ON CONFLICT(discovered_at) DO UPDATE SET
-  updated_at = CURRENT_TIMESTAMP;`
+ON CONFLICT(discovered_at) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;`
 
 // Param: :discovered_at
 const selectEntityIDByContactRecordText = `
-SELECT entity_id FROM entities
-WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='contactrecord')
-  AND display_value=lower(:discovered_at)
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'contactrecord' LIMIT 1)
+  AND display_value = lower(:discovered_at)
 LIMIT 1;`
 
 // Param: :row_id
 const selectContactRecordByID = `
-SELECT id, created_at, updated_at, discovered_at FROM contactrecord
-WHERE id = :row_id
+SELECT id, created_at, updated_at, discovered_at 
+FROM contactrecord 
+WHERE id = :row_id 
 LIMIT 1;`
 
 func (r *SqliteRepository) upsertContactRecord(ctx context.Context, a *contact.ContactRecord) (int64, error) {

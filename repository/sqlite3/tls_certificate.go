@@ -47,8 +47,8 @@ ON CONFLICT(serial_number) DO UPDATE SET
 
 // Param: :serial_number
 const selectEntityIDByTLSCertificateText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'tlscertificate')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'tlscertificate' LIMIT 1)
   AND display_value = :serial_number
 LIMIT 1;`
 

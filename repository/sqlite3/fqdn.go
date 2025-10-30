@@ -20,12 +20,11 @@ import (
 const upsertFQDNText = `
 INSERT INTO fqdn (fqdn)
 VALUES (lower(:fqdn_text))
-ON CONFLICT(fqdn_norm) DO UPDATE SET
-  updated_at = CURRENT_TIMESTAMP;`
+ON CONFLICT(fqdn_norm) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;`
 
 // Param: :fqdn_text
 const selectEntityIDByFQDNText = `
-SELECT entity_id FROM entities
+SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn' LIMIT 1)
   AND display_value = lower(:fqdn_text)
 LIMIT 1;`

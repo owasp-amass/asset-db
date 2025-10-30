@@ -38,15 +38,16 @@ ON CONFLICT(:unique_id) DO UPDATE SET
 
 // Param: :unique_id
 const selectEntityIDByDomainRecordText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
   AND display_value = :unique_id
 LIMIT 1;`
 
 // Param: :row_id
 const selectDomainRecordByID = `
-SELECT id, created_at, updated_at, unique_id, raw_record, record_name, domain, record_status, 
-punycode, extension, created_date, updated_date, expiration_date, whois_server FROM domainrecord
+SELECT id, created_at, updated_at, unique_id, raw_record, record_name, domain, 
+record_status, punycode, extension, created_date, updated_date, expiration_date, whois_server 
+FROM domainrecord
 WHERE id = :row_id
 LIMIT 1;`
 

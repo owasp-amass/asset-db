@@ -130,7 +130,7 @@ func (r *SqliteRepository) findByContent(ctx context.Context, assetType string, 
 	sb := strings.Builder{}
 	sb.WriteString(`
 SELECT e.entity_id
-FROM entities e
+FROM entity e
 JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ? 
 JOIN entity_ref r ON r.entity_id = e.entity_id AND r.table_name = ? 
 JOIN ` + table + ` a ON a.id = r.row_id
@@ -145,7 +145,7 @@ JOIN ` + table + ` a ON a.id = r.row_id
 	}
 
 	q := sb.String()
-	key := "q.findByContent." + table + "." + strings.Join(reg.keys, ",") // stable key per table/registry
+	key := "q.findByContent." + table + "." + strings.Join(reg.keys, ".") // stable key per table/registry
 	st, err := r.queries.getOrPrepare(ctx, key, q+";")
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (r *SqliteRepository) findByType(ctx context.Context, assetType string, lim
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
 	base := `
 SELECT e.entity_id, e.display_value, e.attrs
-FROM entities e
+FROM entity e
 JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?
 ORDER BY e.updated_at DESC, e.entity_id DESC`
 	key := "entity.by_type.base"
@@ -191,7 +191,7 @@ ORDER BY e.updated_at DESC, e.entity_id DESC`
 	var err error
 
 	if limit > 0 {
-		q = base + " LIMIT ?"
+		q = base + " LIMIT ? "
 		key = "entity.by_type.base.limit"
 	}
 	if st, err = r.queries.getOrPrepare(ctx, key, q+";"); err != nil {

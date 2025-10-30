@@ -35,8 +35,8 @@ ON CONFLICT(street_address) DO UPDATE SET
 
 // Param: :street_address
 const selectEntityIDByLocationText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'location')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'location' LIMIT 1)
   AND display_value = lower(:street_address)
 LIMIT 1;`
 

@@ -27,14 +27,15 @@ ON CONFLICT(file_url) DO UPDATE SET
 
 // Param: :file_url
 const selectEntityIDByFileText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'file')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'file' LIMIT 1)
   AND display_value = lower(:file_url)
 LIMIT 1;`
 
 // Param: :row_id
 const selectFileByID = `
-SELECT id, created_at, updated_at, file_url, basename, file_type FROM file
+SELECT id, created_at, updated_at, file_url, basename, file_type 
+FROM file
 WHERE id = :row_id
 LIMIT 1;`
 

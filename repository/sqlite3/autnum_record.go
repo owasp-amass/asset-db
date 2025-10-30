@@ -31,7 +31,7 @@ INSERT INTO autnumrecord(handle, asn, record_name, record_status, created_date, 
 
 // Param: :handle
 const selectEntityIDByAutnumText = `
-SELECT entity_id FROM entities
+SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'autnumrecord')
   AND display_value = :handle
 LIMIT 1;`

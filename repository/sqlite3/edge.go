@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,31 +24,31 @@ import (
 
 // Params: :etype_name, :label, :from_entity_id, :to_entity_id, :content(JSON)
 const ensureEdgeText = `
-INSERT INTO edges(etype_id, label, from_entity_id, to_entity_id, content)
-SELECT (SELECT id FROM edge_type_lu WHERE name=:etype_name LIMIT 1), 
-	:label, :from_entity_id, :to_entity_id, coalesce(:content,'{}')
+INSERT INTO edge(etype_id, label, from_entity_id, to_entity_id, content)
+VALUES (SELECT id FROM edge_type_lu WHERE name = :etype_name LIMIT 1), 
+	lower(:label), :from_entity_id, :to_entity_id, coalesce(:content, '{}')
 ON CONFLICT(etype_id, from_entity_id, to_entity_id, label) DO UPDATE SET
     content = CASE
-        WHEN json_patch(edges.content, coalesce(excluded.content,'{}')) IS NOT edges.content
-        THEN json_patch(edges.content, coalesce(excluded.content,'{}'))
-        ELSE edges.content
-      END,
+        WHEN json_patch(edge.content, coalesce(excluded.content, '{}')) IS NOT edge.content
+        THEN json_patch(edge.content, coalesce(excluded.content, '{}'))
+        ELSE edge.content
+    END,
     updated_at = CURRENT_TIMESTAMP;`
 
 // Params: :etype_name, :label, :from_entity_id, :to_entity_id
 const selectEdgeIDBetweenText = `
 SELECT e.edge_id
-FROM edges e
+FROM edge e
 JOIN edge_type_lu t ON t.id = e.etype_id
 WHERE t.name = :etype_name
-  AND e.label = :label
+  AND e.label = lower(:label) 
   AND e.from_entity_id = :from_entity_id
   AND e.to_entity_id = :to_entity_id;`
 
 // Params: edge_id
 const selectEdgeByIDText = `
 SELECT e.edge_id, e.created_at, e.updated_at, t.name, e.from_entity_id, e.to_entity_id, e.content
-FROM edges e
+FROM edge e
 JOIN edge_type_lu t ON t.id = e.etype_id
 WHERE e.edge_id = :edge_id;`
 
@@ -56,7 +57,7 @@ type Edge struct {
 	EType        string          `json:"etype"` // edge_type_lu.name
 	FromEntityID int64           `json:"from_entity_id"`
 	ToEntityID   int64           `json:"to_entity_id"`
-	Content      json.RawMessage `json:"content,omitempty"` // edges.content
+	Content      json.RawMessage `json:"content,omitempty"` // edge.content
 	CreatedAt    *time.Time      `json:"created_at,omitempty"`
 	UpdatedAt    *time.Time      `json:"updated_at,omitempty"`
 }
@@ -237,23 +238,15 @@ func (r *SqliteRepository) IncomingEdges(ctx context.Context, entity *types.Enti
 
 	var out []*types.Edge
 	for _, e := range edges {
-		if len(labels) > 0 {
-			matched := false
-			for _, l := range labels {
-				if e.EType == l {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
 		edge, err := convertSQLiteEdgeToOAMEdge(&e.Edge)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert edge: %v", err)
 		}
+
+		if len(labels) > 0 && !slices.Contains(labels, edge.Relation.Label()) {
+			continue
+		}
+
 		out = append(out, edge)
 	}
 	return out, nil
@@ -272,34 +265,26 @@ func (r *SqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Enti
 
 	var out []*types.Edge
 	for _, e := range edges {
-		if len(labels) > 0 {
-			matched := false
-			for _, l := range labels {
-				if e.EType == l {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
 		edge, err := convertSQLiteEdgeToOAMEdge(&e.Edge)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert edge: %v", err)
 		}
+
+		if len(labels) > 0 && !slices.Contains(labels, edge.Relation.Label()) {
+			continue
+		}
+
 		out = append(out, edge)
 	}
 	return out, nil
 }
 
 func (r *SqliteRepository) DeleteEdge(ctx context.Context, id string) error {
-	edgeID, err := strconv.ParseInt(id, 10, 64)
+	eid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid edge ID: %v", err)
 	}
-	return r.deleteEdgeByID(ctx, edgeID)
+	return r.deleteEdgeByID(ctx, eid)
 }
 
 // findEdgesForEntity returns edges incident to entityID.
@@ -314,10 +299,10 @@ func (r *SqliteRepository) findEdgesForEntity(ctx context.Context, entityID int6
 SELECT e.edge_id, te.name,
        e.from_entity_id, e.to_entity_id, e.content, e.created_at, e.updated_at,
        tf.name AS from_type, tt.name AS to_type
-FROM edges e
+FROM edge e
 JOIN edge_type_lu te ON te.id = e.etype_id
-JOIN entities a ON a.entity_id = e.from_entity_id
-JOIN entities b ON b.entity_id = e.to_entity_id
+JOIN entity a ON a.entity_id = e.from_entity_id
+JOIN entity b ON b.entity_id = e.to_entity_id
 JOIN entity_type_lu tf ON tf.id = a.type_id
 JOIN entity_type_lu tt ON tt.id = b.type_id
 `
@@ -355,7 +340,7 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 		q += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	st, err := r.queries.getOrPrepare(ctx, name, q+";")
+	st, err := r.queries.getOrPrepare(ctx, name, q+" ;")
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +374,7 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 // deleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).
 func (r *SqliteRepository) deleteEdgeByID(ctx context.Context, id int64) error {
 	const key = "edge.del_by_id"
-	const q = `DELETE FROM edges WHERE edge_id = ?;`
+	const q = `DELETE FROM edge WHERE edge_id = ? ;`
 	st, err := r.queries.getOrPrepare(ctx, key, q)
 	if err != nil {
 		return err

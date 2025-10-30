@@ -29,8 +29,8 @@ ON CONFLICT(e164) DO UPDATE SET
 
 // Param: :e164
 const selectEntityIDByPhoneText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'phone')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'phone' LIMIT 1)
   AND display_value = :e164
 LIMIT 1;`
 

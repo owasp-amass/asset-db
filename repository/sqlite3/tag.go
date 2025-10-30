@@ -24,51 +24,47 @@ import (
 
 // Params: :ttype_name, :property_name, :property_value, :content(JSON)
 const upsertTagText = `
-INSERT INTO tags(ttype_id, property_name, property_value, content)
-VALUES ((SELECT id FROM tag_type_lu WHERE name=:ttype_name LIMIT 1), 
-	:property_name, :property_value, coalesce(:content,'{}'))
+INSERT INTO tag(ttype_id, property_name, property_value, content)
+VALUES ((SELECT id FROM tag_type_lu WHERE name = :ttype_name LIMIT 1), 
+	:property_name, :property_value, coalesce(:content, '{}'))
 ON CONFLICT(ttype_id, property_name, property_value) DO UPDATE SET
     content = CASE
-        WHEN json_patch(tags.content, coalesce(excluded.content,'{}')) IS NOT tags.content
-        THEN json_patch(tags.content, coalesce(excluded.content,'{}'))
-        ELSE tags.content
+        WHEN json_patch(tag.content, coalesce(excluded.content,'{}')) IS NOT tag.content
+        THEN json_patch(tag.content, coalesce(excluded.content,'{}'))
+        ELSE tag.content
     END,
     updated_at = CURRENT_TIMESTAMP;`
 
 // Params: :ttype_name, :property_name, :property_value
 const selectTagIDByTagText = `
-SELECT tag_id FROM tags
-WHERE ttype_id = (SELECT id FROM tag_type_lu WHERE name = :ttype_name LIMIT 1)
-  AND property_name = :property_name
-  AND coalesce(property_value,'∅') = coalesce(:property_value,'∅')
+SELECT tag_id FROM tag 
+JOIN tag_type_lu tt ON tt.id = tag.ttype_id
+WHERE tt.name = :ttype_name AND tag.property_name = :property_name 
+  AND coalesce(tag.property_value,'∅') = coalesce(:property_value,'∅')
 LIMIT 1;`
 
 // Params: :entity_id, :tag_id
 const tagEntityText = `
 INSERT INTO entity_tag_map(entity_id, tag_id)
 VALUES (:entity_id, :tag_id)
-ON CONFLICT(entity_id, tag_id) DO UPDATE SET
-    updated_at = CURRENT_TIMESTAMP;`
+ON CONFLICT(entity_id, tag_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;`
 
 // Params: :entity_id, :tag_id
 const selectEntityTagMapIDText = `
 SELECT id FROM entity_tag_map
-WHERE entity_id = :entity_id
-  AND tag_id = :tag_id
+WHERE entity_id = :entity_id AND tag_id = :tag_id 
 LIMIT 1;`
 
 // Params: :edge_id, :tag_id
 const tagEdgeText = `
 INSERT INTO edge_tag_map(edge_id, tag_id)
 VALUES (:edge_id, :tag_id)
-ON CONFLICT(edge_id, tag_id) DO UPDATE SET
-    updated_at = CURRENT_TIMESTAMP;`
+ON CONFLICT(edge_id, tag_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;`
 
 // Params: :edge_id, :tag_id
 const selectEdgeTagMapIDText = `
 SELECT id FROM edge_tag_map
-WHERE edge_id = :edge_id
-  AND tag_id = :tag_id
+WHERE edge_id = :edge_id AND tag_id = :tag_id 
 LIMIT 1;`
 
 type Tag struct {
@@ -142,7 +138,7 @@ func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*t
 SELECT m.id, m.entity_id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
 	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM entity_tag_map m
-JOIN tags tg ON tg.tag_id = m.tag_id
+JOIN tag tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
 ORDER BY m.updated_at DESC;`
 	st, err := r.queries.getOrPrepare(ctx, "tag.entity_tag_by_id", q)
@@ -355,7 +351,7 @@ func (r *SqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*typ
 SELECT m.id, m.edge_id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
 	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM edge_tag_map m
-JOIN tags tg ON tg.tag_id = m.tag_id
+JOIN tag tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
 ORDER BY m.updated_at DESC;`
 	st, err := r.queries.getOrPrepare(ctx, "tag.edge_tag_by_id", q)
@@ -567,7 +563,7 @@ func (r *SqliteRepository) tagsForEntity(ctx context.Context, entityID int64) ([
 SELECT m.id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
 	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM entity_tag_map m
-JOIN tags tg ON tg.tag_id = m.tag_id
+JOIN tag tg ON tg.tag_id = m.tag_id
 WHERE m.entity_id = ?
 ORDER BY m.updated_at DESC;`
 	st, err := r.queries.getOrPrepare(ctx, "tag.for_entity", q)
@@ -611,7 +607,7 @@ func (r *SqliteRepository) tagsForEdge(ctx context.Context, edgeID int64) ([]Tag
 SELECT m.id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
 	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
 FROM edge_tag_map m
-JOIN tags tg ON tg.tag_id = m.tag_id
+JOIN tag tg ON tg.tag_id = m.tag_id
 WHERE m.edge_id = ?
 ORDER BY m.updated_at DESC;`
 	st, err := r.queries.getOrPrepare(ctx, "tag.for_edge", q)
@@ -655,7 +651,7 @@ func (r *SqliteRepository) removeEntityTag(ctx context.Context, mid int64) (int6
 		return 0, err
 	}
 
-	const q = `DELETE FROM entity_tag_map WHERE id = ?;`
+	const q = `DELETE FROM entity_tag_map WHERE id = ? ;`
 	stmt, err := r.queries.getOrPrepare(ctx, "tag.remove_entity_tag", q)
 	if err != nil {
 		return 0, err
@@ -674,7 +670,7 @@ func (r *SqliteRepository) entityMIDToTID(ctx context.Context, mid int64) (int64
 	const q = `
 SELECT tg.tag_id
 FROM entity_tag_map m
-JOIN tags tg ON tg.tag_id = m.tag_id
+JOIN tag tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
 ORDER BY m.updated_at DESC;`
 	st, err := r.queries.getOrPrepare(ctx, "tag.entity_mid_to_tid", q)
@@ -702,7 +698,7 @@ func (r *SqliteRepository) removeEdgeTag(ctx context.Context, mid int64) (int64,
 		return 0, err
 	}
 
-	const q = `DELETE FROM edge_tag_map WHERE id = ?;`
+	const q = `DELETE FROM edge_tag_map WHERE id = ? ;`
 	stmt, err := r.queries.getOrPrepare(ctx, "tag.remove_edge_tag", q)
 	if err != nil {
 		return 0, err
@@ -721,7 +717,7 @@ func (r *SqliteRepository) edgeMIDToTID(ctx context.Context, mid int64) (int64, 
 	const q = `
 SELECT tg.tag_id
 FROM edge_tag_map m
-JOIN tags tg ON tg.tag_id = m.tag_id
+JOIN tag tg ON tg.tag_id = m.tag_id
 WHERE m.id = ?
 ORDER BY m.updated_at DESC;`
 	st, err := r.queries.getOrPrepare(ctx, "tag.edge_mid_to_tid", q)
@@ -748,10 +744,10 @@ ORDER BY m.updated_at DESC;`
 func (r *SqliteRepository) deleteTagByID(ctx context.Context, tagID int64, onlyIfOrphaned bool) (int64, error) {
 	if onlyIfOrphaned {
 		const q = `
-DELETE FROM tags
+DELETE FROM tag 
 WHERE tag_id = ?
-  AND NOT EXISTS (SELECT 1 FROM entity_tag_map WHERE tag_id = tags.tag_id)
-  AND NOT EXISTS (SELECT 1 FROM edge_tag_map   WHERE tag_id = tags.tag_id);`
+  AND NOT EXISTS (SELECT 1 FROM entity_tag_map WHERE tag_id = tag.tag_id)
+  AND NOT EXISTS (SELECT 1 FROM edge_tag_map   WHERE tag_id = tag.tag_id);`
 		res, err := r.DB.ExecContext(ctx, q, tagID)
 		if err != nil {
 			return 0, err
@@ -766,13 +762,13 @@ WHERE tag_id = ?
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM entity_tag_map WHERE tag_id = ?;`, tagID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM entity_tag_map WHERE tag_id = ? ;`, tagID); err != nil {
 		return 0, err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM edge_tag_map WHERE tag_id = ?;`, tagID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM edge_tag_map WHERE tag_id = ? ;`, tagID); err != nil {
 		return 0, err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE tag_id = ?;`, tagID)
+	res, err := tx.ExecContext(ctx, `DELETE FROM tag WHERE tag_id = ? ;`, tagID)
 	if err != nil {
 		return 0, err
 	}

@@ -30,8 +30,8 @@ ON CONFLICT(unique_id) DO UPDATE SET
 
 // Param: :unique_id
 const selectEntityIDByProductText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'product')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'product' LIMIT 1)
   AND display_value = :unique_id
 LIMIT 1;`
 

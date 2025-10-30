@@ -26,8 +26,8 @@ ON CONFLICT(release_name) DO UPDATE SET
 
 // Param: :release_name
 const selectEntityIDByProductReleaseText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'productrelease')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'productrelease' LIMIT 1)
   AND display_value = lower(:release_name)
 LIMIT 1;`
 

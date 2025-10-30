@@ -29,8 +29,8 @@ ON CONFLICT(raw_url) DO UPDATE SET
 
 // Param: :raw_url
 const selectEntityIDByURLText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'url')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'url' LIMIT 1)
   AND display_value = lower(:raw_url)
 LIMIT 1;`
 

@@ -19,19 +19,19 @@ import (
 // Params: :asn
 const upsertAutonomousSystemText = `
 INSERT INTO autonomoussystem(asn) VALUES (:asn)
-ON CONFLICT(asn) DO UPDATE SET
-  updated_at = CURRENT_TIMESTAMP;`
+ON CONFLICT(asn) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;`
 
 // Param: :asn
 const selectEntityIDByAutonomousSystemText = `
-SELECT entity_id FROM entities
-WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='autonomoussystem')
-  AND display_value = :asn
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name='autonomoussystem' LIMIT 1)
+  AND display_value = CAST(:asn AS TEXT) 
 LIMIT 1;`
 
 // Param: :row_id
 const selectAutonomousSystemByID = `
-SELECT id, created_at, updated_at, asn FROM autonomoussystem
+SELECT id, created_at, updated_at, asn 
+FROM autonomoussystem
 WHERE id = :row_id
 LIMIT 1;`
 
@@ -50,7 +50,7 @@ func (r *SqliteRepository) upsertAutonomousSystem(ctx context.Context, a *oamnet
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("asn", strconv.Itoa(a.Number))).Scan(&id); err != nil {
+	if err := stmt2.QueryRowContext(ctx, sql.Named("asn", a.Number)).Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil

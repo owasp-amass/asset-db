@@ -26,15 +26,15 @@ ON CONFLICT(unique_id) DO UPDATE SET
 
 // Param: :unique_id
 const selectEntityIDByIdentifierText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'identifier')
-  AND display_value = :unique_id
+SELECT entity_id FROM entity 
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'identifier' LIMIT 1) 
+  AND display_value = :unique_id 
 LIMIT 1;`
 
 // Param: :row_id
 const selectIdentifierByID = `
 SELECT id, created_at, updated_at, id_type, unique_id 
-FROM identifier
+FROM identifier 
 WHERE id = :row_id
 LIMIT 1;`
 

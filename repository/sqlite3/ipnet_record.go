@@ -44,8 +44,8 @@ ON CONFLICT(handle) DO UPDATE SET
 
 // Param: :handle
 const selectEntityIDByIPNetRecordText = `
-SELECT entity_id FROM entities
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipnetrecord')
+SELECT entity_id FROM entity
+WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipnetrecord' LIMIT 1)
   AND display_value = :handle
 LIMIT 1;`
 
