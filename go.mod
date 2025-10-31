@@ -3,6 +3,7 @@ module github.com/owasp-amass/asset-db
 go 1.24.0
 
 require (
+	github.com/caffix/queue v0.3.2-0.20250202195624-3ad0123016e3
 	github.com/caffix/stringset v0.2.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.32

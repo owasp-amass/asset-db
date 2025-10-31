@@ -1,5 +1,7 @@
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
+github.com/caffix/queue v0.3.2-0.20250202195624-3ad0123016e3 h1:O2uSxkYmbCZilIErl655PUsM9zPmqYg7N4A5EJzZALA=
+github.com/caffix/queue v0.3.2-0.20250202195624-3ad0123016e3/go.mod h1:AnCrUsy3cwDjLJvNv7FkQx/0Q9Hb7n7agRrUP0OiYl4=
 github.com/caffix/stringset v0.2.0 h1:kN6xnvL8jzx2YhQNOYr6A6hFzUK+iikt1JtJ2MS2LC8=
 github.com/caffix/stringset v0.2.0/go.mod h1:8PZ6GIPpMP5+r5hr790/05w3v9xI+gXRxRzJCZL57lQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
