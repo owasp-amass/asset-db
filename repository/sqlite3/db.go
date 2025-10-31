@@ -8,6 +8,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"math/rand"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -22,56 +24,134 @@ const (
 
 // SqliteRepository is a repository implementation.
 type SqliteRepository struct {
-	DB      *sql.DB
-	queries *Queries
-	dbtype  string
+	DB     *sql.DB
+	rodb   *sql.DB
+	ww     *writeWorker
+	rpool  *readerWorkerPool
+	dbtype string
 }
 
 // New creates a new instance of the asset database repository.
 func New(dbtype, dsn string) (*SqliteRepository, error) {
-	repo, err := sqliteDatabase(dsn, 1, 1)
+	var err error
+	var repo *SqliteRepository
+
+	switch dbtype {
+	case SQLiteMemory:
+		repo, err = sqliteMemoryDatabase()
+	case SQLite:
+		repo, err = sqliteDatabase(dsn)
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s", dbtype)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	err = ApplyPragmas(context.Background(), repo.DB)
-	if err != nil {
-		return nil, err
-	}
-
-	repo.dbtype = dbtype
 	return repo, nil
 }
 
-func (sql *SqliteRepository) Prepare(ctx context.Context) error {
-	queries, err := NewQueries(sql.DB)
+// sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
+func sqliteDatabase(dsn string) (*SqliteRepository, error) {
+	wdsn := dsn + "?_synchronous=NORMAL&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL"
+	db, err := sql.Open("sqlite3", wdsn)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	sql.queries = queries
-	return nil
+
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = db.ExecContext(ctx, `
+		PRAGMA temp_store = MEMORY;
+		PRAGMA mmap_size = 268435456;        -- 256 MiB map if available
+		PRAGMA page_size = 4096;
+		PRAGMA cache_size = -1048576; 		 -- ~1 GiB if RAM allows
+	`)
+
+	rdsn := dsn + "?mode=ro&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL"
+	dbro, err := sql.Open("sqlite3", rdsn)
+	if err != nil {
+		return nil, err
+	}
+
+	dbro.SetMaxOpenConns(16)
+	dbro.SetMaxIdleConns(16)
+	dbro.SetConnMaxLifetime(0)
+
+	return &SqliteRepository{
+		DB:     db,
+		rodb:   dbro,
+		dbtype: SQLite,
+	}, nil
 }
 
-// sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
-func sqliteDatabase(dsn string, conns, idles int) (*SqliteRepository, error) {
+// sqliteMemoryDatabase creates a new in-memory SQLite database connection.
+func sqliteMemoryDatabase() (*SqliteRepository, error) {
+	name := fmt.Sprintf("amassmem%d", rand.Intn(1000))
+	dsn := name + "?mode=memory&cache=shared&_foreign_keys=on&_busy_timeout=5000&_synchronous=OFF&_journal_mode=MEMORY&_temp_store=MEMORY"
+
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	db.SetMaxOpenConns(conns)
-	db.SetMaxIdleConns(idles)
-	db.SetConnMaxLifetime(time.Hour)
-	db.SetConnMaxIdleTime(10 * time.Minute)
-	return &SqliteRepository{DB: db}, nil
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = db.ExecContext(ctx, `
+		PRAGMA mmap_size = 268435456;    -- 256 MiB map if available
+		PRAGMA page_size = 4096;
+		PRAGMA cache_size = -80000;      -- ~80 MiB cache (negative = KiB units)
+	`)
+
+	dbro, err := sql.Open("sqlite3", name+"?mode=memory&cache=shared&immutable=1")
+	if err != nil {
+		return nil, err
+	}
+
+	dbro.SetMaxOpenConns(16)
+	dbro.SetMaxIdleConns(16)
+	dbro.SetConnMaxLifetime(0)
+
+	return &SqliteRepository{
+		DB:     db,
+		rodb:   dbro,
+		dbtype: SQLiteMemory,
+	}, nil
+}
+
+func (sql *SqliteRepository) Prepare(ctx context.Context) error {
+	wworker, err := newWriteWorker(sql.DB, 100, 100*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	sql.ww = wworker
+
+	rpool, err := newReaderWorkerPool(sql.rodb, 16)
+	if err != nil {
+		return err
+	}
+	sql.rpool = rpool
+	return nil
 }
 
 // Close implements the Repository interface.
 func (sql *SqliteRepository) Close() error {
-	if sql.queries != nil {
-		_ = sql.queries.Close()
+	if sql.rpool != nil {
+		sql.rpool.Close()
 	}
-
+	if sql.ww != nil {
+		sql.ww.Close()
+	}
 	if sql.DB != nil {
 		return sql.DB.Close()
 	}

@@ -37,38 +37,63 @@ WHERE id = :row_id
 LIMIT 1;`
 
 func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
-	const keySel = "asset.fqdn.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertFQDNText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "asset.fqdn.upsert",
+		SQLText: upsertFQDNText,
+		Args:    []any{sql.Named("fqdn_text", a.Name)},
+		Result:  done,
+	})
+	err := <-done
 	if err != nil {
 		return 0, err
 	}
 
-	_ = stmt.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name))
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.fqdn.entity_id_by_fqdn",
+		SQLText: selectEntityIDByFQDNText,
+		Args:    []any{sql.Named("fqdn_text", a.Name)},
+		Result:  ch,
+	})
 
-	const keySel2 = "asset.fqdn.entity_id_by_fqdn"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByFQDNText)
-	if err != nil {
-		return 0, err
+	result := <-ch
+	if result.Err != nil {
+		return 0, result.Err
+	} else if result.Row == nil {
+		return 0, errors.New("no row returned for FQDN entity ID")
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("fqdn_text", a.Name)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
 func (r *SqliteRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	const keySel = "asset.fqdn.by_id"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, selectFQDNByIDText)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.fqdn.by_id",
+		SQLText: selectFQDNByIDText,
+		Args:    []any{sql.Named("row_id", rowID)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
+	} else if result.Row == nil {
+		return nil, errors.New("no row returned for FQDN by ID")
 	}
 
 	var id int64
 	var fqdn string
 	var c, u *string
-	if err := stmt.QueryRowContext(ctx, sql.Named("row_id", rowID)).Scan(&id, &c, &u, &fqdn); err != nil {
+	if err := result.Row.Scan(&id, &c, &u, &fqdn); err != nil {
 		return nil, err
 	}
 

@@ -8,7 +8,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"math/rand"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -26,14 +25,11 @@ import (
 // New creates a new assetDB instance.
 // It initializes the asset database with the specified database type and DSN.
 func New(dbtype, dsn string) (repository.Repository, error) {
-	if dbtype == sqlite3.SQLiteMemory {
-		dsn = fmt.Sprintf("file:mem%d?mode=memory&_synchronous=NORMAL&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL", rand.Intn(1000))
-	}
-
 	db, err := repository.New(dbtype, dsn)
 	if err != nil {
 		return nil, err
 	}
+
 	if err := migrateDatabase(dbtype, db); err != nil {
 		return nil, err
 	}

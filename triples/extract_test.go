@@ -30,12 +30,14 @@ func TestExtract(t *testing.T) {
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// create assets and relations for testing
 	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
-	sentity, err := db.CreateAsset(ctx, oamdns.FQDN{Name: "www.owasp.org"})
+	sentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err, "Failed to create subdomain asset")
 	assert.NotNil(t, sentity, "Subdomain entity should not be nil")
 	edge, err := db.CreateEdge(ctx, &dbt.Edge{
@@ -137,7 +139,7 @@ func TestPredAndObject(t *testing.T) {
 	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
-	ipentity, err := db.CreateAsset(ctx, oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	ipentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
 	assert.NoError(t, err, "Failed to create the fqdn asset")
 	assert.NotNil(t, ipentity, "The entity should not be nil")
 	edge1, err := db.CreateEdge(ctx, &dbt.Edge{
