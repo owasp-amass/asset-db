@@ -145,22 +145,27 @@ JOIN ` + table + ` a ON a.id = r.row_id
 	}
 
 	q := sb.String()
-	key := "q.findByContent." + table + "." + strings.Join(reg.keys, ".") // stable key per table/registry
-	st, err := r.queries.getOrPrepare(ctx, key, q+";")
-	if err != nil {
-		return nil, err
-	}
+	key := "q.findByContent." + table + "." + strings.Join(reg.keys, ".") + fmt.Sprintf("limit%d", limit)
 
-	rows, err := st.QueryContext(ctx, args...)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowsReadResult, 1)
+	r.rpool.Submit(&rowsReadJob{
+		Ctx:     ctx,
+		Name:    key,
+		SQLText: q,
+		Args:    args,
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() { _ = result.Rows.Close() }()
 
 	var out []*types.Entity
-	for rows.Next() {
+	for result.Rows.Next() {
 		var eid int64
-		if err := rows.Scan(&eid); err != nil {
+		if err := result.Rows.Scan(&eid); err != nil {
 			return nil, err
 		}
 		ent, err := r.idToEntity(ctx, eid)
@@ -169,7 +174,7 @@ JOIN ` + table + ` a ON a.id = r.row_id
 		}
 		out = append(out, ent)
 	}
-	return out, rows.Err()
+	return out, result.Rows.Err()
 }
 
 // findByType returns up to `limit` Entities of the given asset type,
@@ -177,7 +182,7 @@ JOIN ` + table + ` a ON a.id = r.row_id
 //
 // If limit <= 0, it returns all (be careful on large datasets).
 func (r *SqliteRepository) findByType(ctx context.Context, assetType string, limit int) ([]*types.Entity, error) {
-	t := normalizeType(assetType)
+	table := normalizeType(assetType)
 
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
 	base := `
@@ -187,34 +192,35 @@ JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?
 ORDER BY e.updated_at DESC, e.entity_id DESC`
 	key := "entity.by_type.base"
 	q := base
-	var st *sql.Stmt
-	var err error
+	args := []any{table}
 
 	if limit > 0 {
-		q = base + " LIMIT ? "
+		q = base + " LIMIT ?"
+		args = append(args, limit)
 		key = "entity.by_type.base.limit"
 	}
-	if st, err = r.queries.getOrPrepare(ctx, key, q+";"); err != nil {
-		return nil, err
-	}
 
-	var rows *sql.Rows
-	if limit > 0 {
-		rows, err = st.QueryContext(ctx, t, limit)
-	} else {
-		rows, err = st.QueryContext(ctx, t)
+	ch := make(chan *rowsReadResult, 1)
+	r.rpool.Submit(&rowsReadJob{
+		Ctx:     ctx,
+		Name:    key,
+		SQLText: q,
+		Args:    args,
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
+	defer func() { _ = result.Rows.Close() }()
 
 	out := make([]*types.Entity, 0, max(0, limit))
-	for rows.Next() {
+	for result.Rows.Next() {
 		var eid int64
 		var disp string
 		var raw *string
-		if err := rows.Scan(&eid, &disp, &raw); err != nil {
+		if err := result.Rows.Scan(&eid, &disp, &raw); err != nil {
 			return nil, err
 		}
 		// Hydrate via existing logic (populates Type + Asset)
@@ -224,7 +230,7 @@ ORDER BY e.updated_at DESC, e.entity_id DESC`
 		}
 		out = append(out, ent)
 	}
-	return out, rows.Err()
+	return out, result.Rows.Err()
 }
 
 // --- tiny helper used above ---

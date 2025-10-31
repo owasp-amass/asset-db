@@ -20,21 +20,21 @@ import (
 const upsertFQDNText = `
 INSERT INTO fqdn (fqdn)
 VALUES (lower(:fqdn_text))
-ON CONFLICT(fqdn_norm) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;`
+ON CONFLICT(fqdn_norm) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
 
 // Param: :fqdn_text
 const selectEntityIDByFQDNText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn' LIMIT 1)
   AND display_value = lower(:fqdn_text)
-LIMIT 1;`
+LIMIT 1`
 
 // Param: :row_id
 const selectFQDNByIDText = `
 SELECT id, created_at, updated_at, fqdn 
 FROM fqdn
 WHERE id = :row_id
-LIMIT 1;`
+LIMIT 1`
 
 func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
 	done := make(chan error, 1)
@@ -62,8 +62,6 @@ func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int6
 	result := <-ch
 	if result.Err != nil {
 		return 0, result.Err
-	} else if result.Row == nil {
-		return 0, errors.New("no row returned for FQDN entity ID")
 	}
 
 	var id int64
@@ -86,8 +84,6 @@ func (r *SqliteRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int6
 	result := <-ch
 	if result.Err != nil {
 		return nil, result.Err
-	} else if result.Row == nil {
-		return nil, errors.New("no row returned for FQDN by ID")
 	}
 
 	var id int64

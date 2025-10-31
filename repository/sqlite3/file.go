@@ -23,59 +23,80 @@ VALUES (lower(:file_url), :basename, :file_type)
 ON CONFLICT(file_url) DO UPDATE SET
     basename   = COALESCE(excluded.basename,  file.basename),
     file_type  = COALESCE(excluded.file_type, file.file_type),
-    updated_at = CURRENT_TIMESTAMP;`
+    updated_at = CURRENT_TIMESTAMP`
 
 // Param: :file_url
 const selectEntityIDByFileText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'file' LIMIT 1)
   AND display_value = lower(:file_url)
-LIMIT 1;`
+LIMIT 1`
 
 // Param: :row_id
 const selectFileByID = `
 SELECT id, created_at, updated_at, file_url, basename, file_type 
 FROM file
 WHERE id = :row_id
-LIMIT 1;`
+LIMIT 1`
 
 func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
-	const keySel = "asset.file.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertFileText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "asset.file.upsert",
+		SQLText: upsertFileText,
+		Args: []any{
+			sql.Named("file_url", a.URL),
+			sql.Named("basename", a.Name),
+			sql.Named("file_type", a.Type),
+		},
+		Result: done,
+	})
+	err := <-done
 	if err != nil {
 		return 0, err
 	}
 
-	_ = stmt.QueryRowContext(ctx,
-		sql.Named("file_url", a.URL),
-		sql.Named("basename", a.Name),
-		sql.Named("file_type", a.Type),
-	)
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.file.entity_id_by_file",
+		SQLText: selectEntityIDByFileText,
+		Args:    []any{sql.Named("file_url", a.URL)},
+		Result:  ch,
+	})
 
-	const keySel2 = "asset.file.entity_id_by_file"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByFileText)
-	if err != nil {
-		return 0, err
+	result := <-ch
+	if result.Err != nil {
+		return 0, result.Err
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("file_url", a.URL)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
 func (r *SqliteRepository) fetchFileByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	const keySel = "asset.file.by_id"
-	st, err := r.queries.getOrPrepare(ctx, keySel, selectFileByID)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.file.by_id",
+		SQLText: selectFileByID,
+		Args:    []any{sql.Named("row_id", rowID)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var id int64
 	var url string
 	var c, u, fn, ft *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &url, &fn, &ft); err != nil {
+	if err := result.Row.Scan(&id, &c, &u, &url, &fn, &ft); err != nil {
 		return nil, err
 	}
 

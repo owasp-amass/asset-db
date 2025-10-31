@@ -33,7 +33,7 @@ ON CONFLICT(etype_id, from_entity_id, to_entity_id, label) DO UPDATE SET
         THEN json_patch(edge.content, coalesce(excluded.content, '{}'))
         ELSE edge.content
     END,
-    updated_at = CURRENT_TIMESTAMP;`
+    updated_at = CURRENT_TIMESTAMP`
 
 // Params: :etype_name, :label, :from_entity_id, :to_entity_id
 const selectEdgeIDBetweenText = `
@@ -43,14 +43,14 @@ JOIN edge_type_lu t ON t.id = e.etype_id
 WHERE t.name = :etype_name
   AND e.label = lower(:label) 
   AND e.from_entity_id = :from_entity_id
-  AND e.to_entity_id = :to_entity_id;`
+  AND e.to_entity_id = :to_entity_id`
 
 // Params: edge_id
 const selectEdgeByIDText = `
 SELECT e.edge_id, e.created_at, e.updated_at, t.name, e.from_entity_id, e.to_entity_id, e.content
 FROM edge e
 JOIN edge_type_lu t ON t.id = e.etype_id
-WHERE e.edge_id = :edge_id;`
+WHERE e.edge_id = :edge_id`
 
 type Edge struct {
 	EdgeID       int64           `json:"edge_id"`
@@ -92,32 +92,46 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*t
 		return nil, fmt.Errorf("failed to marshal edge relation to JSON: %v", err)
 	}
 
-	const keySel = "edge.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, ensureEdgeText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "edge.upsert",
+		SQLText: ensureEdgeText,
+		Args: []any{
+			sql.Named("etype_name", string(edge.Relation.RelationType())),
+			sql.Named("label", edge.Relation.Label()),
+			sql.Named("from_entity_id", fromID),
+			sql.Named("to_entity_id", toID),
+			sql.Named("content", string(content)),
+		},
+		Result: done,
+	})
+	err = <-done
 	if err != nil {
 		return nil, err
 	}
 
-	_ = stmt.QueryRowContext(ctx,
-		sql.Named("etype_name", string(edge.Relation.RelationType())),
-		sql.Named("label", edge.Relation.Label()),
-		sql.Named("from_entity_id", fromID),
-		sql.Named("to_entity_id", toID),
-		sql.Named("content", string(content)),
-	)
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "edge.id_between",
+		SQLText: selectEdgeIDBetweenText,
+		Args: []any{
+			sql.Named("etype_name", string(edge.Relation.RelationType())),
+			sql.Named("label", edge.Relation.Label()),
+			sql.Named("from_entity_id", fromID),
+			sql.Named("to_entity_id", toID),
+		},
+		Result: ch,
+	})
 
-	const keySel2 = "edge.id_between"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEdgeIDBetweenText)
-	if err != nil {
-		return nil, err
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx,
-		sql.Named("etype_name", string(edge.Relation.RelationType())),
-		sql.Named("label", edge.Relation.Label()),
-		sql.Named("from_entity_id", fromID),
-		sql.Named("to_entity_id", toID)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return nil, err
 	}
 
@@ -144,17 +158,25 @@ func (r *SqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.
 }
 
 func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*Edge, error) {
-	const keySel = "edge.by_id"
-	st, err := r.queries.getOrPrepare(ctx, keySel, selectEdgeByIDText)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "edge.by_id",
+		SQLText: selectEdgeByIDText,
+		Args:    []any{sql.Named("edge_id", id)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var eg Edge
 	var cAt, uAt *string
 	var content *string
-	if err := st.QueryRowContext(ctx, id).Scan(&eg.EdgeID, &cAt,
-		&uAt, &eg.EType, &eg.FromEntityID, &eg.ToEntityID, &content); err != nil {
+	if err := result.Row.Scan(&eg.EdgeID, &cAt, &uAt, &eg.EType,
+		&eg.FromEntityID, &eg.ToEntityID, &content); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("edge %d not found", id)
 		}
@@ -340,52 +362,59 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 		q += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	st, err := r.queries.getOrPrepare(ctx, name, q+" ;")
-	if err != nil {
-		return nil, err
-	}
+	ch := make(chan *rowsReadResult, 1)
+	r.rpool.Submit(&rowsReadJob{
+		Ctx:     ctx,
+		Name:    name,
+		SQLText: q,
+		Args:    args,
+		Result:  ch,
+	})
 
-	rows, err := st.QueryContext(ctx, args...)
-	if err != nil {
-		return nil, err
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() { _ = result.Rows.Close() }()
 
 	var out []EdgeWithTypes
-	for rows.Next() {
+	for result.Rows.Next() {
 		var eg EdgeWithTypes
 		var cAt, uAt *string
 		var content *string
-		if err := rows.Scan(
-			&eg.EdgeID, &eg.EType, &eg.FromEntityID, &eg.ToEntityID, &content, &cAt, &uAt, &eg.FromType, &eg.ToType,
-		); err != nil {
+
+		if err := result.Rows.Scan(&eg.EdgeID, &eg.EType, &eg.FromEntityID,
+			&eg.ToEntityID, &content, &cAt, &uAt, &eg.FromType, &eg.ToType); err != nil {
 			return nil, err
 		}
+
 		if content != nil && strings.TrimSpace(*content) != "" {
 			eg.Content = json.RawMessage(*content)
 		}
+
 		eg.CreatedAt = parseTS(cAt)
 		eg.UpdatedAt = parseTS(uAt)
+		if eg.CreatedAt == nil || eg.UpdatedAt == nil {
+			continue
+		}
+
 		out = append(out, eg)
 	}
-	return out, rows.Err()
+
+	return out, result.Rows.Err()
 }
 
 // deleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).
 func (r *SqliteRepository) deleteEdgeByID(ctx context.Context, id int64) error {
-	const key = "edge.del_by_id"
-	const q = `DELETE FROM edge WHERE edge_id = ? ;`
-	st, err := r.queries.getOrPrepare(ctx, key, q)
-	if err != nil {
-		return err
-	}
-	res, err := st.ExecContext(ctx, id) // direct exec is fine; same q
-	if err != nil {
-		return err
-	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+	done := make(chan error, 1)
+
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "edge.del.by_id",
+		SQLText: `DELETE FROM edge WHERE edge_id = :edge_id`,
+		Args:    []any{sql.Named("edge_id", id)},
+		Result:  done,
+	})
+
+	return <-done
 }

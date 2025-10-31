@@ -43,14 +43,14 @@ ON CONFLICT(serial_number) DO UPDATE SET
     signature_algorithm   = COALESCE(excluded.signature_algorithm,   tlscertificate.signature_algorithm),
     public_key_algorithm  = COALESCE(excluded.public_key_algorithm,  tlscertificate.public_key_algorithm),
     crl_distribution_points=COALESCE(excluded.crl_distribution_points,tlscertificate.crl_distribution_points),
-    updated_at            = CURRENT_TIMESTAMP;`
+    updated_at            = CURRENT_TIMESTAMP`
 
 // Param: :serial_number
 const selectEntityIDByTLSCertificateText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'tlscertificate' LIMIT 1)
   AND display_value = :serial_number
-LIMIT 1;`
+LIMIT 1`
 
 // Param: :row_id
 const selectTLSCertificateByIDText = `
@@ -59,7 +59,7 @@ SELECT id, created_at, updated_at, is_ca, tls_version, key_usage, not_after, not
 	   signature_algorithm, public_key_algorithm, crl_distribution_points, subject_common_name 
 FROM tlscertificate 
 WHERE id = :row_id
-LIMIT 1;`
+LIMIT 1`
 
 type cert struct {
 	ID                    int64      `json:"id"`
@@ -82,58 +82,77 @@ type cert struct {
 }
 
 func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.TLSCertificate) (int64, error) {
-	const keySel = "asset.tls_certificate.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertTLSCertificateText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "asset.tls_certificate.upsert",
+		SQLText: upsertTLSCertificateText,
+		Args: []any{
+			sql.Named("is_ca", a.IsCA),
+			sql.Named("tls_version", a.Version),
+			sql.Named("key_usage", a.KeyUsage),
+			sql.Named("not_after", a.NotAfter),
+			sql.Named("not_before", a.NotBefore),
+			sql.Named("ext_key_usage", a.ExtKeyUsage),
+			sql.Named("serial_number", a.SerialNumber),
+			sql.Named("subject_key_id", a.SubjectKeyID),
+			sql.Named("authority_key_id", a.AuthorityKeyID),
+			sql.Named("issuer_common_name", a.IssuerCommonName),
+			sql.Named("signature_algorithm", a.SignatureAlgorithm),
+			sql.Named("subject_common_name", a.SubjectCommonName),
+			sql.Named("public_key_algorithm", a.PublicKeyAlgorithm),
+			sql.Named("crl_distribution_points", a.CRLDistributionPoints),
+		},
+		Result: done,
+	})
+	err := <-done
 	if err != nil {
 		return 0, err
 	}
 
-	_ = stmt.QueryRowContext(ctx,
-		sql.Named("is_ca", a.IsCA),
-		sql.Named("tls_version", a.Version),
-		sql.Named("key_usage", a.KeyUsage),
-		sql.Named("not_after", a.NotAfter),
-		sql.Named("not_before", a.NotBefore),
-		sql.Named("ext_key_usage", a.ExtKeyUsage),
-		sql.Named("serial_number", a.SerialNumber),
-		sql.Named("subject_key_id", a.SubjectKeyID),
-		sql.Named("authority_key_id", a.AuthorityKeyID),
-		sql.Named("issuer_common_name", a.IssuerCommonName),
-		sql.Named("signature_algorithm", a.SignatureAlgorithm),
-		sql.Named("subject_common_name", a.SubjectCommonName),
-		sql.Named("public_key_algorithm", a.PublicKeyAlgorithm),
-		sql.Named("crl_distribution_points", a.CRLDistributionPoints),
-	)
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.tls_certificate.entity_id_by_tls_certificate",
+		SQLText: selectEntityIDByTLSCertificateText,
+		Args:    []any{sql.Named("serial_number", a.SerialNumber)},
+		Result:  ch,
+	})
 
-	const keySel2 = "asset.tls_certificate.entity_id_by_tls_certificate"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByTLSCertificateText)
-	if err != nil {
-		return 0, err
+	result := <-ch
+	if result.Err != nil {
+		return 0, result.Err
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("serial_number", a.SerialNumber)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
 func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	const keySel = "asset.tls_certificate.by_id"
-	st, err := r.queries.getOrPrepare(ctx, keySel, selectTLSCertificateByIDText)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.tls_certificate.by_id",
+		SQLText: selectTLSCertificateByIDText,
+		Args:    []any{sql.Named("row_id", rowID)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var a cert
 	var c, u, na, nb *string
 	var isca *int64
 	var tlsver *int64
-	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &isca, &tlsver, &a.KeyUsage, &na, &nb, &a.ExtKeyUsage,
-		&a.SerialNumber, &a.SubjectKeyID, &a.AuthorityKeyID, &a.IssuerCommonName,
-		&a.SignatureAlgorithm, &a.PublicKeyAlgorithm, &a.CRLDistributionPoints, &a.SubjectCommonName,
-	); err != nil {
+	if err := result.Row.Scan(&a.ID, &c, &u, &isca, &tlsver, &a.KeyUsage, &na, &nb,
+		&a.ExtKeyUsage, &a.SerialNumber, &a.SubjectKeyID, &a.AuthorityKeyID, &a.IssuerCommonName,
+		&a.SignatureAlgorithm, &a.PublicKeyAlgorithm, &a.CRLDistributionPoints, &a.SubjectCommonName); err != nil {
 		return nil, err
 	}
 

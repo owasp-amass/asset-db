@@ -25,21 +25,21 @@ ON CONFLICT(unique_id) DO UPDATE SET
     first_name  = COALESCE(excluded.first_name,  person.first_name),
     family_name = COALESCE(excluded.family_name, person.family_name),
     middle_name = COALESCE(excluded.middle_name, person.middle_name),
-    updated_at  = CURRENT_TIMESTAMP;`
+    updated_at  = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
 const selectEntityIDByPersonText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'person' LIMIT 1)
   AND display_value = :unique_id
-LIMIT 1;`
+LIMIT 1`
 
 // Param: :row_id
 const selectPersonByIDText = `
 SELECT id, created_at, updated_at, full_name, unique_id, first_name, family_name, middle_name 
 FROM person 
 WHERE id = :row_id
-LIMIT 1;`
+LIMIT 1`
 
 type person struct {
 	ID         int64      `json:"id"`
@@ -53,45 +53,65 @@ type person struct {
 }
 
 func (r *SqliteRepository) upsertPerson(ctx context.Context, a *people.Person) (int64, error) {
-	const keySel = "asset.person.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertPersonText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "asset.person.upsert",
+		SQLText: upsertPersonText,
+		Args: []any{
+			sql.Named("full_name", a.FullName),
+			sql.Named("unique_id", a.ID),
+			sql.Named("first_name", a.FirstName),
+			sql.Named("family_name", a.FamilyName),
+			sql.Named("middle_name", a.MiddleName),
+		},
+		Result: done,
+	})
+	err := <-done
 	if err != nil {
 		return 0, err
 	}
 
-	_ = stmt.QueryRowContext(ctx,
-		sql.Named("full_name", a.FullName),
-		sql.Named("unique_id", a.ID),
-		sql.Named("first_name", a.FirstName),
-		sql.Named("family_name", a.FamilyName),
-		sql.Named("middle_name", a.MiddleName),
-	)
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.person.entity_id_by_person",
+		SQLText: selectEntityIDByPersonText,
+		Args:    []any{sql.Named("unique_id", a.ID)},
+		Result:  ch,
+	})
 
-	const keySel2 = "asset.person.entity_id_by_person"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByPersonText)
-	if err != nil {
-		return 0, err
+	result := <-ch
+	if result.Err != nil {
+		return 0, result.Err
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("unique_id", a.ID)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
 func (r *SqliteRepository) fetchPersonByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	const keySel = "asset.fqdn.by_id"
-	st, err := r.queries.getOrPrepare(ctx, keySel, selectPersonByIDText)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.person.by_id",
+		SQLText: selectPersonByIDText,
+		Args:    []any{sql.Named("row_id", rowID)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var a person
 	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &a.FullName, &a.UniqueID, &a.FirstName, &a.FamilyName, &a.MiddleName,
-	); err != nil {
+	if err := result.Row.Scan(&a.ID, &c, &u, &a.FullName, &a.UniqueID,
+		&a.FirstName, &a.FamilyName, &a.MiddleName); err != nil {
 		return nil, err
 	}
 

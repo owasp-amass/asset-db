@@ -19,53 +19,75 @@ import (
 // Params: :asn
 const upsertAutonomousSystemText = `
 INSERT INTO autonomoussystem(asn) VALUES (:asn)
-ON CONFLICT(asn) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;`
+ON CONFLICT(asn) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
 
 // Param: :asn
 const selectEntityIDByAutonomousSystemText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name='autonomoussystem' LIMIT 1)
   AND display_value = CAST(:asn AS TEXT) 
-LIMIT 1;`
+LIMIT 1`
 
 // Param: :row_id
 const selectAutonomousSystemByID = `
 SELECT id, created_at, updated_at, asn 
 FROM autonomoussystem
 WHERE id = :row_id
-LIMIT 1;`
+LIMIT 1`
 
 func (r *SqliteRepository) upsertAutonomousSystem(ctx context.Context, a *oamnet.AutonomousSystem) (int64, error) {
-	const keySel = "asset.autonomous_system.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertAutonomousSystemText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "asset.autonomous_system.upsert",
+		SQLText: upsertAutonomousSystemText,
+		Args:    []any{sql.Named("asn", a.Number)},
+		Result:  done,
+	})
+	err := <-done
 	if err != nil {
 		return 0, err
 	}
-	_ = stmt.QueryRowContext(ctx, sql.Named("asn", a.Number))
 
-	const keySel2 = "asset.autonomous_system.entity_id_by_asn"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByAutonomousSystemText)
-	if err != nil {
-		return 0, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.autonomous_system.entity_id_by_asn",
+		SQLText: selectEntityIDByAutonomousSystemText,
+		Args:    []any{sql.Named("asn", a.Number)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return 0, result.Err
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("asn", a.Number)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
 func (r *SqliteRepository) fetchAutonomousSystemByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	const keySel = "asset.autonomous_system.by_id"
-	st, err := r.queries.getOrPrepare(ctx, keySel, selectAutonomousSystemByID)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.autonomous_system.by_id",
+		SQLText: selectAutonomousSystemByID,
+		Args:    []any{sql.Named("row_id", rowID)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var c, u *string
 	var id, asn int64
-	if err := st.QueryRowContext(ctx, rowID).Scan(&id, &c, &u, &asn); err != nil {
+	if err := result.Row.Scan(&id, &c, &u, &asn); err != nil {
 		return nil, err
 	}
 

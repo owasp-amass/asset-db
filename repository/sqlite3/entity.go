@@ -139,20 +139,27 @@ func validateAssetTable(tableName string) string {
 func (r *SqliteRepository) loadEntityCore(ctx context.Context, id int64) (*Entity, error) {
 	var e Entity
 	var raw string
-
-	const key = "entity.by_id"
 	query := `
 	SELECT e.entity_id, t.name, e.display_value, e.attrs
 	FROM entity e
 	JOIN entity_type_lu t ON t.id = e.type_id
-	WHERE e.entity_id = ? ;`
+	WHERE e.entity_id = :entity_id`
 
-	stmt, err := r.queries.getOrPrepare(ctx, key, query)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "entity.by_id",
+		SQLText: query,
+		Args:    []any{sql.Named("entity_id", id)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
-	if err := stmt.QueryRowContext(ctx, id).Scan(&e.EntityID, &e.Type, &e.DisplayValue, &raw); err != nil {
+	if err := result.Row.Scan(&e.EntityID, &e.Type, &e.DisplayValue, &raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("entity %d not found", id)
 		}
@@ -172,20 +179,31 @@ func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entit
 		return nil, fmt.Errorf("no table mapping for entity type %q", e.Type)
 	}
 
-	const key = "entity.ref.row_by_entity_table"
 	const query = `
 	SELECT row_id FROM entity_ref
-	WHERE entity_id = ? AND table_name = ?
-	LIMIT 1;`
+	WHERE entity_id = :entity_id AND table_name = :table_name
+	LIMIT 1`
 
-	stmt, err := r.queries.getOrPrepare(ctx, key, query)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "entity.ref.row_by_entity_table",
+		SQLText: query,
+		Args: []any{
+			sql.Named("entity_id", e.EntityID),
+			sql.Named("table_name", table),
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	// Resolve the row id in that concrete table via entity_ref
 	var rowID int64
-	if err := stmt.QueryRowContext(ctx, e.EntityID, table).Scan(&rowID); err != nil {
+	if err := result.Row.Scan(&rowID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Entity exists but does not have a ref to the expected table (data drift)
 			return nil, fmt.Errorf("entity %d has no %s row mapping", e.EntityID, table)

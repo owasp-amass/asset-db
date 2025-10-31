@@ -34,14 +34,14 @@ ON CONFLICT(:unique_id) DO UPDATE SET
     updated_date  = COALESCE(excluded.updated_date,  domainrecord.updated_date),
     expiration_date = COALESCE(excluded.expiration_date, domainrecord.expiration_date),
     whois_server  = COALESCE(excluded.whois_server,  domainrecord.whois_server),
-    updated_at    = CURRENT_TIMESTAMP;`
+    updated_at    = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
 const selectEntityIDByDomainRecordText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
   AND display_value = :unique_id
-LIMIT 1;`
+LIMIT 1`
 
 // Param: :row_id
 const selectDomainRecordByID = `
@@ -49,7 +49,7 @@ SELECT id, created_at, updated_at, unique_id, raw_record, record_name, domain,
 record_status, punycode, extension, created_date, updated_date, expiration_date, whois_server 
 FROM domainrecord
 WHERE id = :row_id
-LIMIT 1;`
+LIMIT 1`
 
 type domrec struct {
 	ID             int64      `json:"id"`
@@ -69,53 +69,71 @@ type domrec struct {
 }
 
 func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.DomainRecord) (int64, error) {
-	const keySel = "asset.domainrecord.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertDomainRecordText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "asset.domainrecord.upsert",
+		SQLText: upsertDomainRecordText,
+		Args: []any{
+			sql.Named("domain_text", a.Domain),
+			sql.Named("unique_id", a.ID),
+			sql.Named("record_name", a.Name),
+			sql.Named("raw_record", a.Raw),
+			sql.Named("record_status", a.Status),
+			sql.Named("punycode", a.Punycode),
+			sql.Named("extension", a.Extension),
+			sql.Named("created_date", a.CreatedDate),
+			sql.Named("updated_date", a.UpdatedDate),
+			sql.Named("expiration_date", a.ExpirationDate),
+			sql.Named("whois_server", a.WhoisServer),
+		},
+		Result: done,
+	})
+	err := <-done
 	if err != nil {
 		return 0, err
 	}
 
-	_ = stmt.QueryRowContext(ctx,
-		sql.Named("domain_text", a.Domain),
-		sql.Named("unique_id", a.ID),
-		sql.Named("record_name", a.Name),
-		sql.Named("raw_record", a.Raw),
-		sql.Named("record_status", a.Status),
-		sql.Named("punycode", a.Punycode),
-		sql.Named("extension", a.Extension),
-		sql.Named("created_date", a.CreatedDate),
-		sql.Named("updated_date", a.UpdatedDate),
-		sql.Named("expiration_date", a.ExpirationDate),
-		sql.Named("whois_server", a.WhoisServer),
-	)
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.domainrecord.entity_id_by_domain",
+		SQLText: selectEntityIDByDomainRecordText,
+		Args:    []any{sql.Named("unique_id", a.ID)},
+		Result:  ch,
+	})
 
-	const keySel2 = "asset.domainrecord.entity_id_by_domain"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByDomainRecordText)
-	if err != nil {
-		return 0, err
+	result := <-ch
+	if result.Err != nil {
+		return 0, result.Err
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("unique_id", a.ID)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
 func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	const keySel = "asset.domainrecord.by_id"
-	st, err := r.queries.getOrPrepare(ctx, keySel, selectDomainRecordByID)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.domainrecord.by_id",
+		SQLText: selectDomainRecordByID,
+		Args:    []any{sql.Named("row_id", rowID)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var a domrec
 	var c, u *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &a.UniqueID, &a.RawRecord, &a.RecordName,
-		&a.Domain, &a.RecordStatus, &a.Punycode, &a.Extension,
-		&a.CreatedDate, &a.UpdatedDate, &a.ExpirationDate, &a.WhoisServer,
-	); err != nil {
+	if err := result.Row.Scan(&a.ID, &c, &u, &a.UniqueID, &a.RawRecord, &a.RecordName, &a.Domain, &a.RecordStatus,
+		&a.Punycode, &a.Extension, &a.CreatedDate, &a.UpdatedDate, &a.ExpirationDate, &a.WhoisServer); err != nil {
 		return nil, err
 	}
 

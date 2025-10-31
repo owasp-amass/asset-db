@@ -40,14 +40,14 @@ ON CONFLICT(handle) DO UPDATE SET
     start_address 	= COALESCE(excluded.start_address, ipnetrecord.start_address),
     end_address   	= COALESCE(excluded.end_address,   ipnetrecord.end_address),
     country       	= COALESCE(excluded.country,       ipnetrecord.country),
-    updated_at    	= CURRENT_TIMESTAMP;`
+    updated_at    	= CURRENT_TIMESTAMP`
 
 // Param: :handle
 const selectEntityIDByIPNetRecordText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipnetrecord' LIMIT 1)
   AND display_value = :handle
-LIMIT 1;`
+LIMIT 1`
 
 // Param: :row_id
 const selectIPNetRecordByID = `
@@ -55,7 +55,7 @@ SELECT id, created_at, updated_at, record_cidr, record_name, ip_version, handle,
 	   created_date, updated_date, whois_server, parent_handle, start_address, end_address, country 
 FROM ipnetrecord
 WHERE id = :row_id
-LIMIT 1;`
+LIMIT 1`
 
 type IPNetRecord struct {
 	ID           int64      `json:"id"`
@@ -77,52 +77,72 @@ type IPNetRecord struct {
 }
 
 func (r *SqliteRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IPNetRecord) (int64, error) {
-	const keySel = "asset.ipnet_record.upsert"
-	stmt, err := r.queries.getOrPrepare(ctx, keySel, upsertIPNetRecordText)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "asset.ipnet_record.upsert",
+		SQLText: upsertIPNetRecordText,
+		Args: []any{
+			sql.Named("record_cidr", a.CIDR.String()),
+			sql.Named("record_name", a.Name),
+			sql.Named("ip_version", a.Type),
+			sql.Named("handle", a.Handle),
+			sql.Named("method", a.Method),
+			sql.Named("record_status", a.Status),
+			sql.Named("created_date", a.CreatedDate),
+			sql.Named("updated_date", a.UpdatedDate),
+			sql.Named("whois_server", a.WhoisServer),
+			sql.Named("parent_handle", a.ParentHandle),
+			sql.Named("start_address", a.StartAddress.String()),
+			sql.Named("end_address", a.EndAddress.String()),
+			sql.Named("country", a.Country),
+		},
+		Result: done,
+	})
+	err := <-done
 	if err != nil {
 		return 0, err
 	}
 
-	_ = stmt.QueryRowContext(ctx,
-		sql.Named("record_cidr", a.CIDR.String()),
-		sql.Named("record_name", a.Name),
-		sql.Named("ip_version", a.Type),
-		sql.Named("handle", a.Handle),
-		sql.Named("method", a.Method),
-		sql.Named("record_status", a.Status),
-		sql.Named("created_date", a.CreatedDate),
-		sql.Named("updated_date", a.UpdatedDate),
-		sql.Named("whois_server", a.WhoisServer),
-		sql.Named("parent_handle", a.ParentHandle),
-		sql.Named("start_address", a.StartAddress.String()),
-		sql.Named("end_address", a.EndAddress.String()),
-		sql.Named("country", a.Country),
-	)
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.ipnet_record.entity_id_by_ipnet_record",
+		SQLText: selectEntityIDByIPNetRecordText,
+		Args:    []any{sql.Named("handle", a.Handle)},
+		Result:  ch,
+	})
 
-	const keySel2 = "asset.ipnet_record.entity_id_by_ipnet_record"
-	stmt2, err := r.queries.getOrPrepare(ctx, keySel2, selectEntityIDByIPNetRecordText)
-	if err != nil {
-		return 0, err
+	result := <-ch
+	if result.Err != nil {
+		return 0, result.Err
 	}
 
 	var id int64
-	if err := stmt2.QueryRowContext(ctx, sql.Named("handle", a.Handle)).Scan(&id); err != nil {
+	if err := result.Row.Scan(&id); err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
 func (r *SqliteRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	const keySel = "asset.fqdn.by_id"
-	st, err := r.queries.getOrPrepare(ctx, keySel, selectIPNetRecordByID)
-	if err != nil {
-		return nil, err
+	ch := make(chan *rowReadResult, 1)
+	r.rpool.Submit(&rowReadJob{
+		Ctx:     ctx,
+		Name:    "asset.ipnet_record.by_id",
+		SQLText: selectIPNetRecordByID,
+		Args:    []any{sql.Named("row_id", rowID)},
+		Result:  ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
 	}
 
 	var a IPNetRecord
 	var c, u, cd, ud *string
-	if err := st.QueryRowContext(ctx, rowID).Scan(
-		&a.ID, &c, &u, &a.RecordCIDR, &a.RecordName, &a.IPVersion, &a.Handle, &a.Method,
+	if err := result.Row.Scan(&a.ID, &c, &u, &a.RecordCIDR, &a.RecordName, &a.IPVersion, &a.Handle, &a.Method,
 		&a.RecordStatus, &cd, &ud, &a.WhoisServer, &a.ParentHandle, &a.StartAddress, &a.EndAddress, &a.Country,
 	); err != nil {
 		return nil, err

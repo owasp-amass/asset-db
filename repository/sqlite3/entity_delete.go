@@ -25,72 +25,52 @@ func (r *SqliteRepository) DeleteEntity(ctx context.Context, id string) error {
 // and tag mappings. It leaves the concrete asset row intact by default; if you also
 // want to remove the asset row, set alsoDeleteAsset=true.
 func (r *SqliteRepository) deleteEntityByID(ctx context.Context, eid int64, alsoDeleteAsset bool) error {
-	tx, err := r.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	// Optionally remove the concrete asset row (requires looking up its table + row_id)
 	if alsoDeleteAsset {
-		const keySel = "del.entity.refRow"
-		const qSel = `SELECT table_name, row_id FROM entity_ref WHERE entity_id = ? ;`
-		stSel, err := r.queries.getOrPrepare(ctx, keySel, qSel)
-		if err != nil {
-			return err
-		}
-		rows, err := tx.Stmt(stSel).QueryContext(ctx, eid)
-		if err != nil {
-			return err
-		}
-		type ref struct {
-			table string
-			rowID int64
-		}
-		var refs []ref
-		for rows.Next() {
-			var t string
-			var id int64
-			if err := rows.Scan(&t, &id); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			refs = append(refs, ref{table: t, rowID: id})
-		}
-		_ = rows.Close()
+		const qSel = `SELECT table_name, row_id FROM entity_ref WHERE entity_id = :entity_id LIMIT 1`
+		ch := make(chan *rowReadResult, 1)
+		r.rpool.Submit(&rowReadJob{
+			Ctx:     ctx,
+			Name:    "entity.ref_row",
+			SQLText: qSel,
+			Args:    []any{sql.Named("entity_id", eid)},
+			Result:  ch,
+		})
 
-		for _, rf := range refs {
-			tbl := validateAssetTable(rf.table)
-			if tbl == "" {
-				// unknown table: skip instead of failing the whole deletion
-				continue
-			}
-			delQ := fmt.Sprintf(`DELETE FROM %s WHERE id = ? ;`, tbl)
-			key := "del.asset." + tbl
-			st, err := r.queries.getOrPrepare(ctx, key, delQ)
-			if err != nil {
-				return err
-			}
-			if _, err := tx.Stmt(st).ExecContext(ctx, rf.rowID); err != nil {
+		result := <-ch
+		if result.Err != nil {
+			return result.Err
+		}
+
+		var t string
+		var id int64
+		if err := result.Row.Scan(&t, &id); err != nil {
+			return err
+		}
+
+		if tbl := validateAssetTable(t); tbl != "" {
+			done := make(chan error, 1)
+			r.ww.Submit(&writeJob{
+				Ctx:     ctx,
+				Name:    "asset." + tbl + ".del",
+				SQLText: fmt.Sprintf(`DELETE FROM %s WHERE id = :row_id`, tbl),
+				Args:    []any{sql.Named("row_id", id)},
+				Result:  done,
+			})
+			if err := <-done; err != nil {
 				return err
 			}
 		}
 	}
 
 	// Delete the entity (FKs should take care of edges, entity_ref, tag maps if schema has CASCADE)
-	const keyDel = "del.entity.by_id"
-	const qDel = `DELETE FROM entity WHERE entity_id = ? ;`
-	stDel, err := r.queries.getOrPrepare(ctx, keyDel, qDel)
-	if err != nil {
-		return err
-	}
-	res, err := tx.Stmt(stDel).ExecContext(ctx, eid)
-	if err != nil {
-		return err
-	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
-		return sql.ErrNoRows
-	}
-	return tx.Commit()
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "entity.del.by_id",
+		SQLText: `DELETE FROM entity WHERE entity_id = :entity_id`,
+		Args:    []any{sql.Named("entity_id", eid)},
+		Result:  done,
+	})
+	return <-done
 }
