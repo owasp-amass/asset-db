@@ -252,7 +252,7 @@ func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid IP address: %s", subject.Key)
 		}
-		filter["address"] = addr
+		filter["address"] = addr.String()
 	case strings.EqualFold(subtype, string(oam.IPNetRecord)):
 		filter["handle"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.Location)):
@@ -263,7 +263,7 @@ func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
 			return nil, fmt.Errorf("invalid netblock prefix: %s", subject.Key)
 		}
 
-		filter["cidr"] = prefix
+		filter["cidr"] = prefix.String()
 	case strings.EqualFold(subtype, string(oam.Organization)):
 		filter["unique_id"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.Person)):

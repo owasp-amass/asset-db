@@ -255,98 +255,6 @@ type regEntry struct {
 // contentRegistry: per-table filters you can search on.
 // Feel free to expand with more columns if needed.
 var contentRegistry = map[string]regEntry{
-	"fqdn": {
-		keys: []string{"fqdn"},
-		colMap: map[string]string{
-			"fqdn": "lower(a.fqdn)",
-		},
-	},
-	"ipaddress": {
-		keys: []string{"ip_address", "ip_version"},
-		colMap: map[string]string{
-			"ip_address": "a.ip_address",
-			"ip_version": "a.ip_version",
-		},
-	},
-	"domainrecord": {
-		keys: []string{"domain", "record_name", "extension", "punycode"},
-		colMap: map[string]string{
-			"domain":      "lower(a.domain)",
-			"record_name": "lower(a.record_name)",
-			"extension":   "a.extension",
-			"punycode":    "a.punycode",
-		},
-	},
-	"url": {
-		keys: []string{"raw_url", "host", "url_path", "port", "scheme"},
-		colMap: map[string]string{
-			"raw_url":  "a.raw_url",
-			"host":     "a.host",
-			"url_path": "a.url_path",
-			"port":     "a.port",
-			"scheme":   "a.scheme",
-		},
-	},
-	"organization": {
-		keys: []string{"unique_id", "legal_name", "org_name"},
-		colMap: map[string]string{
-			"unique_id":  "a.unique_id",
-			"legal_name": "a.legal_name",
-			"org_name":   "a.org_name",
-		},
-	},
-	"autonomoussystem": {
-		keys: []string{"asn"},
-		colMap: map[string]string{
-			"asn": "a.asn",
-		},
-	},
-	"autnumrecord": {
-		keys: []string{"asn", "handle", "record_name"},
-		colMap: map[string]string{
-			"asn":         "a.asn",
-			"handle":      "a.handle",
-			"record_name": "a.record_name",
-		},
-	},
-	"ipnetrecord": {
-		keys: []string{"record_cidr", "handle", "ip_version", "country"},
-		colMap: map[string]string{
-			"record_cidr": "a.record_cidr",
-			"handle":      "a.handle",
-			"ip_version":  "a.ip_version",
-			"country":     "a.country",
-		},
-	},
-	"netblock": {
-		keys: []string{"netblock_cidr", "ip_version"},
-		colMap: map[string]string{
-			"netblock_cidr": "a.netblock_cidr",
-			"ip_version":    "a.ip_version",
-		},
-	},
-	"file": {
-		keys: []string{"file_url", "basename", "file_type"},
-		colMap: map[string]string{
-			"file_url":  "a.file_url",
-			"basename":  "a.basename",
-			"file_type": "a.file_type",
-		},
-	},
-	"service": {
-		keys: []string{"unique_id", "service_type"},
-		colMap: map[string]string{
-			"unique_id":    "a.unique_id",
-			"service_type": "a.service_type",
-		},
-	},
-	"identifier": {
-		keys: []string{"unique_id", "id_type"},
-		colMap: map[string]string{
-			"unique_id": "a.unique_id",
-			"id_type":   "a.id_type",
-		},
-	},
 	"account": {
 		keys: []string{"unique_id", "account_type", "username", "account_number"},
 		colMap: map[string]string{
@@ -356,62 +264,201 @@ var contentRegistry = map[string]regEntry{
 			"account_number": "a.account_number",
 		},
 	},
+	"autnumrecord": {
+		keys: []string{"number", "handle", "name", "whois_server"},
+		colMap: map[string]string{
+			"number":       "a.asn",
+			"handle":       "a.handle",
+			"name":         "a.record_name",
+			"whois_server": "a.whois_server",
+		},
+	},
+	"autonomoussystem": {
+		keys: []string{"number"},
+		colMap: map[string]string{
+			"number": "a.asn",
+		},
+	},
+	"contactrecord": {
+		keys: []string{"discovered_at"},
+		colMap: map[string]string{
+			"discovered_at": "a.discovered_at",
+		},
+	},
+	"domainrecord": {
+		keys: []string{"domain", "name", "extension", "punycode", "raw", "id", "whois_server"},
+		colMap: map[string]string{
+			"domain":       "lower(a.domain)",
+			"name":         "lower(a.record_name)",
+			"extension":    "a.extension",
+			"punycode":     "a.punycode",
+			"raw":          "a.raw_record",
+			"id":           "a.unique_id",
+			"whois_server": "a.whois_server",
+		},
+	},
+	"file": {
+		keys: []string{"url", "name", "type"},
+		colMap: map[string]string{
+			"url":  "a.file_url",
+			"name": "a.basename",
+			"type": "a.file_type",
+		},
+	},
+	"fqdn": {
+		keys: []string{"name"},
+		colMap: map[string]string{
+			"name": "lower(a.fqdn)",
+		},
+	},
 	"fundstransfer": {
-		keys: []string{"unique_id", "reference_number", "currency", "transfer_method"},
+		keys: []string{"unique_id", "amount", "reference_number", "currency", "transfer_method", "exchange_rate"},
 		colMap: map[string]string{
 			"unique_id":        "a.unique_id",
+			"amount":           "a.amount",
 			"reference_number": "a.reference_number",
 			"currency":         "a.currency",
 			"transfer_method":  "a.transfer_method",
+			"exchange_rate":    "a.exchange_rate",
+		},
+	},
+	"identifier": {
+		keys: []string{"id", "id_type"},
+		colMap: map[string]string{
+			"id":      "a.unique_id",
+			"id_type": "a.id_type",
+		},
+	},
+	"ipaddress": {
+		keys: []string{"address", "type"},
+		colMap: map[string]string{
+			"address": "a.ip_address",
+			"type":    "a.ip_version",
+		},
+	},
+	"ipnetrecord": {
+		keys: []string{
+			"cidr", "handle", "name", "type", "start_address",
+			"end_address", "whois_server", "method", "country", "parent_handle",
+		},
+		colMap: map[string]string{
+			"cidr":          "a.record_cidr",
+			"handle":        "a.handle",
+			"name":          "a.record_name",
+			"type":          "a.ip_version",
+			"start_address": "a.start_address",
+			"end_address":   "a.end_address",
+			"whois_server":  "a.whois_server",
+			"method":        "a.method",
+			"country":       "a.country",
+			"parent_handle": "a.parent_handle",
 		},
 	},
 	"location": {
-		keys: []string{"street_address", "city", "country", "postal_code"},
+		keys: []string{
+			"address", "building", "building_number", "province",
+			"street_name", "unit", "locality", "city", "country", "postal_code",
+		},
 		colMap: map[string]string{
-			"street_address": "a.street_address",
-			"city":           "a.city",
-			"country":        "a.country",
-			"postal_code":    "a.postal_code",
+			"address":         "a.street_address",
+			"building":        "a.building",
+			"building_number": "a.building_number",
+			"province":        "a.province",
+			"street_name":     "a.street_name",
+			"unit":            "a.unit",
+			"locality":        "a.locality",
+			"city":            "a.city",
+			"country":         "a.country",
+			"postal_code":     "a.postal_code",
+		},
+	},
+	"netblock": {
+		keys: []string{"cidr", "type"},
+		colMap: map[string]string{
+			"cidr": "a.netblock_cidr",
+			"type": "a.ip_version",
+		},
+	},
+	"organization": {
+		keys: []string{"unique_id", "legal_name", "name", "jurisdiction", "registration_id"},
+		colMap: map[string]string{
+			"unique_id":       "a.unique_id",
+			"legal_name":      "a.legal_name",
+			"name":            "a.org_name",
+			"jurisdiction":    "a.jurisdiction",
+			"registration_id": "a.registration_id",
 		},
 	},
 	"person": {
-		keys: []string{"unique_id", "full_name", "first_name", "family_name"},
+		keys: []string{"unique_id", "full_name", "first_name", "family_name", "middle_name"},
 		colMap: map[string]string{
 			"unique_id":   "a.unique_id",
 			"full_name":   "a.full_name",
 			"first_name":  "a.first_name",
 			"family_name": "a.family_name",
+			"middle_name": "a.middle_name",
 		},
 	},
 	"phone": {
-		keys: []string{"e164", "raw_number", "country_abbrev"},
+		keys: []string{"type", "e164", "raw", "country_code", "country_abbrev"},
 		colMap: map[string]string{
+			"type":           "a.number_type",
 			"e164":           "a.e164",
-			"raw_number":     "a.raw_number",
+			"raw":            "a.raw_number",
+			"country_code":   "a.country_code",
 			"country_abbrev": "a.country_abbrev",
 		},
 	},
 	"product": {
-		keys: []string{"unique_id", "product_name", "product_type", "category"},
+		keys: []string{"unique_id", "product_name", "product_type", "category", "description", "country_of_origin"},
 		colMap: map[string]string{
-			"unique_id":    "a.unique_id",
-			"product_name": "a.product_name",
-			"product_type": "a.product_type",
-			"category":     "a.category",
+			"unique_id":         "a.unique_id",
+			"product_name":      "a.product_name",
+			"product_type":      "a.product_type",
+			"category":          "a.category",
+			"description":       "a.product_description",
+			"country_of_origin": "a.country_of_origin",
 		},
 	},
 	"productrelease": {
-		keys: []string{"release_name"},
+		keys: []string{"name"},
 		colMap: map[string]string{
-			"release_name": "a.release_name",
+			"name": "a.release_name",
+		},
+	},
+	"service": {
+		keys: []string{"unique_id", "service_type", "output", "output_length"},
+		colMap: map[string]string{
+			"unique_id":     "a.unique_id",
+			"service_type":  "a.service_type",
+			"output":        "a.output_data",
+			"output_length": "a.output_length",
 		},
 	},
 	"tlscertificate": {
-		keys: []string{"serial_number", "subject_common_name", "issuer_common_name"},
+		keys: []string{
+			"version", "serial_number", "subject_common_name", "issuer_common_name",
+			"signature_algorithm", "public_key_algorithm", "subject_key_id", "authority_key_id",
+		},
 		colMap: map[string]string{
-			"serial_number":       "a.serial_number",
-			"subject_common_name": "a.subject_common_name",
-			"issuer_common_name":  "a.issuer_common_name",
+			"version":              "a.tls_version",
+			"serial_number":        "a.serial_number",
+			"subject_common_name":  "a.subject_common_name",
+			"issuer_common_name":   "a.issuer_common_name",
+			"signature_algorithm":  "a.signature_algorithm",
+			"public_key_algorithm": "a.public_key_algorithm",
+			"subject_key_id":       "a.subject_key_id",
+			"authority_key_id":     "a.authority_key_id",
+		},
+	},
+	"url": {
+		keys: []string{"url", "host", "path", "port", "scheme"},
+		colMap: map[string]string{
+			"url":    "a.raw_url",
+			"host":   "a.host",
+			"path":   "a.url_path",
+			"port":   "a.port",
+			"scheme": "a.scheme",
 		},
 	},
 }

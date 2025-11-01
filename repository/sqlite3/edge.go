@@ -202,7 +202,7 @@ func convertSQLiteEdgeToOAMEdge(e *Edge) (*types.Edge, error) {
 	}
 
 	var rel oam.Relation
-	switch e.EType {
+	switch strings.ToLower(e.EType) {
 	case strings.ToLower(string(oam.BasicDNSRelation)):
 		var r oamdns.BasicDNSRelation
 		if err := json.Unmarshal(e.Content, &r); err != nil {
@@ -314,13 +314,9 @@ func (r *SqliteRepository) DeleteEdge(ctx context.Context, id string) error {
 // since limits by updated_at >= since (zero time => no limit).
 // limit <= 0 => no explicit LIMIT.
 func (r *SqliteRepository) findEdgesForEntity(ctx context.Context, entityID int64, dir, etype string, since time.Time, limit int) ([]EdgeWithTypes, error) {
-	where := []string{}
-	args := []any{}
-
 	base := `
-SELECT e.edge_id, te.name,
-       e.from_entity_id, e.to_entity_id, e.content, e.created_at, e.updated_at,
-       tf.name AS from_type, tt.name AS to_type
+SELECT e.edge_id, te.name, e.from_entity_id, e.to_entity_id, e.content, 
+	e.created_at, e.updated_at, tf.name AS from_type, tt.name AS to_type
 FROM edge e
 JOIN edge_type_lu te ON te.id = e.etype_id
 JOIN entity a ON a.entity_id = e.from_entity_id
@@ -328,8 +324,9 @@ JOIN entity b ON b.entity_id = e.to_entity_id
 JOIN entity_type_lu tf ON tf.id = a.type_id
 JOIN entity_type_lu tt ON tt.id = b.type_id
 `
-
+	var args []any
 	var name string
+	var where []string
 	switch strings.ToLower(strings.TrimSpace(dir)) {
 	case "out":
 		name = "edge.outgoing"
@@ -347,7 +344,7 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	if etype = strings.TrimSpace(etype); etype != "" {
 		name += ".etype"
 		where = append(where, "te.name = ?")
-		args = append(args, etype)
+		args = append(args, strings.ToLower(etype))
 	}
 	if !since.IsZero() {
 		name += ".since"

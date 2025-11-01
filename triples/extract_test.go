@@ -92,7 +92,7 @@ func TestExtract(t *testing.T) {
 	assert.Nil(t, results, "Results should be nil when an error occurs")
 
 	// add a new asset and relation to the database
-	nentity, err := db.CreateAsset(ctx, oamnet.IPAddress{Address: netip.MustParseAddr("192.168.1.2")})
+	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr("192.168.1.2"), Type: "IPv4"})
 	assert.NoError(t, err, "Failed to create IP address asset")
 	assert.NotNil(t, nentity, "IP address entity should not be nil")
 	edge, err = db.CreateEdge(ctx, &dbt.Edge{
@@ -139,7 +139,7 @@ func TestPredAndObject(t *testing.T) {
 	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
-	ipentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	ipentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr), Type: "IPv4"})
 	assert.NoError(t, err, "Failed to create the fqdn asset")
 	assert.NotNil(t, ipentity, "The entity should not be nil")
 	edge1, err := db.CreateEdge(ctx, &dbt.Edge{
@@ -220,7 +220,7 @@ func TestFindFirstSubject(t *testing.T) {
 	ipstr := "192.168.1.2"
 	ctx := context.Background()
 	// add a new asset to the database
-	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr), Type: "IPv4"})
 	assert.NoError(t, err, "Failed to create IP address asset")
 	assert.NotNil(t, nentity, "IP address entity should not be nil")
 
@@ -330,7 +330,7 @@ func TestEdgePropsMatch(t *testing.T) {
 	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create FQDN asset")
 	assert.NotNil(t, fentity, "FQDN entity should not be nil")
-	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(ipstr), Type: "IPv4"})
 	assert.NoError(t, err, "Failed to create subdomain asset")
 	assert.NotNil(t, nentity, "Subdomain entity should not be nil")
 	edge1, err := db.CreateEdge(ctx, &dbt.Edge{

@@ -22,9 +22,9 @@ import (
 const upsertDomainRecordText = `
 INSERT INTO domainrecord(domain, unique_id, record_name, raw_record, record_status, 
 punycode, extension, created_date, updated_date, expiration_date, whois_server)
-VALUES (:domain_text, :unique_id, :record_name, :raw_record, :record_status, :punycode, 
+VALUES (lower(:domain_text), :unique_id, :record_name, :raw_record, :record_status, :punycode, 
 :extension, :created_date, :updated_date, :expiration_date, :whois_server)
-ON CONFLICT(:unique_id) DO UPDATE SET
+ON CONFLICT(domain) DO UPDATE SET
 	record_name   = COALESCE(excluded.record_name,   domainrecord.record_name),
     raw_record    = COALESCE(excluded.raw_record,    domainrecord.raw_record),
     record_status = COALESCE(excluded.record_status, domainrecord.record_status),
@@ -36,11 +36,11 @@ ON CONFLICT(:unique_id) DO UPDATE SET
     whois_server  = COALESCE(excluded.whois_server,  domainrecord.whois_server),
     updated_at    = CURRENT_TIMESTAMP`
 
-// Param: :unique_id
+// Param: :domain_text
 const selectEntityIDByDomainRecordText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
-  AND display_value = :unique_id
+  AND display_value = :domain_text
 LIMIT 1`
 
 // Param: :row_id
@@ -99,7 +99,7 @@ func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.Dom
 		Ctx:     ctx,
 		Name:    "asset.domainrecord.entity_id_by_domain",
 		SQLText: selectEntityIDByDomainRecordText,
-		Args:    []any{sql.Named("unique_id", a.ID)},
+		Args:    []any{sql.Named("domain_text", a.Domain)},
 		Result:  ch,
 	})
 

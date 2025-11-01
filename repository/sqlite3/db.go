@@ -126,7 +126,7 @@ func sqliteMemoryDatabase() (*SqliteRepository, error) {
 }
 
 func (sql *SqliteRepository) Prepare(ctx context.Context) error {
-	wworker, err := newWriteWorker(sql.DB, 100, 100*time.Millisecond)
+	wworker, err := newWriteWorker(sql.DB, 20, 50*time.Millisecond)
 	if err != nil {
 		return err
 	}

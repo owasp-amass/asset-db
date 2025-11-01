@@ -47,7 +47,7 @@ func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddr
 		SQLText: upsertIPAddressText,
 		Args: []any{
 			sql.Named("ip_version", a.Type),
-			sql.Named("ip_address", a.Address),
+			sql.Named("ip_address_text", a.Address.String()),
 		},
 		Result: done,
 	})

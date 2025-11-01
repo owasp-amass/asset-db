@@ -13,6 +13,7 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -22,7 +23,7 @@ import (
 // Params: :ttype_name, :property_name, :property_value, :content(JSON)
 const upsertTagText = `
 INSERT INTO tag(ttype_id, property_name, property_value, content)
-VALUES ((SELECT id FROM tag_type_lu WHERE name = :ttype_name LIMIT 1), 
+VALUES ((SELECT id FROM tag_type_lu WHERE name = lower(:ttype_name) LIMIT 1), 
 	:property_name, :property_value, coalesce(:content, '{}'))
 ON CONFLICT(ttype_id, property_name, property_value) DO UPDATE SET
     content = CASE
@@ -36,7 +37,7 @@ ON CONFLICT(ttype_id, property_name, property_value) DO UPDATE SET
 const selectTagIDByTagText = `
 SELECT tag_id FROM tag 
 JOIN tag_type_lu tt ON tt.id = tag.ttype_id
-WHERE tt.name = :ttype_name AND tag.property_name = :property_name 
+WHERE tt.name = lower(:ttype_name) AND tag.property_name = :property_name 
   AND coalesce(tag.property_value,'∅') = coalesce(:property_value,'∅')
 LIMIT 1`
 
@@ -186,6 +187,12 @@ func convertSQLitePropertyToOAMProperty(ta *TagAssignment) (oam.Property, error)
 			return nil, err
 		}
 		p = &vp
+	case strings.ToLower(string(types.CachePropertyType)):
+		var cp types.CacheProperty
+		if err := json.Unmarshal(ta.Tag.Meta, &cp); err != nil {
+			return nil, err
+		}
+		p = &cp
 	default:
 		return nil, fmt.Errorf("unknown property type: %s", ta.Tag.Namespace)
 	}

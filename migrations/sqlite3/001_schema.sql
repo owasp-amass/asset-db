@@ -40,7 +40,7 @@ INSERT OR IGNORE INTO edge_type_lu(name) VALUES
  ('basicdnsrelation'),('portrelation'),('prefdnsrelation'),('simplerelation'),('srvdnsrelation');
 
 INSERT OR IGNORE INTO tag_type_lu(name) VALUES
- ('dnsrecordproperty'),('simpleproperty'),('sourceproperty'),('vulnproperty');
+ ('dnsrecordproperty'),('simpleproperty'),('sourceproperty'),('vulnproperty'),('cacheproperty');
 
 -- -----------------------------
 -- Core entity & mapping
@@ -297,10 +297,10 @@ CREATE TABLE IF NOT EXISTS domainrecord (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  unique_id  TEXT NOT NULL UNIQUE,
+  unique_id  TEXT NOT NULL,
   raw_record TEXT,
   record_name TEXT NOT NULL,
-  domain TEXT NOT NULL,
+  domain TEXT NOT NULL UNIQUE,
   domain_norm TEXT GENERATED ALWAYS AS (lower(domain)) STORED,
   record_status TEXT,                -- JSON array encoded (optional)
   punycode TEXT,
@@ -319,12 +319,12 @@ CREATE TRIGGER IF NOT EXISTS trg_domainrecord_ai
 AFTER INSERT ON domainrecord
 BEGIN
   INSERT INTO entity(type_id, display_value, attrs)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), lower(NEW.unique_id), '{}')
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), NEW.domain_norm, '{}')
   ON CONFLICT(type_id, display_value) DO UPDATE SET updated_at=CURRENT_TIMESTAMP;
 
   INSERT INTO entity_ref(entity_id, table_name, row_id)
   VALUES (
-    (SELECT entity_id FROM entity WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='domainrecord') AND display_value=lower(NEW.domain)),
+    (SELECT entity_id FROM entity WHERE type_id=(SELECT id FROM entity_type_lu WHERE name='domainrecord') AND display_value=NEW.domain_norm),
     'domainrecord', NEW.id
   )
   ON CONFLICT(entity_id, table_name, row_id) DO NOTHING;
@@ -336,7 +336,7 @@ CREATE TRIGGER IF NOT EXISTS trg_domainrecord_au
 AFTER UPDATE ON domainrecord
 BEGIN
   INSERT INTO entity(type_id, display_value, attrs)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), lower(NEW.unique_id), '{}')
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='domainrecord'), NEW.domain_norm, '{}')
   ON CONFLICT(type_id, display_value) DO UPDATE SET updated_at=CURRENT_TIMESTAMP;
 END;
 -- +migrate StatementEnd
