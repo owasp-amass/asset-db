@@ -25,8 +25,8 @@ import (
 // Params: :etype_name, :label, :from_entity_id, :to_entity_id, :content(JSON)
 const ensureEdgeText = `
 INSERT INTO edge(etype_id, label, from_entity_id, to_entity_id, content)
-VALUES (SELECT id FROM edge_type_lu WHERE name = :etype_name LIMIT 1), 
-	lower(:label), :from_entity_id, :to_entity_id, coalesce(:content, '{}')
+VALUES ((SELECT id FROM edge_type_lu WHERE name = lower(:etype_name) LIMIT 1), 
+	lower(:label), :from_entity_id, :to_entity_id, coalesce(:content, '{}'))
 ON CONFLICT(etype_id, from_entity_id, to_entity_id, label) DO UPDATE SET
     content = CASE
         WHEN json_patch(edge.content, coalesce(excluded.content, '{}')) IS NOT edge.content
@@ -40,7 +40,7 @@ const selectEdgeIDBetweenText = `
 SELECT e.edge_id
 FROM edge e
 JOIN edge_type_lu t ON t.id = e.etype_id
-WHERE t.name = :etype_name
+WHERE t.name = lower(:etype_name)
   AND e.label = lower(:label) 
   AND e.from_entity_id = :from_entity_id
   AND e.to_entity_id = :to_entity_id`

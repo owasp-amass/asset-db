@@ -66,12 +66,10 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err = db.ExecContext(ctx, `
-		PRAGMA temp_store = MEMORY;
-		PRAGMA mmap_size = 268435456;        -- 256 MiB map if available
-		PRAGMA page_size = 4096;
-		PRAGMA cache_size = -1048576; 		 -- ~1 GiB if RAM allows
-	`)
+	_, _ = db.ExecContext(ctx, `PRAGMA temp_store = MEMORY`)
+	_, _ = db.ExecContext(ctx, `PRAGMA mmap_size = 268435456`) // 256 MiB map if available
+	_, _ = db.ExecContext(ctx, `PRAGMA page_size = 4096`)
+	_, _ = db.ExecContext(ctx, `PRAGMA cache_size = -262144`) // ~256 MiB cache (negative = KiB units)
 
 	rdsn := dsn + "?mode=ro&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL"
 	dbro, err := sql.Open("sqlite3", rdsn)
@@ -92,8 +90,8 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 
 // sqliteMemoryDatabase creates a new in-memory SQLite database connection.
 func sqliteMemoryDatabase() (*SqliteRepository, error) {
-	name := fmt.Sprintf("amassmem%d", rand.Intn(1000))
-	dsn := name + "?mode=memory&cache=shared&_foreign_keys=on&_busy_timeout=5000&_synchronous=OFF&_journal_mode=MEMORY&_temp_store=MEMORY"
+	name := fmt.Sprintf("file:amassmem%d", rand.Intn(1000))
+	dsn := name + `?mode=memory&cache=shared&_foreign_keys=on&_busy_timeout=5000&_synchronous=OFF&_journal_mode=MEMORY&_temp_store=MEMORY`
 
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
@@ -107,13 +105,11 @@ func sqliteMemoryDatabase() (*SqliteRepository, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err = db.ExecContext(ctx, `
-		PRAGMA mmap_size = 268435456;    -- 256 MiB map if available
-		PRAGMA page_size = 4096;
-		PRAGMA cache_size = -80000;      -- ~80 MiB cache (negative = KiB units)
-	`)
+	_, _ = db.ExecContext(ctx, `PRAGMA mmap_size = 268435456`) // 256 MiB map if available
+	_, _ = db.ExecContext(ctx, `PRAGMA page_size = 4096`)
+	_, _ = db.ExecContext(ctx, `PRAGMA cache_size = -80000`) // ~80 MiB cache (negative = KiB units)
 
-	dbro, err := sql.Open("sqlite3", name+"?mode=memory&cache=shared&immutable=1")
+	dbro, err := sql.Open("sqlite3", name+`?mode=memory&cache=shared&immutable=1`)
 	if err != nil {
 		return nil, err
 	}
