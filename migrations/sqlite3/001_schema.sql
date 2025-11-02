@@ -40,7 +40,7 @@ INSERT OR IGNORE INTO edge_type_lu(name) VALUES
  ('basicdnsrelation'),('portrelation'),('prefdnsrelation'),('simplerelation'),('srvdnsrelation');
 
 INSERT OR IGNORE INTO tag_type_lu(name) VALUES
- ('dnsrecordproperty'),('simpleproperty'),('sourceproperty'),('vulnproperty'),('cacheproperty');
+ ('dnsrecordproperty'),('simpleproperty'),('sourceproperty'),('vulnproperty');
 
 -- -----------------------------
 -- Core entity & mapping

@@ -271,6 +271,10 @@ func (r *SqliteRepository) IncomingEdges(ctx context.Context, entity *types.Enti
 
 		out = append(out, edge)
 	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no incoming edges found for entity %s", entity.ID)
+	}
 	return out, nil
 }
 
@@ -297,6 +301,10 @@ func (r *SqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Enti
 		}
 
 		out = append(out, edge)
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no outgoing edges found for entity %s", entity.ID)
 	}
 	return out, nil
 }

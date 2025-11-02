@@ -13,7 +13,6 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -187,12 +186,6 @@ func convertSQLitePropertyToOAMProperty(ta *TagAssignment) (oam.Property, error)
 			return nil, err
 		}
 		p = &vp
-	case strings.ToLower(string(types.CachePropertyType)):
-		var cp types.CacheProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &cp); err != nil {
-			return nil, err
-		}
-		p = &cp
 	default:
 		return nil, fmt.Errorf("unknown property type: %s", ta.Tag.Namespace)
 	}
