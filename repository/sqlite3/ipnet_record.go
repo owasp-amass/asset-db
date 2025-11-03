@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -88,7 +89,7 @@ func (r *SqliteRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IPNe
 			sql.Named("ip_version", a.Type),
 			sql.Named("handle", a.Handle),
 			sql.Named("method", a.Method),
-			sql.Named("record_status", a.Status),
+			sql.Named("record_status", strings.Join(a.Status, ",")),
 			sql.Named("created_date", a.CreatedDate),
 			sql.Named("updated_date", a.UpdatedDate),
 			sql.Named("whois_server", a.WhoisServer),
@@ -164,9 +165,9 @@ func (r *SqliteRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, row
 		method = *a.Method
 	}
 
-	var rstatus string
+	var rstatus []string
 	if a.RecordStatus != nil {
-		rstatus = *a.RecordStatus
+		rstatus = strings.Split(*a.RecordStatus, ",")
 	}
 
 	var phandle string
@@ -231,7 +232,7 @@ func (r *SqliteRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, row
 			WhoisServer:  whois,
 			CreatedDate:  cdate,
 			UpdatedDate:  udate,
-			Status:       []string{rstatus},
+			Status:       rstatus,
 		},
 	}, nil
 }

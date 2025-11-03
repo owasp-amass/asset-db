@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -90,10 +91,10 @@ func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.
 		Args: []any{
 			sql.Named("is_ca", a.IsCA),
 			sql.Named("tls_version", a.Version),
-			sql.Named("key_usage", a.KeyUsage),
+			sql.Named("key_usage", strings.Join(a.KeyUsage, ",")),
 			sql.Named("not_after", a.NotAfter),
 			sql.Named("not_before", a.NotBefore),
-			sql.Named("ext_key_usage", a.ExtKeyUsage),
+			sql.Named("ext_key_usage", strings.Join(a.ExtKeyUsage, ",")),
 			sql.Named("serial_number", a.SerialNumber),
 			sql.Named("subject_key_id", a.SubjectKeyID),
 			sql.Named("authority_key_id", a.AuthorityKeyID),
@@ -101,7 +102,7 @@ func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.
 			sql.Named("signature_algorithm", a.SignatureAlgorithm),
 			sql.Named("subject_common_name", a.SubjectCommonName),
 			sql.Named("public_key_algorithm", a.PublicKeyAlgorithm),
-			sql.Named("crl_distribution_points", a.CRLDistributionPoints),
+			sql.Named("crl_distribution_points", strings.Join(a.CRLDistributionPoints, ",")),
 		},
 		Result: done,
 	})
@@ -185,17 +186,17 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 		notbefore = *nb
 	}
 
-	var keyusage string
+	var keyusage []string
 	if a.KeyUsage != nil {
-		keyusage = *a.KeyUsage
+		keyusage = strings.Split(*a.KeyUsage, ",")
 	}
 
-	var extkey string
+	var extkey []string
 	if a.ExtKeyUsage != nil {
-		extkey = *a.ExtKeyUsage
+		extkey = strings.Split(*a.ExtKeyUsage, ",")
 	}
 
-	var subkeyid, authkeyid, sigalg, pubkeyalg, crldp string
+	var subkeyid, authkeyid, sigalg, pubkeyalg string
 	if a.SubjectKeyID != nil {
 		subkeyid = *a.SubjectKeyID
 	}
@@ -208,8 +209,10 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 	if a.PublicKeyAlgorithm != nil {
 		pubkeyalg = *a.PublicKeyAlgorithm
 	}
+
+	var crldp []string
 	if a.CRLDistributionPoints != nil {
-		crldp = *a.CRLDistributionPoints
+		crldp = strings.Split(*a.CRLDistributionPoints, ",")
 	}
 
 	return &types.Entity{
@@ -223,12 +226,12 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 			IssuerCommonName:      iscommon,
 			NotBefore:             notbefore,
 			NotAfter:              notafter,
-			KeyUsage:              []string{keyusage},
-			ExtKeyUsage:           []string{extkey},
+			KeyUsage:              keyusage,
+			ExtKeyUsage:           extkey,
 			SignatureAlgorithm:    sigalg,
 			PublicKeyAlgorithm:    pubkeyalg,
 			IsCA:                  a.IsCA,
-			CRLDistributionPoints: []string{crldp},
+			CRLDistributionPoints: crldp,
 			SubjectKeyID:          subkeyid,
 			AuthorityKeyID:        authkeyid,
 		},

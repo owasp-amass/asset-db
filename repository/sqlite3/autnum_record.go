@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -19,15 +20,15 @@ import (
 // Params: :handle, :asn, :record_name, :record_status, :created_date, :updated_date, :whois_server
 const upsertAutnumRecordText = `
 INSERT INTO autnumrecord(handle, asn, record_name, record_status, created_date, updated_date, whois_server)
-    VALUES (:handle, :asn, :record_name, :record_status, :created_date, :updated_date, :whois_server)
-    ON CONFLICT(handle) DO UPDATE SET
-      asn           = COALESCE(excluded.asn,           autnumrecord.asn),
-      record_name   = COALESCE(excluded.record_name,   autnumrecord.record_name),
-      record_status = COALESCE(excluded.record_status, autnumrecord.record_status),
-      created_date  = COALESCE(excluded.created_date,  autnumrecord.created_date),
-      updated_date  = COALESCE(excluded.updated_date,  autnumrecord.updated_date),
-      whois_server  = COALESCE(excluded.whois_server,  autnumrecord.whois_server),
-      updated_at    = CURRENT_TIMESTAMP`
+VALUES (:handle, :asn, :record_name, :record_status, :created_date, :updated_date, :whois_server)
+ON CONFLICT(handle) DO UPDATE SET
+    asn           = COALESCE(excluded.asn,           autnumrecord.asn),
+    record_name   = COALESCE(excluded.record_name,   autnumrecord.record_name),
+    record_status = COALESCE(excluded.record_status, autnumrecord.record_status),
+    created_date  = COALESCE(excluded.created_date,  autnumrecord.created_date),
+    updated_date  = COALESCE(excluded.updated_date,  autnumrecord.updated_date),
+    whois_server  = COALESCE(excluded.whois_server,  autnumrecord.whois_server),
+    updated_at    = CURRENT_TIMESTAMP`
 
 // Param: :handle
 const selectEntityIDByAutnumText = `
@@ -66,7 +67,7 @@ func (r *SqliteRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.Aut
 			sql.Named("handle", a.Handle),
 			sql.Named("asn", a.Number),
 			sql.Named("record_name", a.Name),
-			sql.Named("record_status", a.Status),
+			sql.Named("record_status", strings.Join(a.Status, ",")),
 			sql.Named("created_date", a.CreatedDate),
 			sql.Named("updated_date", a.UpdatedDate),
 			sql.Named("whois_server", a.WhoisServer),
@@ -142,9 +143,9 @@ func (r *SqliteRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, ro
 		rname = *a.RecordName
 	}
 
-	var rstatus string
+	var rstatus []string
 	if a.RecordStatus != nil {
-		rstatus = *a.RecordStatus
+		rstatus = strings.Split(*a.RecordStatus, ",")
 	}
 
 	var whois string
@@ -163,7 +164,7 @@ func (r *SqliteRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, ro
 			WhoisServer: whois,
 			CreatedDate: cdate,
 			UpdatedDate: udate,
-			Status:      []string{rstatus},
+			Status:      rstatus,
 		},
 	}, nil
 }

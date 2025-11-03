@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -79,7 +80,7 @@ func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.Dom
 			sql.Named("unique_id", a.ID),
 			sql.Named("record_name", a.Name),
 			sql.Named("raw_record", a.Raw),
-			sql.Named("record_status", a.Status),
+			sql.Named("record_status", strings.Join(a.Status, ",")),
 			sql.Named("punycode", a.Punycode),
 			sql.Named("extension", a.Extension),
 			sql.Named("created_date", a.CreatedDate),
@@ -168,9 +169,9 @@ func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, ro
 		rawrec = *a.RawRecord
 	}
 
-	var rstatus string
+	var rstatus []string
 	if a.RecordStatus != nil {
-		rstatus = *a.RecordStatus
+		rstatus = strings.Split(*a.RecordStatus, ",")
 	}
 
 	var punny string
@@ -203,7 +204,7 @@ func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, ro
 			CreatedDate:    cdate,
 			UpdatedDate:    udate,
 			ExpirationDate: edate,
-			Status:         []string{rstatus},
+			Status:         rstatus,
 		},
 	}, nil
 }
