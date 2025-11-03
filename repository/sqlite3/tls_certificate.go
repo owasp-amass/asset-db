@@ -148,18 +148,18 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 	}
 
 	var a cert
-	var c, u, na, nb *string
-	var isca *int64
+	var isca *bool
 	var tlsver *int64
+	var c, u, na, nb *string
 	if err := result.Row.Scan(&a.ID, &c, &u, &isca, &tlsver, &a.KeyUsage, &na, &nb,
 		&a.ExtKeyUsage, &a.SerialNumber, &a.SubjectKeyID, &a.AuthorityKeyID, &a.IssuerCommonName,
 		&a.SignatureAlgorithm, &a.PublicKeyAlgorithm, &a.CRLDistributionPoints, &a.SubjectCommonName); err != nil {
 		return nil, err
 	}
 
+	var iscaBool bool
 	if isca != nil {
-		b := *isca != 0
-		a.IsCA = b
+		iscaBool = *isca
 	}
 
 	a.CreatedAt = parseTS(c)
@@ -230,7 +230,7 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 			ExtKeyUsage:           extkey,
 			SignatureAlgorithm:    sigalg,
 			PublicKeyAlgorithm:    pubkeyalg,
-			IsCA:                  a.IsCA,
+			IsCA:                  iscaBool,
 			CRLDistributionPoints: crldp,
 			SubjectKeyID:          subkeyid,
 			AuthorityKeyID:        authkeyid,
