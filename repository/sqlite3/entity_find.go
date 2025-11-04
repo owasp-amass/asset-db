@@ -125,6 +125,7 @@ func (r *SqliteRepository) findByContent(ctx context.Context, atype string, filt
 	if !ok {
 		return nil, fmt.Errorf("no content registry for table %q", table)
 	}
+
 	where, args, err := buildWhere(table, reg, filters)
 	if err != nil {
 		return nil, err
@@ -135,8 +136,8 @@ func (r *SqliteRepository) findByContent(ctx context.Context, atype string, filt
 	sb.WriteString(`
 SELECT e.entity_id FROM entity e
 JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ? 
-JOIN ` + table + ` a ON a.id = e.row_id
-`)
+JOIN ` + table + ` a ON a.id = e.row_id`)
+
 	args = append([]any{table}, args...) // prepend type/table to args
 	if where != "" {
 		sb.WriteString(" WHERE " + where + "\n")
@@ -147,7 +148,7 @@ JOIN ` + table + ` a ON a.id = e.row_id
 	}
 
 	q := sb.String()
-	key := "q.findByContent." + table + "." + strings.Join(reg.keys, ".") + fmt.Sprintf("limit%d", limit)
+	key := "q.findByContent." + table + "." + where + fmt.Sprintf("limit%d", limit)
 
 	ch := make(chan *rowsReadResult, 1)
 	r.rpool.Submit(&rowsReadJob{
@@ -167,6 +168,7 @@ JOIN ` + table + ` a ON a.id = e.row_id
 	var out []*types.Entity
 	for result.Rows.Next() {
 		var eid int64
+
 		if err := result.Rows.Scan(&eid); err != nil {
 			return nil, err
 		}
@@ -174,8 +176,10 @@ JOIN ` + table + ` a ON a.id = e.row_id
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, ent)
 	}
+
 	return out, result.Rows.Err()
 }
 
@@ -185,8 +189,9 @@ func buildWhere(table string, reg regEntry, filters types.ContentFilters) (strin
 	if len(filters) == 0 {
 		// No filters — allow full scan over that table via entity (but still ordered by updated_at).
 		// Usually caller should set a LIMIT in this case.
-		return "", nil, nil
+		return "", nil, errors.New("no filters provided")
 	}
+
 	// Validate keys and order them stably for deterministic SQL key (cache)
 	allowed := map[string]struct{}{}
 	for _, k := range reg.keys {
@@ -200,10 +205,12 @@ func buildWhere(table string, reg regEntry, filters types.ContentFilters) (strin
 		if _, ok := allowed[k]; !ok {
 			return "", nil, fmt.Errorf("unsupported filter %q for table %s (allowed: %v)", k, table, reg.keys)
 		}
+
 		col := reg.colMap[k]
 		if col == "" {
 			return "", nil, fmt.Errorf("no column mapping for filter %q on table %s", k, table)
 		}
+
 		// For lower(a.col) use normalized string value if possible
 		val := filters[k]
 		if strings.HasPrefix(col, "lower(") {
@@ -211,9 +218,11 @@ func buildWhere(table string, reg regEntry, filters types.ContentFilters) (strin
 				val = strings.ToLower(s)
 			}
 		}
+
 		parts = append(parts, col+" = ?")
 		args = append(args, val)
 	}
+
 	return strings.Join(parts, " AND "), args, nil
 }
 
