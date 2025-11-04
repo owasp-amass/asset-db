@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/asset-db/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/stretchr/testify/assert"
@@ -110,12 +110,12 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	assert.NotNil(t, ar, "Entity for the AutnumRecord should not be nil")
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, string(oam.AutnumRecord), after, types.ContentFilters{
+	_, err = db.FindOneEntityByContent(ctx, string(oam.AutnumRecord), after, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, string(oam.AutnumRecord), before, types.ContentFilters{
+	found, err := db.FindOneEntityByContent(ctx, string(oam.AutnumRecord), before, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the AutnumRecord")
@@ -124,6 +124,7 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	ar2, ok := found.Asset.(*oamreg.AutnumRecord)
 	assert.True(t, ok, "AutnumRecord found by content is not of type *oamreg.AutnumRecord")
 	assert.Equal(t, found.ID, ar.ID, "AutnumRecord found by content does not have matching IDs")
+	assert.Equal(t, ar2.Number, number, "AutnumRecord found by ID does not have matching number")
 	assert.Equal(t, ar2.Handle, handle, "AutnumRecord Handle found by content does not match")
 	assert.Equal(t, ar2.Name, recname, "AutnumRecord Name found by content does not match")
 	assert.Equal(t, ar2.WhoisServer, server, "AutnumRecord WhoisServer found by content does not match")
@@ -131,25 +132,25 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	assert.Equal(t, ar2.UpdatedDate, updated, "AutnumRecord UpdatedDate found by content does not match")
 	assert.Equal(t, ar2.Status, status, "AutnumRecord Status found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), before, types.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), before, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), before, types.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), before, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), time.Time{}, types.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), time.Time{}, dbt.ContentFilters{
 		"name": recname,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), time.Time{}, types.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), time.Time{}, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")

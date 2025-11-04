@@ -16,13 +16,13 @@ import (
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
-// Params: :domain_text, :unique_id, :record_name, :raw_record, :record_status, :punycode,
+// Params: :domain_text, :object_id, :record_name, :raw_record, :record_status, :punycode,
 //
 //	:extension, :created_date, :updated_date, :expiration_date, :whois_server
 const upsertDomainRecordText = `
-INSERT INTO domainrecord(domain, unique_id, record_name, raw_record, record_status, 
+INSERT INTO domainrecord(domain, object_id, record_name, raw_record, record_status, 
 punycode, extension, created_date, updated_date, expiration_date, whois_server)
-VALUES (lower(:domain_text), :unique_id, :record_name, :raw_record, :record_status, :punycode, 
+VALUES (lower(:domain_text), :object_id, :record_name, :raw_record, :record_status, :punycode, 
 :extension, :created_date, :updated_date, :expiration_date, :whois_server)
 ON CONFLICT(domain) DO UPDATE SET
 	record_name   = COALESCE(excluded.record_name,   domainrecord.record_name),
@@ -34,18 +34,19 @@ ON CONFLICT(domain) DO UPDATE SET
     updated_date  = COALESCE(excluded.updated_date,  domainrecord.updated_date),
     expiration_date = COALESCE(excluded.expiration_date, domainrecord.expiration_date),
     whois_server  = COALESCE(excluded.whois_server,  domainrecord.whois_server),
+	object_id	  = COALESCE(excluded.object_id, domainrecord.object_id),
     updated_at    = CURRENT_TIMESTAMP`
 
 // Param: :domain_text
 const selectEntityIDByDomainRecordText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
-  AND natural_key = :domain_text
+  AND natural_key = lower(:domain_text)
 LIMIT 1`
 
 // Param: :row_id
 const selectDomainRecordByID = `
-SELECT id, created_at, updated_at, unique_id, raw_record, record_name, domain, 
+SELECT id, created_at, updated_at, object_id, raw_record, record_name, domain, 
 record_status, punycode, extension, created_date, updated_date, expiration_date, whois_server 
 FROM domainrecord
 WHERE id = :row_id
@@ -59,7 +60,7 @@ func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.Dom
 		SQLText: upsertDomainRecordText,
 		Args: []any{
 			sql.Named("domain_text", a.Domain),
-			sql.Named("unique_id", a.ID),
+			sql.Named("object_id", a.ID),
 			sql.Named("record_name", a.Name),
 			sql.Named("raw_record", a.Raw),
 			sql.Named("record_status", strings.Join(a.Status, ",")),

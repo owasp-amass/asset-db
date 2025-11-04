@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/asset-db/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
 	"github.com/stretchr/testify/assert"
@@ -101,12 +101,12 @@ func TestFindEntitiesByContentForAccount(t *testing.T) {
 	assert.NotNil(t, acc, "Entity for the account should not be nil")
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, string(oam.Account), after, types.ContentFilters{
+	_, err = db.FindOneEntityByContent(ctx, string(oam.Account), after, dbt.ContentFilters{
 		"username": username,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, string(oam.Account), before, types.ContentFilters{
+	found, err := db.FindOneEntityByContent(ctx, string(oam.Account), before, dbt.ContentFilters{
 		"username": username,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the account")
@@ -122,19 +122,19 @@ func TestFindEntitiesByContentForAccount(t *testing.T) {
 	assert.Equal(t, acc2.Balance, balance, "Account Balance found by content for the account does not match")
 	assert.Equal(t, acc2.Active, active, "Account Active found by content for the account does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, string(oam.Account), before, types.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, string(oam.Account), before, dbt.ContentFilters{
 		"unique_id": uid,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the account")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the account")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.Account), before, types.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, string(oam.Account), before, dbt.ContentFilters{
 		"account_type": string(atype),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the account")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the account")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.Account), time.Time{}, types.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, string(oam.Account), time.Time{}, dbt.ContentFilters{
 		"account_number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the account")

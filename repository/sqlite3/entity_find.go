@@ -6,7 +6,6 @@ package sqlite3
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"maps"
@@ -44,14 +43,16 @@ func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype stri
 	if err != nil {
 		return nil, err
 	}
-
+	if len(ents) == 0 {
+		return nil, errors.New("zero entities found")
+	}
 	if since.IsZero() {
 		return ents, nil
 	}
 
 	var filtered []*types.Entity
 	for _, e := range ents {
-		if e.LastSeen.After(since) {
+		if !e.LastSeen.Before(since) {
 			filtered = append(filtered, e)
 		}
 	}
@@ -66,7 +67,10 @@ func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype str
 	if err != nil {
 		return nil, err
 	}
-	if ent.LastSeen.Before(since) {
+	if ent == nil {
+		return nil, errors.New("entity not found")
+	}
+	if !since.IsZero() && ent.LastSeen.Before(since) {
 		return nil, errors.New("entity not found")
 	}
 	return ent, nil
@@ -97,23 +101,23 @@ func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.Ass
 // asset type, and returns Entity+Asset. Supports multiple matches.
 
 // findOneByContent returns exactly one (first by updated_at desc)
-func (r *SqliteRepository) findOneByContent(ctx context.Context, assetType string, filters types.ContentFilters) (*types.Entity, error) {
-	ents, err := r.findByContent(ctx, assetType, filters, 1)
+func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, filters types.ContentFilters) (*types.Entity, error) {
+	ents, err := r.findByContent(ctx, atype, filters, 1)
 	if err != nil {
 		return nil, err
 	}
 	if len(ents) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, errors.New("zero entities found")
 	}
 	return ents[0], nil
 }
 
 // findByContent finds entities for asset type with given filters (on the asset table).
 // limit <= 0 => no explicit LIMIT.
-func (r *SqliteRepository) findByContent(ctx context.Context, assetType string, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
-	table := normalizeType(assetType)
+func (r *SqliteRepository) findByContent(ctx context.Context, atype string, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
+	table := normalizeType(atype)
 	if table == "" {
-		return nil, fmt.Errorf("unknown asset type %q", assetType)
+		return nil, fmt.Errorf("unknown asset type %q", atype)
 	}
 
 	// Normalize/validate filters against registry for that table.
@@ -132,11 +136,10 @@ func (r *SqliteRepository) findByContent(ctx context.Context, assetType string, 
 SELECT e.entity_id FROM entity e
 JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ? 
 JOIN ` + table + ` a ON a.id = e.row_id
-WHERE e.table_name = ?
 `)
-	args = append([]any{table, table}, args...) // prepend type/table to args
+	args = append([]any{table}, args...) // prepend type/table to args
 	if where != "" {
-		sb.WriteString("AND " + where + "\n")
+		sb.WriteString(" WHERE " + where + "\n")
 	}
 	sb.WriteString("ORDER BY e.updated_at DESC")
 	if limit > 0 {
@@ -176,13 +179,50 @@ WHERE e.table_name = ?
 	return out, result.Rows.Err()
 }
 
+// buildWhere validates the provided filters and builds "col = ?" AND ... with args.
+// It honors case-insensitive matching for columns that already use lower() in colMap.
+func buildWhere(table string, reg regEntry, filters types.ContentFilters) (string, []any, error) {
+	if len(filters) == 0 {
+		// No filters — allow full scan over that table via entity (but still ordered by updated_at).
+		// Usually caller should set a LIMIT in this case.
+		return "", nil, nil
+	}
+	// Validate keys and order them stably for deterministic SQL key (cache)
+	allowed := map[string]struct{}{}
+	for _, k := range reg.keys {
+		allowed[k] = struct{}{}
+	}
+	keys := slices.Sorted(maps.Keys(filters))
+
+	parts := make([]string, 0, len(keys))
+	args := make([]any, 0, len(keys))
+	for _, k := range keys {
+		if _, ok := allowed[k]; !ok {
+			return "", nil, fmt.Errorf("unsupported filter %q for table %s (allowed: %v)", k, table, reg.keys)
+		}
+		col := reg.colMap[k]
+		if col == "" {
+			return "", nil, fmt.Errorf("no column mapping for filter %q on table %s", k, table)
+		}
+		// For lower(a.col) use normalized string value if possible
+		val := filters[k]
+		if strings.HasPrefix(col, "lower(") {
+			if s, ok := val.(string); ok {
+				val = strings.ToLower(s)
+			}
+		}
+		parts = append(parts, col+" = ?")
+		args = append(args, val)
+	}
+	return strings.Join(parts, " AND "), args, nil
+}
+
 // findByType returns up to `limit` Entities of the given asset type,
 // ordered by most recently updated (DESC). Each Entity has its concrete Asset populated.
 //
 // If limit <= 0, it returns all (be careful on large datasets).
-func (r *SqliteRepository) findByType(ctx context.Context, assetType string, limit int) ([]*types.Entity, error) {
-	table := normalizeType(assetType)
-
+func (r *SqliteRepository) findByType(ctx context.Context, atype string, limit int) ([]*types.Entity, error) {
+	table := normalizeType(atype)
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
 	base := `
 SELECT e.entity_id, e.natural_key, e.attrs
@@ -292,7 +332,7 @@ var contentRegistry = map[string]regEntry{
 			"extension":    "a.extension",
 			"punycode":     "a.punycode",
 			"raw":          "a.raw_record",
-			"id":           "a.unique_id",
+			"id":           "a.object_id",
 			"whois_server": "a.whois_server",
 		},
 	},
@@ -460,42 +500,4 @@ var contentRegistry = map[string]regEntry{
 			"scheme": "a.scheme",
 		},
 	},
-}
-
-// buildWhere validates the provided filters and builds "col = ?" AND ... with args.
-// It honors case-insensitive matching for columns that already use lower() in colMap.
-func buildWhere(table string, reg regEntry, filters types.ContentFilters) (string, []any, error) {
-	if len(filters) == 0 {
-		// No filters — allow full scan over that table via entity (but still ordered by updated_at).
-		// Usually caller should set a LIMIT in this case.
-		return "", nil, nil
-	}
-	// Validate keys and order them stably for deterministic SQL key (cache)
-	allowed := map[string]struct{}{}
-	for _, k := range reg.keys {
-		allowed[k] = struct{}{}
-	}
-	keys := slices.Sorted(maps.Keys(filters))
-
-	parts := make([]string, 0, len(keys))
-	args := make([]any, 0, len(keys))
-	for _, k := range keys {
-		if _, ok := allowed[k]; !ok {
-			return "", nil, fmt.Errorf("unsupported filter %q for table %s (allowed: %v)", k, table, reg.keys)
-		}
-		col := reg.colMap[k]
-		if col == "" {
-			return "", nil, fmt.Errorf("no column mapping for filter %q on table %s", k, table)
-		}
-		// For lower(a.col) use normalized string value if possible
-		val := filters[k]
-		if strings.HasPrefix(col, "lower(") {
-			if s, ok := val.(string); ok {
-				val = strings.ToLower(s)
-			}
-		}
-		parts = append(parts, col+" = ?")
-		args = append(args, val)
-	}
-	return strings.Join(parts, " AND "), args, nil
 }

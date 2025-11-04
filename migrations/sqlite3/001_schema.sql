@@ -265,18 +265,18 @@ CREATE TABLE IF NOT EXISTS domainrecord (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  unique_id  TEXT NOT NULL,
   raw_record TEXT,
   record_name TEXT NOT NULL,
   domain TEXT NOT NULL UNIQUE,
   domain_norm TEXT GENERATED ALWAYS AS (lower(domain)) STORED,
-  record_status TEXT,                -- JSON array encoded (optional)
+  record_status TEXT,
   punycode TEXT,
   extension TEXT,
   created_date TEXT,
   updated_date TEXT,
   expiration_date TEXT,
   whois_server TEXT,
+  object_id  TEXT,
   UNIQUE(domain_norm)
 );
 CREATE INDEX IF NOT EXISTS idx_domainrecord_name ON domainrecord(record_name);
