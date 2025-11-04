@@ -140,7 +140,7 @@ func (r *SqliteRepository) loadEntityCore(ctx context.Context, id int64) (*Entit
 	var e Entity
 	var raw string
 	query := `
-	SELECT e.entity_id, t.name, e.display_value, e.attrs
+	SELECT e.entity_id, t.name, e.natural_key, e.attrs
 	FROM entity e
 	JOIN entity_type_lu t ON t.id = e.type_id
 	WHERE e.entity_id = :entity_id`
@@ -179,21 +179,13 @@ func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entit
 		return nil, fmt.Errorf("no table mapping for entity type %q", e.Type)
 	}
 
-	const query = `
-	SELECT row_id FROM entity_ref
-	WHERE entity_id = :entity_id AND table_name = :table_name
-	LIMIT 1`
-
 	ch := make(chan *rowReadResult, 1)
 	r.rpool.Submit(&rowReadJob{
 		Ctx:     ctx,
-		Name:    "entity.ref.row_by_entity_table",
-		SQLText: query,
-		Args: []any{
-			sql.Named("entity_id", e.EntityID),
-			sql.Named("table_name", table),
-		},
-		Result: ch,
+		Name:    "entity.row_by_id",
+		SQLText: `SELECT row_id FROM entity WHERE entity_id = :entity_id LIMIT 1`,
+		Args:    []any{sql.Named("entity_id", e.EntityID)},
+		Result:  ch,
 	})
 
 	result := <-ch
@@ -201,13 +193,8 @@ func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entit
 		return nil, result.Err
 	}
 
-	// Resolve the row id in that concrete table via entity_ref
 	var rowID int64
 	if err := result.Row.Scan(&rowID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// Entity exists but does not have a ref to the expected table (data drift)
-			return nil, fmt.Errorf("entity %d has no %s row mapping", e.EntityID, table)
-		}
 		return nil, err
 	}
 

@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -34,7 +33,7 @@ ON CONFLICT(handle) DO UPDATE SET
 const selectEntityIDByAutnumText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'autnumrecord' LIMIT 1)
-  AND display_value = :handle
+  AND natural_key = :handle
 LIMIT 1`
 
 // Param: :row_id
@@ -43,19 +42,6 @@ SELECT id, created_at, updated_at, record_name, handle, asn, record_status, crea
 FROM autnumrecord
 WHERE id = :row_id
 LIMIT 1`
-
-type autnum struct {
-	ID           int64      `json:"id"`
-	CreatedAt    *time.Time `json:"created_at,omitempty"`
-	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
-	RecordName   *string    `json:"record_name,omitempty"`
-	Handle       string     `json:"handle"`
-	ASN          int64      `json:"asn"`
-	RecordStatus *string    `json:"record_status,omitempty"`
-	CreatedDate  *string    `json:"created_date,omitempty"`
-	UpdatedDate  *string    `json:"updated_date,omitempty"`
-	WhoisServer  *string    `json:"whois_server,omitempty"`
-}
 
 func (r *SqliteRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.AutnumRecord) (int64, error) {
 	done := make(chan error, 1)
@@ -115,56 +101,30 @@ func (r *SqliteRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, ro
 		return nil, result.Err
 	}
 
-	var a autnum
-	var c, u *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.RecordName, &a.Handle, &a.ASN,
-		&a.RecordStatus, &a.CreatedDate, &a.UpdatedDate, &a.WhoisServer); err != nil {
+	var c, u string
+	var row_id int64
+	var status string
+	var a oamreg.AutnumRecord
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &a.Handle, &a.Number,
+		&status, &a.CreatedDate, &a.UpdatedDate, &a.WhoisServer); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var cdate string
-	if a.CreatedDate != nil {
-		cdate = *a.CreatedDate
+	if status != "" {
+		a.Status = strings.Split(status, ",")
 	}
 
-	var udate string
-	if a.UpdatedDate != nil {
-		udate = *a.UpdatedDate
-	}
-
-	var rname string
-	if a.RecordName != nil {
-		rname = *a.RecordName
-	}
-
-	var rstatus []string
-	if a.RecordStatus != nil {
-		rstatus = strings.Split(*a.RecordStatus, ",")
-	}
-
-	var whois string
-	if a.WhoisServer != nil {
-		whois = *a.WhoisServer
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamreg.AutnumRecord{
-			Number:      int(a.ASN),
-			Handle:      a.Handle,
-			Name:        rname,
-			WhoisServer: whois,
-			CreatedDate: cdate,
-			UpdatedDate: udate,
-			Status:      rstatus,
-		},
-	}, nil
+	return e, nil
 }

@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +40,7 @@ ON CONFLICT(domain) DO UPDATE SET
 const selectEntityIDByDomainRecordText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
-  AND display_value = :domain_text
+  AND natural_key = :domain_text
 LIMIT 1`
 
 // Param: :row_id
@@ -51,23 +50,6 @@ record_status, punycode, extension, created_date, updated_date, expiration_date,
 FROM domainrecord
 WHERE id = :row_id
 LIMIT 1`
-
-type domrec struct {
-	ID             int64      `json:"id"`
-	CreatedAt      *time.Time `json:"created_at,omitempty"`
-	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
-	UniqueID       *string    `json:"unique_id,omitempty"`
-	RawRecord      *string    `json:"raw_record,omitempty"`
-	RecordName     string     `json:"record_name"`
-	Domain         string     `json:"domain"`
-	RecordStatus   *string    `json:"record_status,omitempty"` // TEXT[] in PG; in SQLite we commonly keep TEXT/JSON
-	Punycode       *string    `json:"punycode,omitempty"`
-	Extension      *string    `json:"extension,omitempty"`
-	CreatedDate    *string    `json:"created_date,omitempty"`
-	UpdatedDate    *string    `json:"updated_date,omitempty"`
-	ExpirationDate *string    `json:"expiration_date,omitempty"`
-	WhoisServer    *string    `json:"whois_server,omitempty"`
-}
 
 func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.DomainRecord) (int64, error) {
 	done := make(chan error, 1)
@@ -131,80 +113,30 @@ func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, ro
 		return nil, result.Err
 	}
 
-	var a domrec
-	var c, u *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.UniqueID, &a.RawRecord, &a.RecordName, &a.Domain, &a.RecordStatus,
-		&a.Punycode, &a.Extension, &a.CreatedDate, &a.UpdatedDate, &a.ExpirationDate, &a.WhoisServer); err != nil {
+	var c, u string
+	var row_id int64
+	var status string
+	var a oamreg.DomainRecord
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Raw, &a.Name, &a.Domain, &status, &a.Punycode,
+		&a.Extension, &a.CreatedDate, &a.UpdatedDate, &a.ExpirationDate, &a.WhoisServer); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var cdate string
-	if a.CreatedDate != nil {
-		cdate = *a.CreatedDate
+	if status != "" {
+		a.Status = strings.Split(status, ",")
 	}
 
-	var udate string
-	if a.UpdatedDate != nil {
-		udate = *a.UpdatedDate
-	}
-
-	var edate string
-	if a.ExpirationDate != nil {
-		edate = *a.ExpirationDate
-	}
-
-	var uid string
-	if a.UniqueID != nil {
-		uid = *a.UniqueID
-	}
-
-	var rawrec string
-	if a.RawRecord != nil {
-		rawrec = *a.RawRecord
-	}
-
-	var rstatus []string
-	if a.RecordStatus != nil {
-		rstatus = strings.Split(*a.RecordStatus, ",")
-	}
-
-	var punny string
-	if a.Punycode != nil {
-		punny = *a.Punycode
-	}
-
-	var ext string
-	if a.Extension != nil {
-		ext = *a.Extension
-	}
-
-	var whois string
-	if a.WhoisServer != nil {
-		whois = *a.WhoisServer
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamreg.DomainRecord{
-			Raw:            rawrec,
-			ID:             uid,
-			Domain:         a.Domain,
-			Punycode:       punny,
-			Name:           a.RecordName,
-			Extension:      ext,
-			WhoisServer:    whois,
-			CreatedDate:    cdate,
-			UpdatedDate:    udate,
-			ExpirationDate: edate,
-			Status:         rstatus,
-		},
-	}, nil
+	return e, nil
 }

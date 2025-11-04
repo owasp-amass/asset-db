@@ -112,23 +112,35 @@ LIMIT 1`
 	}
 
 	var eid int64
-	var v *string
-	var meta *string
+	var v string
+	var meta string
 	var ta TagAssignment
-	var created, updated, tupdated *string
+	var created, updated, tupdated string
 	if err := result.Row.Scan(&ta.ID, &eid, &ta.Tag.TagID, &ta.Tag.Namespace,
 		&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated); err != nil {
 		return nil, err
 	}
 
-	ta.Tag.Value = v
-	if meta != nil && strings.TrimSpace(*meta) != "" {
-		ta.Tag.Meta = json.RawMessage(*meta)
+	ta.Tag.Value = &v
+	if meta != "" && strings.TrimSpace(meta) != "" {
+		ta.Tag.Meta = json.RawMessage(meta)
 	}
 
-	ta.CreatedAt = parseTS(created)
-	ta.UpdatedAt = parseTS(updated)
-	ta.Tag.UpdatedAt = parseTS(tupdated)
+	if c, err := parseTimestamp(created); err == nil {
+		ta.CreatedAt = &c
+	} else {
+		return nil, err
+	}
+	if u, err := parseTimestamp(updated); err == nil {
+		ta.UpdatedAt = &u
+	} else {
+		return nil, err
+	}
+	if t, err := parseTimestamp(tupdated); err == nil {
+		ta.Tag.UpdatedAt = &t
+	} else {
+		return nil, err
+	}
 	if ta.CreatedAt == nil || ta.UpdatedAt == nil || ta.Tag.UpdatedAt == nil {
 		return nil, errors.New("failed to obtain the timestamps")
 	}
@@ -278,25 +290,37 @@ ORDER BY m.updated_at DESC`
 	var out []TagAssignment
 	for result.Rows.Next() {
 		var ta TagAssignment
-		var created, updated, tupdated *string
-		var v *string
-		var meta *string
+		var created, updated, tupdated string
+		var v string
+		var meta string
 
 		if err := result.Rows.Scan(&ta.ID, &ta.Tag.TagID, &ta.Tag.Namespace,
 			&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated); err != nil {
 			return nil, err
 		}
 
-		ta.Tag.Value = v
-		if meta != nil && strings.TrimSpace(*meta) != "" {
-			ta.Tag.Meta = json.RawMessage(*meta)
+		ta.Tag.Value = &v
+		if meta != "" && strings.TrimSpace(meta) != "" {
+			ta.Tag.Meta = json.RawMessage(meta)
 		}
 
-		ta.CreatedAt = parseTS(created)
-		ta.UpdatedAt = parseTS(updated)
-		ta.Tag.UpdatedAt = parseTS(tupdated)
+		if c, err := parseTimestamp(created); err == nil {
+			ta.CreatedAt = &c
+		} else {
+			return nil, err
+		}
+		if u, err := parseTimestamp(updated); err == nil {
+			ta.UpdatedAt = &u
+		} else {
+			return nil, err
+		}
+		if t, err := parseTimestamp(tupdated); err == nil {
+			ta.Tag.UpdatedAt = &t
+		} else {
+			return nil, err
+		}
 		if ta.CreatedAt == nil || ta.UpdatedAt == nil || ta.Tag.UpdatedAt == nil {
-			continue
+			return nil, errors.New("failed to obtain the timestamps")
 		}
 
 		out = append(out, ta)

@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -31,7 +30,7 @@ ON CONFLICT(raw_url) DO UPDATE SET
 const selectEntityIDByURLText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'url' LIMIT 1)
-  AND display_value = lower(:raw_url)
+  AND natural_key = lower(:raw_url)
 LIMIT 1`
 
 // Param: :row_id
@@ -97,44 +96,24 @@ func (r *SqliteRepository) fetchURLByRowID(ctx context.Context, eid, rowID int64
 		return nil, result.Err
 	}
 
-	var id int64
-	var raw, host string
-	var p, sch *string
-	var portptr *int64
-	var c, u *string
-	if err := result.Row.Scan(&id, &c, &u, &raw, &host, &p, &portptr, &sch); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamurl.URL
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Raw, &a.Host, &a.Path, &a.Port, &a.Scheme); err != nil {
 		return nil, err
 	}
 
-	created := parseTS(c)
-	updated := parseTS(u)
-	if created == nil || updated == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var path, scheme string
-	if p != nil {
-		path = *p
-	}
-	if sch != nil {
-		scheme = *sch
-	}
-
-	var port int
-	if portptr != nil {
-		port = int(*portptr)
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: created.In(time.UTC).Local(),
-		LastSeen:  updated.In(time.UTC).Local(),
-		Asset: &oamurl.URL{
-			Raw:    raw,
-			Scheme: scheme,
-			Host:   host,
-			Port:   port,
-			Path:   path,
-		},
-	}, nil
+	return e, nil
 }

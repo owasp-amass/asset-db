@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -29,7 +28,7 @@ ON CONFLICT(file_url) DO UPDATE SET
 const selectEntityIDByFileText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'file' LIMIT 1)
-  AND display_value = lower(:file_url)
+  AND natural_key = lower(:file_url)
 LIMIT 1`
 
 // Param: :row_id
@@ -93,37 +92,24 @@ func (r *SqliteRepository) fetchFileByRowID(ctx context.Context, eid, rowID int6
 		return nil, result.Err
 	}
 
-	var id int64
-	var url string
-	var c, u, fn, ft *string
-	if err := result.Row.Scan(&id, &c, &u, &url, &fn, &ft); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamfile.File
+	if err := result.Row.Scan(&row_id, &c, &u, &a.URL, &a.Name, &a.Type); err != nil {
 		return nil, err
 	}
 
-	created := parseTS(c)
-	updated := parseTS(u)
-	if created == nil || updated == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var fname string
-	if fn != nil {
-		fname = *fn
-	}
-
-	var ftype string
-	if ft != nil {
-		ftype = *ft
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: created.In(time.UTC).Local(),
-		LastSeen:  updated.In(time.UTC).Local(),
-		Asset: &oamfile.File{
-			URL:  url,
-			Name: fname,
-			Type: ftype,
-		},
-	}, nil
+	return e, nil
 }

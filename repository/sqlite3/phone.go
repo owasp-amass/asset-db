@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -31,7 +30,7 @@ ON CONFLICT(e164) DO UPDATE SET
 const selectEntityIDByPhoneText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'phone' LIMIT 1)
-  AND display_value = :e164
+  AND natural_key = :e164
 LIMIT 1`
 
 // Param: :row_id
@@ -40,17 +39,6 @@ SELECT id, created_at, updated_at, raw_number, e164, number_type, country_code, 
 FROM phone
 WHERE id = :row_id
 LIMIT 1`
-
-type phone struct {
-	ID            int64      `json:"id"`
-	CreatedAt     *time.Time `json:"created_at,omitempty"`
-	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-	RawNumber     string     `json:"raw_number"`
-	E164          string     `json:"e164"`
-	NumberType    *string    `json:"number_type,omitempty"`
-	CountryCode   *int64     `json:"country_code,omitempty"`
-	CountryAbbrev *string    `json:"country_abbrev,omitempty"`
-}
 
 func (r *SqliteRepository) upsertPhone(ctx context.Context, a *contact.Phone) (int64, error) {
 	done := make(chan error, 1)
@@ -108,43 +96,24 @@ func (r *SqliteRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID int
 		return nil, result.Err
 	}
 
-	var a phone
-	var c, u *string
-	var cc *int64
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.RawNumber,
-		&a.E164, &a.NumberType, &cc, &a.CountryAbbrev); err != nil {
+	var c, u string
+	var row_id int64
+	var a contact.Phone
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Raw, &a.E164, &a.Type, &a.CountryCode, &a.CountryAbbrev); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var ccode int
-	if cc != nil {
-		ccode = int(*cc)
-	}
-
-	var ntype, cabbrev string
-	if a.NumberType != nil {
-		ntype = *a.NumberType
-	}
-	if a.CountryAbbrev != nil {
-		cabbrev = *a.CountryAbbrev
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &contact.Phone{
-			Raw:           a.RawNumber,
-			E164:          a.E164,
-			Type:          ntype,
-			CountryCode:   ccode,
-			CountryAbbrev: cabbrev,
-		},
-	}, nil
+	return e, nil
 }

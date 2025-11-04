@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"net/netip"
 	"strconv"
 	"time"
@@ -29,7 +28,7 @@ ON CONFLICT(netblock_cidr) DO UPDATE SET
 const selectEntityIDByNetblockText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'netblock' LIMIT 1)
-  AND display_value = :netblock_cidr
+  AND natural_key = :netblock_cidr
 LIMIT 1`
 
 // Param: :row_id
@@ -92,36 +91,31 @@ func (r *SqliteRepository) fetchNetblockByRowID(ctx context.Context, eid, rowID 
 		return nil, result.Err
 	}
 
-	var id int64
-	var netstr string
-	var c, u, ipver *string
-	if err := result.Row.Scan(&id, &c, &u, &netstr, &ipver); err != nil {
+	var c, u string
+	var row_id int64
+	var cidrstr string
+	var a oamnet.Netblock
+	if err := result.Row.Scan(&row_id, &c, &u, &cidrstr, &a.Type); err != nil {
 		return nil, err
 	}
 
-	created := parseTS(c)
-	updated := parseTS(u)
-	if created == nil || updated == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	cidr, err := netip.ParsePrefix(netstr)
+	cidr, err := netip.ParsePrefix(cidrstr)
 	if err != nil {
 		return nil, err
 	}
+	a.CIDR = cidr
 
-	var version string
-	if ipver != nil {
-		version = *ipver
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: created.In(time.UTC).Local(),
-		LastSeen:  updated.In(time.UTC).Local(),
-		Asset: &oamnet.Netblock{
-			CIDR: cidr,
-			Type: version,
-		},
-	}, nil
+	return e, nil
 }

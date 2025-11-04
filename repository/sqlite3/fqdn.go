@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -26,7 +25,7 @@ ON CONFLICT(fqdn_norm) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
 const selectEntityIDByFQDNText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn' LIMIT 1)
-  AND display_value = lower(:fqdn_text)
+  AND natural_key = lower(:fqdn_text)
 LIMIT 1`
 
 // Param: :row_id
@@ -86,23 +85,24 @@ func (r *SqliteRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int6
 		return nil, result.Err
 	}
 
-	var id int64
-	var fqdn string
-	var c, u *string
-	if err := result.Row.Scan(&id, &c, &u, &fqdn); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamdns.FQDN
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Name); err != nil {
 		return nil, err
 	}
 
-	created := parseTS(c)
-	updated := parseTS(u)
-	if created == nil || updated == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: created.In(time.UTC).Local(),
-		LastSeen:  updated.In(time.UTC).Local(),
-		Asset:     &oamdns.FQDN{Name: fqdn},
-	}, nil
+	return e, nil
 }

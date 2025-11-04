@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -28,7 +27,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 const selectEntityIDByIdentifierText = `
 SELECT entity_id FROM entity 
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'identifier' LIMIT 1) 
-  AND display_value = :unique_id 
+  AND natural_key = :unique_id 
 LIMIT 1`
 
 // Param: :row_id
@@ -91,31 +90,24 @@ func (r *SqliteRepository) fetchIdentifierByRowID(ctx context.Context, eid, rowI
 		return nil, result.Err
 	}
 
-	var id int64
-	var uid string
-	var c, u, it *string
-	if err := result.Row.Scan(&id, &c, &u, &it, &uid); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamgen.Identifier
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Type, &a.UniqueID); err != nil {
 		return nil, err
 	}
 
-	created := parseTS(c)
-	updated := parseTS(u)
-	if created == nil || updated == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var idType string
-	if it != nil {
-		idType = *it
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: created.In(time.UTC).Local(),
-		LastSeen:  updated.In(time.UTC).Local(),
-		Asset: &oamgen.Identifier{
-			UniqueID: uid,
-			Type:     idType,
-		},
-	}, nil
+	return e, nil
 }

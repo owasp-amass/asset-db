@@ -173,8 +173,8 @@ func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*Edge, error
 	}
 
 	var eg Edge
-	var cAt, uAt *string
-	var content *string
+	var cAt, uAt string
+	var content string
 	if err := result.Row.Scan(&eg.EdgeID, &cAt, &uAt, &eg.EType,
 		&eg.FromEntityID, &eg.ToEntityID, &content); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -183,14 +183,22 @@ func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*Edge, error
 		return nil, err
 	}
 
-	if content != nil && strings.TrimSpace(*content) != "" {
-		eg.Content = json.RawMessage(*content)
+	if content != "" && strings.TrimSpace(content) != "" {
+		eg.Content = json.RawMessage(content)
 	}
 
-	eg.CreatedAt = parseTS(cAt)
-	eg.UpdatedAt = parseTS(uAt)
+	if c, err := parseTimestamp(cAt); err == nil {
+		eg.CreatedAt = &c
+	} else {
+		return nil, err
+	}
+	if u, err := parseTimestamp(uAt); err == nil {
+		eg.UpdatedAt = &u
+	} else {
+		return nil, err
+	}
 	if eg.CreatedAt == nil || eg.UpdatedAt == nil {
-		return nil, fmt.Errorf("failed to obtain the timestamps for edge %d", id)
+		return nil, errors.New("failed to obtain the timestamps")
 	}
 
 	return &eg, nil
@@ -385,22 +393,30 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	var out []EdgeWithTypes
 	for result.Rows.Next() {
 		var eg EdgeWithTypes
-		var cAt, uAt *string
-		var content *string
+		var cAt, uAt string
+		var content string
 
 		if err := result.Rows.Scan(&eg.EdgeID, &eg.EType, &eg.FromEntityID,
 			&eg.ToEntityID, &content, &cAt, &uAt, &eg.FromType, &eg.ToType); err != nil {
 			return nil, err
 		}
 
-		if content != nil && strings.TrimSpace(*content) != "" {
-			eg.Content = json.RawMessage(*content)
+		if content != "" && strings.TrimSpace(content) != "" {
+			eg.Content = json.RawMessage(content)
 		}
 
-		eg.CreatedAt = parseTS(cAt)
-		eg.UpdatedAt = parseTS(uAt)
+		if c, err := parseTimestamp(cAt); err == nil {
+			eg.CreatedAt = &c
+		} else {
+			return nil, err
+		}
+		if u, err := parseTimestamp(uAt); err == nil {
+			eg.UpdatedAt = &u
+		} else {
+			return nil, err
+		}
 		if eg.CreatedAt == nil || eg.UpdatedAt == nil {
-			continue
+			return nil, errors.New("failed to obtain the timestamps")
 		}
 
 		out = append(out, eg)

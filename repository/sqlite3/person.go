@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -31,7 +30,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 const selectEntityIDByPersonText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'person' LIMIT 1)
-  AND display_value = :unique_id
+  AND natural_key = :unique_id
 LIMIT 1`
 
 // Param: :row_id
@@ -40,17 +39,6 @@ SELECT id, created_at, updated_at, full_name, unique_id, first_name, family_name
 FROM person 
 WHERE id = :row_id
 LIMIT 1`
-
-type person struct {
-	ID         int64      `json:"id"`
-	CreatedAt  *time.Time `json:"created_at,omitempty"`
-	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
-	FullName   *string    `json:"full_name,omitempty"`
-	UniqueID   string     `json:"unique_id"`
-	FirstName  *string    `json:"first_name,omitempty"`
-	FamilyName *string    `json:"family_name,omitempty"`
-	MiddleName *string    `json:"middle_name,omitempty"`
-}
 
 func (r *SqliteRepository) upsertPerson(ctx context.Context, a *people.Person) (int64, error) {
 	done := make(chan error, 1)
@@ -108,43 +96,25 @@ func (r *SqliteRepository) fetchPersonByRowID(ctx context.Context, eid, rowID in
 		return nil, result.Err
 	}
 
-	var a person
-	var c, u *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.FullName, &a.UniqueID,
+	var c, u string
+	var row_id int64
+	var a people.Person
+	if err := result.Row.Scan(&row_id, &c, &u, &a.FullName, &a.ID,
 		&a.FirstName, &a.FamilyName, &a.MiddleName); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var fullname, firstname, familyname, middlename string
-	if a.FullName != nil {
-		fullname = *a.FullName
-	}
-	if a.FirstName != nil {
-		firstname = *a.FirstName
-	}
-	if a.FamilyName != nil {
-		familyname = *a.FamilyName
-	}
-	if a.MiddleName != nil {
-		middlename = *a.MiddleName
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &people.Person{
-			ID:         a.UniqueID,
-			FullName:   fullname,
-			FirstName:  firstname,
-			FamilyName: familyname,
-			MiddleName: middlename,
-		},
-	}, nil
+	return e, nil
 }

@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -32,7 +31,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 const selectEntityIDByProductText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'product' LIMIT 1)
-  AND display_value = :unique_id
+  AND natural_key = :unique_id
 LIMIT 1`
 
 // Param: :row_id
@@ -41,18 +40,6 @@ SELECT id, created_at, updated_at, unique_id, product_name, product_type, catego
 FROM product 
 WHERE id = :row_id
 LIMIT 1`
-
-type product struct {
-	ID                 int64      `json:"id"`
-	CreatedAt          *time.Time `json:"created_at,omitempty"`
-	UpdatedAt          *time.Time `json:"updated_at,omitempty"`
-	UniqueID           string     `json:"unique_id"`
-	ProductName        string     `json:"product_name"`
-	ProductType        *string    `json:"product_type,omitempty"`
-	Category           *string    `json:"category,omitempty"`
-	ProductDescription *string    `json:"product_description,omitempty"`
-	CountryOfOrigin    *string    `json:"country_of_origin,omitempty"`
-}
 
 func (r *SqliteRepository) upsertProduct(ctx context.Context, a *oamplat.Product) (int64, error) {
 	done := make(chan error, 1)
@@ -111,44 +98,25 @@ func (r *SqliteRepository) fetchProductByRowID(ctx context.Context, eid, rowID i
 		return nil, result.Err
 	}
 
-	var a product
-	var c, u *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.UniqueID, &a.ProductName,
-		&a.ProductType, &a.Category, &a.ProductDescription, &a.CountryOfOrigin); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamplat.Product
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Name, &a.Type,
+		&a.Category, &a.Description, &a.CountryOfOrigin); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var ptype, category, description, country string
-	if a.ProductType != nil {
-		ptype = *a.ProductType
-	}
-	if a.Category != nil {
-		category = *a.Category
-	}
-	if a.ProductDescription != nil {
-		description = *a.ProductDescription
-	}
-	if a.CountryOfOrigin != nil {
-		country = *a.CountryOfOrigin
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamplat.Product{
-			ID:              a.UniqueID,
-			Name:            a.ProductName,
-			Type:            ptype,
-			Category:        category,
-			Description:     description,
-			CountryOfOrigin: country,
-		},
-	}, nil
+	return e, nil
 }

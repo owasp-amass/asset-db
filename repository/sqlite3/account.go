@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -32,7 +31,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 const selectEntityIDByAccountText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'account' LIMIT 1)
-  AND display_value = :unique_id
+  AND natural_key = :unique_id
 LIMIT 1`
 
 // Param: :row_id
@@ -41,18 +40,6 @@ SELECT id, created_at, updated_at, unique_id, account_type, username, account_nu
 FROM account
 WHERE id = :row_id
 LIMIT 1`
-
-type account struct {
-	ID          int64      `json:"id"`
-	CreatedAt   *time.Time `json:"created_at,omitempty"`
-	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
-	UniqueID    string     `json:"unique_id"`
-	AccountType string     `json:"account_type"`
-	Username    *string    `json:"username,omitempty"`
-	AccountNo   *string    `json:"account_number,omitempty"`
-	Balance     *float64   `json:"balance,omitempty"`
-	Active      *bool      `json:"active,omitempty"`
-}
 
 func (r *SqliteRepository) upsertAccount(ctx context.Context, a *oamacct.Account) (int64, error) {
 	done := make(chan error, 1)
@@ -111,53 +98,25 @@ func (r *SqliteRepository) fetchAccountByRowID(ctx context.Context, eid, rowID i
 		return nil, result.Err
 	}
 
-	var a account
-	var c, u *string
-	var act *int64
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.UniqueID,
-		&a.AccountType, &a.Username, &a.AccountNo, &a.Balance, &act,
-	); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamacct.Account
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Type,
+		&a.Username, &a.Number, &a.Balance, &a.Active); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var username string
-	if a.Username != nil {
-		username = *a.Username
-	}
-
-	var acctnum string
-	if a.AccountNo != nil {
-		acctnum = *a.AccountNo
-	}
-
-	var balance float64
-	if a.Balance != nil {
-		balance = *a.Balance
-	}
-
-	var active bool
-	if act != nil {
-		b := *act != 0
-		active = b
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamacct.Account{
-			ID:       a.UniqueID,
-			Type:     a.AccountType,
-			Username: username,
-			Number:   acctnum,
-			Balance:  balance,
-			Active:   active,
-		},
-	}, nil
+	return e, nil
 }

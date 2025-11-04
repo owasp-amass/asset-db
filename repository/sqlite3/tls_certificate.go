@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -50,7 +49,7 @@ ON CONFLICT(serial_number) DO UPDATE SET
 const selectEntityIDByTLSCertificateText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'tlscertificate' LIMIT 1)
-  AND display_value = :serial_number
+  AND natural_key = :serial_number
 LIMIT 1`
 
 // Param: :row_id
@@ -61,26 +60,6 @@ SELECT id, created_at, updated_at, is_ca, tls_version, key_usage, not_after, not
 FROM tlscertificate 
 WHERE id = :row_id
 LIMIT 1`
-
-type cert struct {
-	ID                    int64      `json:"id"`
-	CreatedAt             *time.Time `json:"created_at,omitempty"`
-	UpdatedAt             *time.Time `json:"updated_at,omitempty"`
-	IsCA                  bool       `json:"is_ca,omitempty"`
-	TLSVersion            *int64     `json:"tls_version,omitempty"`
-	KeyUsage              *string    `json:"key_usage,omitempty"`
-	NotAfter              *time.Time `json:"not_after,omitempty"`
-	NotBefore             *time.Time `json:"not_before,omitempty"`
-	ExtKeyUsage           *string    `json:"ext_key_usage,omitempty"`
-	SerialNumber          string     `json:"serial_number"`
-	SubjectKeyID          *string    `json:"subject_key_id,omitempty"`
-	AuthorityKeyID        *string    `json:"authority_key_id,omitempty"`
-	IssuerCommonName      *string    `json:"issuer_common_name,omitempty"`
-	SignatureAlgorithm    *string    `json:"signature_algorithm,omitempty"`
-	SubjectCommonName     string     `json:"subject_common_name"`
-	PublicKeyAlgorithm    *string    `json:"public_key_algorithm,omitempty"`
-	CRLDistributionPoints *string    `json:"crl_distribution_points,omitempty"`
-}
 
 func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.TLSCertificate) (int64, error) {
 	done := make(chan error, 1)
@@ -147,93 +126,43 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 		return nil, result.Err
 	}
 
-	var a cert
-	var isca *bool
-	var tlsver *int64
-	var c, u, na, nb *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &isca, &tlsver, &a.KeyUsage, &na, &nb,
-		&a.ExtKeyUsage, &a.SerialNumber, &a.SubjectKeyID, &a.AuthorityKeyID, &a.IssuerCommonName,
-		&a.SignatureAlgorithm, &a.PublicKeyAlgorithm, &a.CRLDistributionPoints, &a.SubjectCommonName); err != nil {
+	var c, u string
+	var row_id, version int64
+	var a oamcert.TLSCertificate
+	var keyusage, extkeyusage, crldp string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.IsCA, &version, &keyusage, &a.NotAfter, &a.NotBefore,
+		&extkeyusage, &a.SerialNumber, &a.SubjectKeyID, &a.AuthorityKeyID, &a.IssuerCommonName,
+		&a.SignatureAlgorithm, &a.PublicKeyAlgorithm, &crldp, &a.SubjectCommonName); err != nil {
 		return nil, err
 	}
 
-	var iscaBool bool
-	if isca != nil {
-		iscaBool = *isca
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	if version != 0 {
+		a.Version = strconv.FormatInt(version, 10)
 	}
 
-	var version string
-	if a.TLSVersion != nil {
-		version = strconv.FormatInt(*a.TLSVersion, 10)
+	if keyusage != "" {
+		a.KeyUsage = strings.Split(keyusage, ",")
 	}
 
-	var iscommon string
-	if a.IssuerCommonName != nil {
-		iscommon = *a.IssuerCommonName
+	if extkeyusage != "" {
+		a.ExtKeyUsage = strings.Split(extkeyusage, ",")
 	}
 
-	var notafter, notbefore string
-	if na != nil {
-		notafter = *na
-	}
-	if nb != nil {
-		notbefore = *nb
+	if crldp != "" {
+		a.CRLDistributionPoints = strings.Split(crldp, ",")
 	}
 
-	var keyusage []string
-	if a.KeyUsage != nil {
-		keyusage = strings.Split(*a.KeyUsage, ",")
-	}
-
-	var extkey []string
-	if a.ExtKeyUsage != nil {
-		extkey = strings.Split(*a.ExtKeyUsage, ",")
-	}
-
-	var subkeyid, authkeyid, sigalg, pubkeyalg string
-	if a.SubjectKeyID != nil {
-		subkeyid = *a.SubjectKeyID
-	}
-	if a.AuthorityKeyID != nil {
-		authkeyid = *a.AuthorityKeyID
-	}
-	if a.SignatureAlgorithm != nil {
-		sigalg = *a.SignatureAlgorithm
-	}
-	if a.PublicKeyAlgorithm != nil {
-		pubkeyalg = *a.PublicKeyAlgorithm
-	}
-
-	var crldp []string
-	if a.CRLDistributionPoints != nil {
-		crldp = strings.Split(*a.CRLDistributionPoints, ",")
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamcert.TLSCertificate{
-			Version:               version,
-			SerialNumber:          a.SerialNumber,
-			SubjectCommonName:     a.SubjectCommonName,
-			IssuerCommonName:      iscommon,
-			NotBefore:             notbefore,
-			NotAfter:              notafter,
-			KeyUsage:              keyusage,
-			ExtKeyUsage:           extkey,
-			SignatureAlgorithm:    sigalg,
-			PublicKeyAlgorithm:    pubkeyalg,
-			IsCA:                  iscaBool,
-			CRLDistributionPoints: crldp,
-			SubjectKeyID:          subkeyid,
-			AuthorityKeyID:        authkeyid,
-		},
-	}, nil
+	return e, nil
 }

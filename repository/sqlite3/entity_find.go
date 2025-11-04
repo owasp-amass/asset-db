@@ -126,18 +126,17 @@ func (r *SqliteRepository) findByContent(ctx context.Context, assetType string, 
 		return nil, err
 	}
 
-	// Query entity ids via entity_ref join to the concrete asset table.
+	// Query entity ids via join to the concrete asset table.
 	sb := strings.Builder{}
 	sb.WriteString(`
-SELECT e.entity_id
-FROM entity e
+SELECT e.entity_id FROM entity e
 JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ? 
-JOIN entity_ref r ON r.entity_id = e.entity_id AND r.table_name = ? 
-JOIN ` + table + ` a ON a.id = r.row_id
+JOIN ` + table + ` a ON a.id = e.row_id
+WHERE e.table_name = ?
 `)
 	args = append([]any{table, table}, args...) // prepend type/table to args
 	if where != "" {
-		sb.WriteString("WHERE " + where + "\n")
+		sb.WriteString("AND " + where + "\n")
 	}
 	sb.WriteString("ORDER BY e.updated_at DESC")
 	if limit > 0 {
@@ -186,7 +185,7 @@ func (r *SqliteRepository) findByType(ctx context.Context, assetType string, lim
 
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
 	base := `
-SELECT e.entity_id, e.display_value, e.attrs
+SELECT e.entity_id, e.natural_key, e.attrs
 FROM entity e
 JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?
 ORDER BY e.updated_at DESC, e.entity_id DESC`
@@ -219,7 +218,7 @@ ORDER BY e.updated_at DESC, e.entity_id DESC`
 	for result.Rows.Next() {
 		var eid int64
 		var disp string
-		var raw *string
+		var raw string
 		if err := result.Rows.Scan(&eid, &disp, &raw); err != nil {
 			return nil, err
 		}
@@ -467,7 +466,7 @@ var contentRegistry = map[string]regEntry{
 // It honors case-insensitive matching for columns that already use lower() in colMap.
 func buildWhere(table string, reg regEntry, filters types.ContentFilters) (string, []any, error) {
 	if len(filters) == 0 {
-		// No filters — allow full scan over that table via entity_ref (but still ordered by updated_at).
+		// No filters — allow full scan over that table via entity (but still ordered by updated_at).
 		// Usually caller should set a LIMIT in this case.
 		return "", nil, nil
 	}

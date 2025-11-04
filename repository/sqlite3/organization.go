@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -33,7 +32,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 const selectEntityIDByOrganizationText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'organization' LIMIT 1)
-  AND display_value = :unique_id
+  AND natural_key = :unique_id
 LIMIT 1`
 
 // Param: :row_id
@@ -42,19 +41,6 @@ SELECT id, created_at, updated_at, org_name, active, unique_id, legal_name, juri
 FROM organization 
 WHERE id = :row_id
 LIMIT 1`
-
-type organization struct {
-	ID             int64      `json:"id"`
-	CreatedAt      *time.Time `json:"created_at,omitempty"`
-	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
-	OrgName        *string    `json:"org_name,omitempty"`
-	Active         bool       `json:"active,omitempty"`
-	UniqueID       string     `json:"unique_id"`
-	LegalName      string     `json:"legal_name"`
-	Jurisdiction   *string    `json:"jurisdiction,omitempty"`
-	FoundingDate   *string    `json:"founding_date,omitempty"`
-	RegistrationID *string    `json:"registration_id,omitempty"`
-}
 
 func (r *SqliteRepository) upsertOrganization(ctx context.Context, a *oamorg.Organization) (int64, error) {
 	done := make(chan error, 1)
@@ -114,57 +100,25 @@ func (r *SqliteRepository) fetchOrganizationByRowID(ctx context.Context, eid, ro
 		return nil, result.Err
 	}
 
-	var act *int64
-	var a organization
-	var c, u, fd *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.OrgName, &act, &a.UniqueID,
-		&a.LegalName, &a.Jurisdiction, &fd, &a.RegistrationID); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamorg.Organization
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &a.Active, &a.ID,
+		&a.LegalName, &a.Jurisdiction, &a.FoundingDate, &a.RegistrationID); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var orgname string
-	if a.OrgName != nil {
-		orgname = *a.OrgName
-	}
-
-	var jurisdiction string
-	if a.Jurisdiction != nil {
-		jurisdiction = *a.Jurisdiction
-	}
-
-	var fdate string
-	if fd != nil {
-		fdate = *fd
-	}
-
-	var regid string
-	if a.RegistrationID != nil {
-		regid = *a.RegistrationID
-	}
-
-	if act != nil {
-		b := *act != 0
-		a.Active = b
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamorg.Organization{
-			ID:             a.UniqueID,
-			Name:           orgname,
-			LegalName:      a.LegalName,
-			FoundingDate:   fdate,
-			Jurisdiction:   jurisdiction,
-			RegistrationID: regid,
-			Active:         a.Active,
-		},
-	}, nil
+	return e, nil
 }

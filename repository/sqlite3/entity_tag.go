@@ -8,7 +8,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -112,24 +111,27 @@ LIMIT 1`
 
 	var eid int64
 	var ta TagAssignment
-	var created, updated, tupdated *string
-	var v *string
-	var meta *string
-	if err := result.Row.Scan(&ta.ID, &eid, &ta.Tag.TagID, &ta.Tag.Namespace,
-		&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated); err != nil {
+	var v, meta, c, u, tu string
+	if err := result.Row.Scan(&ta.ID, &eid, &ta.Tag.TagID,
+		&ta.Tag.Namespace, &ta.Tag.Name, &v, &meta, &tu, &c, &u); err != nil {
 		return nil, err
 	}
 
-	ta.Tag.Value = v
-	if meta != nil && strings.TrimSpace(*meta) != "" {
-		ta.Tag.Meta = json.RawMessage(*meta)
+	ta.Tag.Value = &v
+	if meta != "" && strings.TrimSpace(meta) != "" {
+		ta.Tag.Meta = json.RawMessage(meta)
 	}
 
-	ta.CreatedAt = parseTS(created)
-	ta.UpdatedAt = parseTS(updated)
-	ta.Tag.UpdatedAt = parseTS(tupdated)
-	if ta.CreatedAt == nil || ta.UpdatedAt == nil || ta.Tag.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	var created, updated time.Time
+	if c, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		created = c.In(time.UTC).Local()
+	}
+	if u, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		updated = u.In(time.UTC).Local()
 	}
 
 	prop, err := convertSQLitePropertyToOAMProperty(&ta)
@@ -139,8 +141,8 @@ LIMIT 1`
 
 	return &types.EntityTag{
 		ID:        strconv.FormatInt(ta.ID, 10),
-		CreatedAt: ta.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  ta.UpdatedAt.In(time.UTC).Local(),
+		CreatedAt: created,
+		LastSeen:  updated,
 		Property:  prop,
 		Entity:    &types.Entity{ID: strconv.FormatInt(eid, 10)},
 	}, nil
@@ -277,25 +279,35 @@ ORDER BY m.updated_at DESC`
 	var out []TagAssignment
 	for result.Rows.Next() {
 		var ta TagAssignment
-		var created, updated, tupdated *string
-		var v *string
-		var meta *string
+		var v, meta, c, u, tu string
 
-		if err := result.Rows.Scan(&ta.ID, &ta.Tag.TagID, &ta.Tag.Namespace,
-			&ta.Tag.Name, &v, &meta, &tupdated, &created, &updated); err != nil {
+		if err := result.Rows.Scan(&ta.ID, &ta.Tag.TagID,
+			&ta.Tag.Namespace, &ta.Tag.Name, &v, &meta, &tu, &c, &u); err != nil {
 			return nil, err
 		}
 
-		ta.Tag.Value = v
-		if meta != nil && strings.TrimSpace(*meta) != "" {
-			ta.Tag.Meta = json.RawMessage(*meta)
+		ta.Tag.Value = &v
+		if meta != "" && strings.TrimSpace(meta) != "" {
+			ta.Tag.Meta = json.RawMessage(meta)
 		}
 
-		ta.CreatedAt = parseTS(created)
-		ta.UpdatedAt = parseTS(updated)
-		ta.Tag.UpdatedAt = parseTS(tupdated)
-		if ta.CreatedAt == nil || ta.UpdatedAt == nil || ta.Tag.UpdatedAt == nil {
-			continue
+		if c, err := parseTimestamp(c); err != nil {
+			return nil, err
+		} else {
+			created := c.In(time.UTC).Local()
+			ta.CreatedAt = &created
+		}
+		if u, err := parseTimestamp(u); err != nil {
+			return nil, err
+		} else {
+			updated := u.In(time.UTC).Local()
+			ta.UpdatedAt = &updated
+		}
+		if tu, err := parseTimestamp(tu); err != nil {
+			return nil, err
+		} else {
+			tupdated := tu.In(time.UTC).Local()
+			ta.Tag.UpdatedAt = &tupdated
 		}
 
 		out = append(out, ta)

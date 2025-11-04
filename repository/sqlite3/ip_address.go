@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"net/netip"
 	"strconv"
 	"time"
@@ -29,7 +28,7 @@ ON CONFLICT(ip_address) DO UPDATE SET
 const selectEntityIDByIPAddressText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipaddress' LIMIT 1)
-  AND display_value = :ip_address_text
+  AND natural_key = :ip_address_text
 LIMIT 1`
 
 // Param: :row_id
@@ -92,31 +91,31 @@ func (r *SqliteRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID
 		return nil, result.Err
 	}
 
-	var id int64
-	var c, u *string
-	var addrstr, iptype string
-	if err := result.Row.Scan(&id, &c, &u, &iptype, &addrstr); err != nil {
+	var c, u string
+	var row_id int64
+	var addrstr string
+	var a oamnet.IPAddress
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Type, &addrstr); err != nil {
 		return nil, err
 	}
 
-	created := parseTS(c)
-	updated := parseTS(u)
-	if created == nil || updated == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
 	addr, err := netip.ParseAddr(addrstr)
 	if err != nil {
 		return nil, err
 	}
+	a.Address = addr
 
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: created.In(time.UTC).Local(),
-		LastSeen:  updated.In(time.UTC).Local(),
-		Asset: &oamnet.IPAddress{
-			Address: addr,
-			Type:    iptype,
-		},
-	}, nil
+	return e, nil
 }

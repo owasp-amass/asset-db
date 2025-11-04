@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"time"
 
@@ -33,7 +32,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 const selectEntityIDByFundsTransferText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fundstransfer' LIMIT 1)
-  AND display_value = :unique_id
+  AND natural_key = :unique_id
 LIMIT 1`
 
 // Param: :row_id
@@ -42,19 +41,6 @@ SELECT id, created_at, updated_at, unique_id, amount, reference_number, currency
 FROM fundstransfer 
 WHERE id = :row_id
 LIMIT 1`
-
-type funds struct {
-	ID              int64      `json:"id"`
-	CreatedAt       *time.Time `json:"created_at,omitempty"`
-	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
-	UniqueID        string     `json:"unique_id"`
-	Amount          float64    `json:"amount"`
-	ReferenceNumber *string    `json:"reference_number,omitempty"`
-	Currency        *string    `json:"currency,omitempty"`
-	TransferMethod  *string    `json:"transfer_method,omitempty"`
-	ExchangeDate    *string    `json:"exchange_date,omitempty"`
-	ExchangeRate    *float64   `json:"exchange_rate,omitempty"`
-}
 
 func (r *SqliteRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.FundsTransfer) (int64, error) {
 	done := make(chan error, 1)
@@ -114,56 +100,25 @@ func (r *SqliteRepository) fetchFundsTransferByRowID(ctx context.Context, eid, r
 		return nil, result.Err
 	}
 
-	var a funds
-	var c, u, ed *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.UniqueID, &a.Amount,
-		&a.ReferenceNumber, &a.Currency, &a.TransferMethod, &ed, &a.ExchangeRate); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamfin.FundsTransfer
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Amount,
+		&a.ReferenceNumber, &a.Currency, &a.Method, &a.ExchangeDate, &a.ExchangeRate); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedAt == nil || a.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var edate string
-	if a.ExchangeDate != nil {
-		edate = *a.ExchangeDate
-	}
-
-	var refnum string
-	if a.ReferenceNumber != nil {
-		refnum = *a.ReferenceNumber
-	}
-
-	var curr string
-	if a.Currency != nil {
-		curr = *a.Currency
-	}
-
-	var tmethod string
-	if a.TransferMethod != nil {
-		tmethod = *a.TransferMethod
-	}
-
-	var exrate float64
-	if a.ExchangeRate != nil {
-		exrate = *a.ExchangeRate
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamfin.FundsTransfer{
-			ID:              a.UniqueID,
-			Amount:          a.Amount,
-			ReferenceNumber: refnum,
-			Currency:        curr,
-			Method:          tmethod,
-			ExchangeDate:    edate,
-			ExchangeRate:    exrate,
-		},
-	}, nil
+	return e, nil
 }

@@ -7,7 +7,6 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -47,7 +46,7 @@ ON CONFLICT(handle) DO UPDATE SET
 const selectEntityIDByIPNetRecordText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipnetrecord' LIMIT 1)
-  AND display_value = :handle
+  AND natural_key = :handle
 LIMIT 1`
 
 // Param: :row_id
@@ -57,25 +56,6 @@ SELECT id, created_at, updated_at, record_cidr, record_name, ip_version, handle,
 FROM ipnetrecord
 WHERE id = :row_id
 LIMIT 1`
-
-type IPNetRecord struct {
-	ID           int64      `json:"id"`
-	CreatedAt    *time.Time `json:"created_at,omitempty"`
-	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
-	RecordCIDR   string     `json:"record_cidr"`
-	RecordName   string     `json:"record_name"`
-	IPVersion    string     `json:"ip_version"`
-	Handle       string     `json:"handle"`
-	Method       *string    `json:"method,omitempty"`
-	RecordStatus *string    `json:"record_status,omitempty"`
-	CreatedDate  *time.Time `json:"created_date,omitempty"`
-	UpdatedDate  *time.Time `json:"updated_date,omitempty"`
-	WhoisServer  *string    `json:"whois_server,omitempty"`
-	ParentHandle *string    `json:"parent_handle,omitempty"`
-	StartAddress *string    `json:"start_address,omitempty"`
-	EndAddress   *string    `json:"end_address,omitempty"`
-	Country      *string    `json:"country,omitempty"`
-}
 
 func (r *SqliteRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IPNetRecord) (int64, error) {
 	done := make(chan error, 1)
@@ -141,98 +121,48 @@ func (r *SqliteRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, row
 		return nil, result.Err
 	}
 
-	var a IPNetRecord
-	var c, u, cd, ud *string
-	if err := result.Row.Scan(&a.ID, &c, &u, &a.RecordCIDR, &a.RecordName, &a.IPVersion, &a.Handle, &a.Method,
-		&a.RecordStatus, &cd, &ud, &a.WhoisServer, &a.ParentHandle, &a.StartAddress, &a.EndAddress, &a.Country,
-	); err != nil {
+	var c, u string
+	var row_id int64
+	var a oamreg.IPNetRecord
+	var cidrstr, status, start, end string
+	if err := result.Row.Scan(&row_id, &c, &u, &cidrstr, &a.Name, &a.Type, &a.Handle, &a.Method, &status,
+		&a.CreatedDate, &a.UpdatedDate, &a.WhoisServer, &a.ParentHandle, &start, &end, &a.Country); err != nil {
 		return nil, err
 	}
 
-	a.CreatedAt = parseTS(c)
-	a.UpdatedAt = parseTS(u)
-	if a.CreatedDate == nil || a.UpdatedDate == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	ipnet, err := netip.ParsePrefix(a.RecordCIDR)
+	ipnet, err := netip.ParsePrefix(cidrstr)
 	if err != nil {
 		return nil, err
 	}
+	a.CIDR = ipnet
 
-	var method string
-	if a.Method != nil {
-		method = *a.Method
+	if status != "" {
+		a.Status = strings.Split(status, ",")
 	}
 
-	var rstatus []string
-	if a.RecordStatus != nil {
-		rstatus = strings.Split(*a.RecordStatus, ",")
-	}
-
-	var phandle string
-	if a.ParentHandle != nil {
-		phandle = *a.ParentHandle
-	}
-
-	var whois string
-	if a.WhoisServer != nil {
-		whois = *a.WhoisServer
-	}
-
-	var saddrstr string
-	if a.StartAddress != nil {
-		saddrstr = *a.StartAddress
-	}
-
-	startaddr, err := netip.ParseAddr(saddrstr)
+	startaddr, err := netip.ParseAddr(start)
 	if err != nil {
 		return nil, err
 	}
+	a.StartAddress = startaddr
 
-	var eaddrstr string
-	if a.EndAddress != nil {
-		eaddrstr = *a.EndAddress
-	}
-
-	endaddr, err := netip.ParseAddr(eaddrstr)
+	endaddr, err := netip.ParseAddr(end)
 	if err != nil {
 		return nil, err
 	}
+	a.EndAddress = endaddr
 
-	var country string
-	if a.Country != nil {
-		country = *a.Country
-	}
-
-	var cdate string
-	if cd != nil {
-		cdate = *cd
-	}
-
-	var udate string
-	if ud != nil {
-		udate = *ud
-	}
-
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: a.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  a.UpdatedAt.In(time.UTC).Local(),
-		Asset: &oamreg.IPNetRecord{
-			CIDR:         ipnet,
-			Handle:       a.Handle,
-			StartAddress: startaddr,
-			EndAddress:   endaddr,
-			Type:         a.IPVersion,
-			Name:         a.RecordName,
-			Method:       method,
-			Country:      country,
-			ParentHandle: phandle,
-			WhoisServer:  whois,
-			CreatedDate:  cdate,
-			UpdatedDate:  udate,
-			Status:       rstatus,
-		},
-	}, nil
+	return e, nil
 }

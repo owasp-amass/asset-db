@@ -183,13 +183,13 @@ func (ww *writeWorker) run() {
 	}
 
 	queueCheck := func() {
-		if job, ok := ww.jobs.Next(); ok {
+		ww.jobs.Process(func(job any) {
 			if j, valid := job.(*writeJob); valid {
 				jobs = append(jobs, j)
-				if len(jobs) >= ww.batchSize {
-					commit()
-				}
 			}
+		})
+		if len(jobs) >= ww.batchSize {
+			commit()
 		}
 	}
 
@@ -452,26 +452,28 @@ func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
 
 // ------------------------------ Scan Utilities ------------------------------
 
-// parseTS converts a *string timestamp into *time.Time (RFC3339 or SQLite default format).
-// If parsing fails, returns nil (non-fatal for presentation purposes).
-func parseTS(s *string) *time.Time {
-	if s == nil {
-		return nil
+// parseTimestamp converts a *string timestamp into *time.Time (RFC3339 or SQLite
+// default format). If parsing fails, returns nil (non-fatal for presentation purposes).
+func parseTimestamp(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
 	}
-	str := strings.TrimSpace(*s)
+
+	str := strings.TrimSpace(s)
 	if str == "" {
-		return nil
+		return time.Time{}, nil
 	}
+
 	// Try SQLite's default (YYYY-MM-DD HH:MM:SS.SSS) then RFC3339
-	layouts := []string{
-		"2006-01-02 15:04:05.000",
-		time.RFC3339Nano, time.RFC3339,
-		"2006-01-02 15:04:05",
+	layouts := []string{"2006-01-02T15:04:05Z07:00", time.RFC3339Nano,
+		"2006-01-02 15:04:05.000", time.RFC3339, "2006-01-02 15:04:05",
 	}
+
 	for _, l := range layouts {
 		if t, err := time.Parse(l, str); err == nil {
-			return &t
+			return t, nil
 		}
 	}
-	return nil
+
+	return time.Time{}, nil
 }

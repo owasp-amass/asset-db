@@ -8,9 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -33,7 +31,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 const selectEntityIDByServiceText = `
 SELECT entity_id FROM entity
 WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'service' LIMIT 1)
-  AND display_value = :unique_id
+  AND natural_key = :unique_id
 LIMIT 1`
 
 // Param: :row_id
@@ -99,55 +97,33 @@ func (r *SqliteRepository) fetchServiceByRowID(ctx context.Context, eid, rowID i
 		return nil, result.Err
 	}
 
-	var id int64
-	var c, u *string
-	var outLen *int64
-	var uid, stype string
-	var outdata, attrsStr *string
-	if err := result.Row.Scan(&id, &c, &u, &uid,
-		&stype, &outdata, &outLen, &attrsStr); err != nil {
+	var c, u string
+	var row_id int64
+	var attrs string
+	var a oamplat.Service
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Type, &a.Output, &a.OutputLen, &attrs); err != nil {
 		return nil, err
 	}
 
-	var attributes json.RawMessage
-	if attrsStr != nil && strings.TrimSpace(*attrsStr) != "" {
-		raw := json.RawMessage(*attrsStr)
-		attributes = raw
+	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
+	if created, err := parseTimestamp(c); err != nil {
+		return nil, err
+	} else {
+		e.CreatedAt = created.In(time.UTC).Local()
+	}
+	if updated, err := parseTimestamp(u); err != nil {
+		return nil, err
+	} else {
+		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	created := parseTS(c)
-	updated := parseTS(u)
-	if created == nil || updated == nil {
-		return nil, errors.New("failed to obtain the timestamps")
-	}
-
-	var olen int
-	if outLen != nil {
-		olen = int(*outLen)
-	}
-
-	var odata string
-	if outdata != nil {
-		odata = *outdata
-	}
-
-	var sattrs map[string][]string
-	if attributes != nil {
-		if err := json.Unmarshal(attributes, &sattrs); err != nil {
+	if attrs != "" {
+		var sattrs map[string][]string
+		if err := json.Unmarshal([]byte(attrs), &sattrs); err != nil {
 			return nil, err
 		}
+		a.Attributes = sattrs
 	}
 
-	return &types.Entity{
-		ID:        strconv.FormatInt(eid, 10),
-		CreatedAt: created.In(time.UTC).Local(),
-		LastSeen:  updated.In(time.UTC).Local(),
-		Asset: &oamplat.Service{
-			ID:         uid,
-			Type:       stype,
-			Output:     odata,
-			OutputLen:  olen,
-			Attributes: sattrs,
-		},
-	}, nil
+	return e, nil
 }
