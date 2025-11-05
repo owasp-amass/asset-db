@@ -87,7 +87,7 @@ func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.Ass
 
 	var filtered []*types.Entity
 	for _, e := range ents {
-		if e.LastSeen.After(since) {
+		if !e.LastSeen.Before(since) {
 			filtered = append(filtered, e)
 		}
 	}

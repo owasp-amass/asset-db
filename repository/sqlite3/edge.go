@@ -151,7 +151,7 @@ func (r *SqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.
 
 	sqlEdge, err := r.idToEdge(ctx, edgeID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve created edge: %v", err)
+		return nil, fmt.Errorf("failed to retrieve edge: %v", err)
 	}
 
 	return convertSQLiteEdgeToOAMEdge(sqlEdge)
@@ -198,7 +198,7 @@ func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*Edge, error
 		return nil, err
 	}
 	if eg.CreatedAt == nil || eg.UpdatedAt == nil {
-		return nil, errors.New("failed to obtain the timestamps")
+		return nil, errors.New("failed to obtain the edge timestamps")
 	}
 
 	return &eg, nil
@@ -281,7 +281,7 @@ func (r *SqliteRepository) IncomingEdges(ctx context.Context, entity *types.Enti
 	}
 
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no incoming edges found for entity %s", entity.ID)
+		return nil, fmt.Errorf("zero incoming edges found for entity %s", entity.ID)
 	}
 	return out, nil
 }
@@ -312,7 +312,7 @@ func (r *SqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Enti
 	}
 
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no outgoing edges found for entity %s", entity.ID)
+		return nil, fmt.Errorf("zero outgoing edges found for entity %s", entity.ID)
 	}
 	return out, nil
 }
@@ -365,8 +365,7 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	if !since.IsZero() {
 		name += ".since"
 		where = append(where, "e.updated_at >= ?")
-		// Use the same format parseTS() expects
-		args = append(args, since.UTC().Format("2006-01-02 15:04:05.000"))
+		args = append(args, since.In(time.UTC).Format("2006-01-02 15:04:05"))
 	}
 	q := base + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.updated_at DESC"
 
@@ -400,11 +399,6 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 			&eg.ToEntityID, &content, &cAt, &uAt, &eg.FromType, &eg.ToType); err != nil {
 			return nil, err
 		}
-
-		if content != "" && strings.TrimSpace(content) != "" {
-			eg.Content = json.RawMessage(content)
-		}
-
 		if c, err := parseTimestamp(cAt); err == nil {
 			eg.CreatedAt = &c
 		} else {
@@ -417,6 +411,13 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 		}
 		if eg.CreatedAt == nil || eg.UpdatedAt == nil {
 			return nil, errors.New("failed to obtain the timestamps")
+		}
+		if eg.UpdatedAt.Before(since) {
+			continue
+		}
+
+		if content != "" && strings.TrimSpace(content) != "" {
+			eg.Content = json.RawMessage(content)
 		}
 
 		out = append(out, eg)
