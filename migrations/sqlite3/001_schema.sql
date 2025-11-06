@@ -945,7 +945,7 @@ CREATE TABLE IF NOT EXISTS url (
 );
 CREATE INDEX IF NOT EXISTS idx_url_created_at ON url(created_at);
 CREATE INDEX IF NOT EXISTS idx_url_updated_at ON url(updated_at);
-CREATE INDEX IF NOT EXISTS idx_url_host ON url(url_host);
+CREATE INDEX IF NOT EXISTS idx_url_host ON url(host);
 CREATE INDEX IF NOT EXISTS idx_url_path ON url(url_path);
 CREATE INDEX IF NOT EXISTS idx_url_port ON url(port);
 CREATE INDEX IF NOT EXISTS idx_url_scheme ON url(scheme);
