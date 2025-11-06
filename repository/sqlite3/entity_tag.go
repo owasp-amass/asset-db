@@ -8,13 +8,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/owasp-amass/asset-db/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
@@ -55,29 +57,19 @@ func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *typ
 		return nil, err
 	}
 
-	tags, err := r.tagsForEntity(ctx, eid)
+	tags, err := r.tagsForEntity(ctx, eid, time.Time{})
 	if err != nil {
 		return nil, err
 	}
 
-	var assignment *TagAssignment
+	idstr := strconv.FormatInt(mid, 10)
 	for _, t := range tags {
-		if t.ID == mid {
-			assignment = &t
-			break
+		if t.ID == idstr {
+			return t, nil
 		}
 	}
-	if assignment == nil {
-		return nil, fmt.Errorf("tag mapping not found after creation")
-	}
 
-	return &types.EntityTag{
-		ID:        strconv.FormatInt(mid, 10),
-		CreatedAt: assignment.CreatedAt.In(time.UTC).Local(),
-		LastSeen:  assignment.UpdatedAt.In(time.UTC).Local(),
-		Property:  property,
-		Entity:    entity,
-	}, nil
+	return nil, fmt.Errorf("failed to create the entity tag")
 }
 
 func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
@@ -87,12 +79,11 @@ func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*t
 	}
 
 	const q = `
-SELECT m.id, m.entity_id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
-	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
+SELECT m.id, m.entity_id, m.created_at, m.updated_at, 
+	(SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), tg.content
 FROM entity_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
 WHERE m.id = :map_id
-ORDER BY m.updated_at DESC
 LIMIT 1`
 
 	ch := make(chan *rowReadResult, 1)
@@ -109,43 +100,36 @@ LIMIT 1`
 		return nil, result.Err
 	}
 
-	var eid int64
-	var ta TagAssignment
-	var v, meta, c, u, tu string
-	if err := result.Row.Scan(&ta.ID, &eid, &ta.Tag.TagID,
-		&ta.Tag.Namespace, &ta.Tag.Name, &v, &meta, &tu, &c, &u); err != nil {
+	var eid, row_id int64
+	var ttype, content, c, u string
+
+	if err := result.Row.Scan(&row_id, &eid, &c, &u, &ttype, &content); err != nil {
 		return nil, err
 	}
 
-	ta.Tag.Value = &v
-	if meta != "" && strings.TrimSpace(meta) != "" {
-		ta.Tag.Meta = json.RawMessage(meta)
+	tag := &dbt.EntityTag{
+		ID:     strconv.FormatInt(row_id, 10),
+		Entity: &dbt.Entity{ID: strconv.FormatInt(eid, 10)},
 	}
 
-	var created, updated time.Time
+	prop, err := extractOAMProperty(ttype, json.RawMessage(content))
+	if err != nil {
+		return nil, err
+	}
+	tag.Property = prop
+
 	if c, err := parseTimestamp(c); err != nil {
 		return nil, err
 	} else {
-		created = c.In(time.UTC).Local()
+		tag.CreatedAt = c.In(time.UTC).Local()
 	}
 	if u, err := parseTimestamp(u); err != nil {
 		return nil, err
 	} else {
-		updated = u.In(time.UTC).Local()
+		tag.LastSeen = u.In(time.UTC).Local()
 	}
 
-	prop, err := convertSQLitePropertyToOAMProperty(&ta)
-	if err != nil {
-		return nil, err
-	}
-
-	return &types.EntityTag{
-		ID:        strconv.FormatInt(ta.ID, 10),
-		CreatedAt: created,
-		LastSeen:  updated,
-		Property:  prop,
-		Entity:    &types.Entity{ID: strconv.FormatInt(eid, 10)},
-	}, nil
+	return tag, nil
 }
 
 func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
@@ -154,46 +138,21 @@ func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *types.Ent
 		return nil, err
 	}
 
-	tags, err := r.tagsForEntity(ctx, eid)
+	tags, err := r.tagsForEntity(ctx, eid, since)
 	if err != nil {
 		return nil, err
 	}
 
 	var out []*types.EntityTag
 	for _, t := range tags {
-		if t.UpdatedAt != nil && !since.IsZero() && t.UpdatedAt.Before(since) {
+		if len(names) > 0 && !slices.Contains(names, t.Property.Name()) {
 			continue
 		}
-
-		if len(names) > 0 {
-			found := false
-			for _, n := range names {
-				if t.Tag.Name == n {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-		}
-
-		prop, err := convertSQLitePropertyToOAMProperty(&t)
-		if err != nil {
-			return nil, err
-		}
-
-		out = append(out, &types.EntityTag{
-			ID:        strconv.FormatInt(t.ID, 10),
-			CreatedAt: t.CreatedAt.In(time.UTC).Local(),
-			LastSeen:  t.UpdatedAt.In(time.UTC).Local(),
-			Property:  prop,
-			Entity:    entity,
-		})
+		out = append(out, t)
 	}
 
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no tags found for entity")
+		return nil, errors.New("no tags found for entity")
 	}
 	return out, nil
 }
@@ -252,21 +211,30 @@ func (r *SqliteRepository) tagEntity(ctx context.Context, entityID, tagID int64)
 }
 
 // tagsForEntity lists all tag assignments for an entity (namespaced).
-func (r *SqliteRepository) tagsForEntity(ctx context.Context, entityID int64) ([]TagAssignment, error) {
-	const q = `
-SELECT m.id, tg.tag_id, (SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), 
-	tg.property_name, tg.property_value, tg.content, tg.updated_at, m.created_at, m.updated_at
+func (r *SqliteRepository) tagsForEntity(ctx context.Context, eid int64, since time.Time) ([]*dbt.EntityTag, error) {
+	key := "entity.tags_for_entity"
+	args := []any{sql.Named("entity_id", eid)}
+	q := `
+SELECT m.id, m.created_at, m.updated_at, 
+	(SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), tg.content
 FROM entity_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
-WHERE m.entity_id = :entity_id
-ORDER BY m.updated_at DESC`
+WHERE m.entity_id = :entity_id`
+
+	if !since.IsZero() {
+		key += ".since"
+		q += " AND m.updated_at >= :since"
+		args = append(args, sql.Named("since", since.UTC()))
+	}
+
+	q += " ORDER BY m.updated_at DESC"
 
 	ch := make(chan *rowsReadResult, 1)
 	r.rpool.Submit(&rowsReadJob{
 		Ctx:     ctx,
-		Name:    "entity.tags_for_entity",
+		Name:    key,
 		SQLText: q,
-		Args:    []any{sql.Named("entity_id", entityID)},
+		Args:    args,
 		Result:  ch,
 	})
 
@@ -276,44 +244,44 @@ ORDER BY m.updated_at DESC`
 	}
 	defer func() { _ = result.Rows.Close() }()
 
-	var out []TagAssignment
+	var out []*dbt.EntityTag
 	for result.Rows.Next() {
-		var ta TagAssignment
-		var v, meta, c, u, tu string
+		var row_id int64
+		var ttype, content, c, u string
 
-		if err := result.Rows.Scan(&ta.ID, &ta.Tag.TagID,
-			&ta.Tag.Namespace, &ta.Tag.Name, &v, &meta, &tu, &c, &u); err != nil {
+		if err := result.Rows.Scan(&row_id, &c, &u, &ttype, &content); err != nil {
 			return nil, err
 		}
 
-		ta.Tag.Value = &v
-		if meta != "" && strings.TrimSpace(meta) != "" {
-			ta.Tag.Meta = json.RawMessage(meta)
+		tag := &dbt.EntityTag{
+			ID:     strconv.FormatInt(row_id, 10),
+			Entity: &dbt.Entity{ID: strconv.FormatInt(eid, 10)},
 		}
+
+		prop, err := extractOAMProperty(ttype, json.RawMessage(content))
+		if err != nil {
+			return nil, err
+		}
+		tag.Property = prop
 
 		if c, err := parseTimestamp(c); err != nil {
 			return nil, err
 		} else {
-			created := c.In(time.UTC).Local()
-			ta.CreatedAt = &created
+			tag.CreatedAt = c.In(time.UTC).Local()
 		}
 		if u, err := parseTimestamp(u); err != nil {
 			return nil, err
 		} else {
-			updated := u.In(time.UTC).Local()
-			ta.UpdatedAt = &updated
-		}
-		if tu, err := parseTimestamp(tu); err != nil {
-			return nil, err
-		} else {
-			tupdated := tu.In(time.UTC).Local()
-			ta.Tag.UpdatedAt = &tupdated
+			tag.LastSeen = u.In(time.UTC).Local()
 		}
 
-		out = append(out, ta)
+		out = append(out, tag)
 	}
 
-	return out, result.Rows.Err()
+	if len(out) == 0 {
+		return nil, errors.New("no tags found for entity")
+	}
+	return out, nil
 }
 
 // removeEntityTag deletes a specific tag mapping from an entity.

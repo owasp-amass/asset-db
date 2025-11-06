@@ -8,9 +8,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -39,22 +39,6 @@ JOIN tag_type_lu tt ON tt.id = tag.ttype_id
 WHERE tt.name = lower(:ttype_name) AND tag.property_name = :property_name 
   AND coalesce(tag.property_value,'∅') = coalesce(:property_value,'∅')
 LIMIT 1`
-
-type Tag struct {
-	TagID     int64           `json:"tag_id"`
-	Namespace string          `json:"namespace"`
-	Name      string          `json:"name"`
-	Value     *string         `json:"value,omitempty"`
-	Meta      json.RawMessage `json:"meta,omitempty"`
-	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
-}
-
-type TagAssignment struct {
-	ID        int64      `json:"id"`
-	Tag       Tag        `json:"tag"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-}
 
 func (r *SqliteRepository) upsertTag(ctx context.Context, ttype, name, value, content string) (int64, error) {
 	done := make(chan error, 1)
@@ -158,40 +142,40 @@ WHERE tag_id = :tag_id
 	return <-done
 }
 
-func convertSQLitePropertyToOAMProperty(ta *TagAssignment) (oam.Property, error) {
+func extractOAMProperty(ttype string, content []byte) (oam.Property, error) {
 	var p oam.Property
-	err := fmt.Errorf("failed to extract property from tag assignment ID %d", ta.Tag.TagID)
-	if len(ta.Tag.Meta) == 0 {
+	err := errors.New("failed to extract property from the JSON")
+	if len(content) == 0 {
 		return nil, err
 	}
 
-	switch strings.ToLower(ta.Tag.Namespace) {
+	switch strings.ToLower(ttype) {
 	case strings.ToLower(string(oam.DNSRecordProperty)):
 		var dp oamdns.DNSRecordProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &dp); err == nil {
+		if e := json.Unmarshal(content, &dp); e == nil {
 			p = &dp
 			err = nil
 		}
 	case strings.ToLower(string(oam.SimpleProperty)):
 		var sp oamgen.SimpleProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &sp); err == nil {
+		if e := json.Unmarshal(content, &sp); e == nil {
 			p = &sp
 			err = nil
 		}
 	case strings.ToLower(string(oam.SourceProperty)):
 		var sp oamgen.SourceProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &sp); err == nil {
+		if e := json.Unmarshal(content, &sp); e == nil {
 			p = &sp
 			err = nil
 		}
 	case strings.ToLower(string(oam.VulnProperty)):
 		var vp oamplat.VulnProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &vp); err == nil {
+		if e := json.Unmarshal(content, &vp); e == nil {
 			p = &vp
 			err = nil
 		}
 	default:
-		return nil, fmt.Errorf("unknown property type: %s", ta.Tag.Namespace)
+		return nil, fmt.Errorf("unknown property type: %s", ttype)
 	}
 
 	return p, err

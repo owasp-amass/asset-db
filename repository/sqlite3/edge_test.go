@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -233,12 +232,12 @@ func TestIncomingEdges(t *testing.T) {
 
 			switch rel := edge.Relation.(type) {
 			case *oamdns.BasicDNSRelation:
-				assert.Contains(t, rel1.Label(), rel.Label(), "Edge/Relation Label not found in expected labels for "+tname)
+				assert.Equal(t, rel1.Label(), rel.Label(), "Edge/Relation does not have a matching label for "+tname)
 				assert.Equal(t, rel.Header.RRType, rel1.Header.RRType, "Edge/Relation found by ID does not have a matching Header.RRType")
 				assert.Equal(t, rel.Header.Class, rel1.Header.Class, "Edge/Relation found by ID does not have a matching Header.Class")
 				assert.Equal(t, rel.Header.TTL, rel1.Header.TTL, "Edge/Relation found by ID does not have a matching Header.TTL")
 			case *oamgen.SimpleRelation:
-				assert.Contains(t, rel2.Label(), rel.Label(), "Edge/Relation Label not found in expected labels for "+tname)
+				assert.Equal(t, rel2.Label(), rel.Label(), "Edge/Relation does not have a matching label for "+tname)
 			default:
 				t.Errorf("Edge Relation has an unexpected type for %s", tname)
 			}
@@ -383,12 +382,12 @@ func TestOutgoingEdges(t *testing.T) {
 
 			switch rel := edge.Relation.(type) {
 			case *oamdns.BasicDNSRelation:
-				assert.Contains(t, rel1.Label(), rel.Label(), "Edge/Relation Label not found in expected labels for "+tname)
+				assert.Equal(t, rel1.Label(), rel.Label(), "Edge/Relation does not have a matching label for "+tname)
 				assert.Equal(t, rel.Header.RRType, rel1.Header.RRType, "Edge/Relation found by ID does not have a matching Header.RRType")
 				assert.Equal(t, rel.Header.Class, rel1.Header.Class, "Edge/Relation found by ID does not have a matching Header.Class")
 				assert.Equal(t, rel.Header.TTL, rel1.Header.TTL, "Edge/Relation found by ID does not have a matching Header.TTL")
 			case *oamgen.SimpleRelation:
-				assert.Contains(t, rel2.Label(), rel.Label(), "Edge/Relation Label not found in expected labels for "+tname)
+				assert.Equal(t, rel2.Label(), rel.Label(), "Edge/Relation does not have a matching label for "+tname)
 			default:
 				t.Errorf("Edge Relation has an unexpected type for %s", tname)
 			}
