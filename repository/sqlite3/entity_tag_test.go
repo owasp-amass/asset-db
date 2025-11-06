@@ -56,11 +56,11 @@ func TestCreateEntityProperty(t *testing.T) {
 
 	p, ok := tag.Property.(*oamdns.DNSRecordProperty)
 	assert.True(t, ok, "Tag found by ID is not of type *oamdns.DNSRecordProperty")
-	assert.Equal(t, prop.Name, p.Name, "DNSRecordProperty found by ID does not have a matching Name")
+	assert.Equal(t, prop.Name(), p.Name(), "DNSRecordProperty found by ID does not have a matching Name")
 	assert.Equal(t, prop.Header.RRType, p.Header.RRType, "DNSRecordProperty found by ID does not have a matching Header.RRType")
 	assert.Equal(t, prop.Header.Class, p.Header.Class, "DNSRecordProperty found by ID does not have a matching Header.Class")
 	assert.Equal(t, prop.Header.TTL, p.Header.TTL, "DNSRecordProperty found by ID does not have a matching Header.TTL")
-	assert.Equal(t, prop.Data, p.Data, "DNSRecordProperty found by ID does not have matching Data")
+	assert.Equal(t, prop.Value(), p.Value(), "DNSRecordProperty found by ID does not have a matching Value")
 
 	err = db.DeleteEntity(ctx, fqdn.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the FQDN")
@@ -107,7 +107,7 @@ func TestFindEntityTags(t *testing.T) {
 	}
 
 	before2 := time.Now()
-	tag2, err := db.CreateEntityProperty(ctx, fqdn, prop1)
+	tag2, err := db.CreateEntityProperty(ctx, fqdn, prop2)
 	assert.NoError(t, err, "Failed to create tag for the FQDN")
 	assert.NotNil(t, tag2, "Tag for the FQDN should not be nil")
 	after2 := time.Now()

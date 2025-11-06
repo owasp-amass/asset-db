@@ -9,13 +9,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/owasp-amass/asset-db/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -32,11 +30,11 @@ SELECT id FROM entity_tag_map
 WHERE entity_id = :entity_id AND tag_id = :tag_id 
 LIMIT 1`
 
-func (r *SqliteRepository) CreateEntityTag(ctx context.Context, entity *types.Entity, tag *types.EntityTag) (*types.EntityTag, error) {
+func (r *SqliteRepository) CreateEntityTag(ctx context.Context, entity *dbt.Entity, tag *dbt.EntityTag) (*dbt.EntityTag, error) {
 	return r.CreateEntityProperty(ctx, entity, tag.Property)
 }
 
-func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, property oam.Property) (*types.EntityTag, error) {
+func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *dbt.Entity, property oam.Property) (*dbt.EntityTag, error) {
 	content, err := property.JSON()
 	if err != nil {
 		return nil, err
@@ -57,22 +55,11 @@ func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *typ
 		return nil, err
 	}
 
-	tags, err := r.tagsForEntity(ctx, eid, time.Time{})
-	if err != nil {
-		return nil, err
-	}
-
 	idstr := strconv.FormatInt(mid, 10)
-	for _, t := range tags {
-		if t.ID == idstr {
-			return t, nil
-		}
-	}
-
-	return nil, fmt.Errorf("failed to create the entity tag")
+	return r.FindEntityTagById(ctx, idstr)
 }
 
-func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
+func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*dbt.EntityTag, error) {
 	mid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return nil, err
@@ -102,7 +89,6 @@ LIMIT 1`
 
 	var eid, row_id int64
 	var ttype, content, c, u string
-
 	if err := result.Row.Scan(&row_id, &eid, &c, &u, &ttype, &content); err != nil {
 		return nil, err
 	}
@@ -132,7 +118,7 @@ LIMIT 1`
 	return tag, nil
 }
 
-func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *dbt.Entity, since time.Time, names ...string) ([]*dbt.EntityTag, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
@@ -143,7 +129,7 @@ func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *types.Ent
 		return nil, err
 	}
 
-	var out []*types.EntityTag
+	var out []*dbt.EntityTag
 	for _, t := range tags {
 		if len(names) > 0 && !slices.Contains(names, t.Property.Name()) {
 			continue
