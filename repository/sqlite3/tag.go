@@ -160,35 +160,39 @@ WHERE tag_id = :tag_id
 
 func convertSQLitePropertyToOAMProperty(ta *TagAssignment) (oam.Property, error) {
 	var p oam.Property
+	err := fmt.Errorf("failed to extract property from tag assignment ID %d", ta.Tag.TagID)
+	if len(ta.Tag.Meta) == 0 {
+		return nil, err
+	}
 
 	switch strings.ToLower(ta.Tag.Namespace) {
 	case strings.ToLower(string(oam.DNSRecordProperty)):
 		var dp oamdns.DNSRecordProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &dp); err != nil {
-			return nil, err
+		if err := json.Unmarshal(ta.Tag.Meta, &dp); err == nil {
+			p = &dp
+			err = nil
 		}
-		p = &dp
 	case strings.ToLower(string(oam.SimpleProperty)):
 		var sp oamgen.SimpleProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &sp); err != nil {
-			return nil, err
+		if err := json.Unmarshal(ta.Tag.Meta, &sp); err == nil {
+			p = &sp
+			err = nil
 		}
-		p = &sp
 	case strings.ToLower(string(oam.SourceProperty)):
 		var sp oamgen.SourceProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &sp); err != nil {
-			return nil, err
+		if err := json.Unmarshal(ta.Tag.Meta, &sp); err == nil {
+			p = &sp
+			err = nil
 		}
-		p = &sp
 	case strings.ToLower(string(oam.VulnProperty)):
 		var vp oamplat.VulnProperty
-		if err := json.Unmarshal(ta.Tag.Meta, &vp); err != nil {
-			return nil, err
+		if err := json.Unmarshal(ta.Tag.Meta, &vp); err == nil {
+			p = &vp
+			err = nil
 		}
-		p = &vp
 	default:
 		return nil, fmt.Errorf("unknown property type: %s", ta.Tag.Namespace)
 	}
 
-	return p, nil
+	return p, err
 }

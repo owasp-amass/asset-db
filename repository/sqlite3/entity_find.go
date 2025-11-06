@@ -39,70 +39,44 @@ func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*types.En
 }
 
 func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
-	ents, err := r.findByContent(ctx, etype, filters, 0)
+	ents, err := r.findByContent(ctx, etype, since, filters, 0)
 	if err != nil {
 		return nil, err
 	}
 	if len(ents) == 0 {
 		return nil, errors.New("zero entities found")
 	}
-	if since.IsZero() {
-		return ents, nil
-	}
-
-	var filtered []*types.Entity
-	for _, e := range ents {
-		if !e.LastSeen.Before(since) {
-			filtered = append(filtered, e)
-		}
-	}
-	if len(filtered) == 0 {
-		return nil, errors.New("zero entities found")
-	}
-	return filtered, nil
+	return ents, nil
 }
 
 func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
-	ent, err := r.findOneByContent(ctx, etype, filters)
+	ent, err := r.findOneByContent(ctx, etype, since, filters)
 	if err != nil {
 		return nil, err
 	}
 	if ent == nil {
 		return nil, errors.New("entity not found")
 	}
-	if !since.IsZero() && ent.LastSeen.Before(since) {
-		return nil, errors.New("entity not found")
-	}
 	return ent, nil
 }
 
 func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
-	ents, err := r.findByType(ctx, string(atype), 0)
+	ents, err := r.findByType(ctx, string(atype), since, 0)
 	if err != nil {
 		return nil, err
 	}
-	if since.IsZero() {
-		return ents, nil
-	}
-
-	var filtered []*types.Entity
-	for _, e := range ents {
-		if !e.LastSeen.Before(since) {
-			filtered = append(filtered, e)
-		}
-	}
-	if len(filtered) == 0 {
+	if len(ents) == 0 {
 		return nil, errors.New("zero entities found")
 	}
-	return filtered, nil
+	return ents, nil
 }
 
 // findByContent builds the SQL WHERE from a registry of allowed columns per
 // asset type, and returns Entity+Asset. Supports multiple matches.
 
 // findOneByContent returns exactly one (first by updated_at desc)
-func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, filters types.ContentFilters) (*types.Entity, error) {
-	ents, err := r.findByContent(ctx, atype, filters, 1)
+func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
+	ents, err := r.findByContent(ctx, atype, since, filters, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +88,7 @@ func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, f
 
 // findByContent finds entities for asset type with given filters (on the asset table).
 // limit <= 0 => no explicit LIMIT.
-func (r *SqliteRepository) findByContent(ctx context.Context, atype string, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
+func (r *SqliteRepository) findByContent(ctx context.Context, atype string, since time.Time, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
 	table := normalizeType(atype)
 	if table == "" {
 		return nil, fmt.Errorf("unknown asset type %q", atype)
@@ -126,7 +100,7 @@ func (r *SqliteRepository) findByContent(ctx context.Context, atype string, filt
 		return nil, fmt.Errorf("no content registry for table %q", table)
 	}
 
-	where, args, err := buildWhere(table, reg, filters)
+	where, args, err := buildWhere(table, reg, since, filters)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +159,7 @@ JOIN ` + table + ` a ON a.id = e.row_id`)
 
 // buildWhere validates the provided filters and builds "col = ?" AND ... with args.
 // It honors case-insensitive matching for columns that already use lower() in colMap.
-func buildWhere(table string, reg regEntry, filters types.ContentFilters) (string, []any, error) {
+func buildWhere(table string, reg regEntry, since time.Time, filters types.ContentFilters) (string, []any, error) {
 	if len(filters) == 0 {
 		// No filters — allow full scan over that table via entity (but still ordered by updated_at).
 		// Usually caller should set a LIMIT in this case.
@@ -201,6 +175,12 @@ func buildWhere(table string, reg regEntry, filters types.ContentFilters) (strin
 
 	parts := make([]string, 0, len(keys))
 	args := make([]any, 0, len(keys))
+
+	if !since.IsZero() {
+		parts = append(parts, "a.updated_at >= ?")
+		args = append(args, since.UTC())
+	}
+
 	for _, k := range keys {
 		if _, ok := allowed[k]; !ok {
 			return "", nil, fmt.Errorf("unsupported filter %q for table %s (allowed: %v)", k, table, reg.keys)
@@ -230,22 +210,29 @@ func buildWhere(table string, reg regEntry, filters types.ContentFilters) (strin
 // ordered by most recently updated (DESC). Each Entity has its concrete Asset populated.
 //
 // If limit <= 0, it returns all (be careful on large datasets).
-func (r *SqliteRepository) findByType(ctx context.Context, atype string, limit int) ([]*types.Entity, error) {
+func (r *SqliteRepository) findByType(ctx context.Context, atype string, since time.Time, limit int) ([]*types.Entity, error) {
 	table := normalizeType(atype)
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
 	base := `
 SELECT e.entity_id, e.natural_key, e.attrs
 FROM entity e
-JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?
-ORDER BY e.updated_at DESC, e.entity_id DESC`
+JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?`
 	key := "entity.by_type.base"
 	q := base
 	args := []any{table}
 
+	if !since.IsZero() {
+		key += ".since"
+		q += " WHERE e.updated_at >= ?"
+		args = append(args, since.UTC())
+	}
+
+	q += " ORDER BY e.updated_at DESC, e.entity_id DESC"
+
 	if limit > 0 {
+		key += fmt.Sprintf(".limit%d", limit)
 		q = base + " LIMIT ?"
 		args = append(args, limit)
-		key = "entity.by_type.base.limit"
 	}
 
 	ch := make(chan *rowsReadResult, 1)
@@ -334,13 +321,12 @@ var contentRegistry = map[string]regEntry{
 		},
 	},
 	"domainrecord": {
-		keys: []string{"domain", "name", "extension", "punycode", "raw", "id", "whois_server"},
+		keys: []string{"domain", "name", "extension", "punycode", "id", "whois_server"},
 		colMap: map[string]string{
 			"domain":       "lower(a.domain)",
 			"name":         "lower(a.record_name)",
 			"extension":    "a.extension",
 			"punycode":     "a.punycode",
-			"raw":          "a.raw_record",
 			"id":           "a.object_id",
 			"whois_server": "a.whois_server",
 		},
@@ -475,18 +461,16 @@ var contentRegistry = map[string]regEntry{
 		},
 	},
 	"service": {
-		keys: []string{"unique_id", "service_type", "output", "output_length"},
+		keys: []string{"unique_id", "service_type", "output_length"},
 		colMap: map[string]string{
 			"unique_id":     "a.unique_id",
 			"service_type":  "a.service_type",
-			"output":        "a.output_data",
 			"output_length": "a.output_length",
 		},
 	},
 	"tlscertificate": {
 		keys: []string{
-			"version", "serial_number", "subject_common_name", "issuer_common_name",
-			"signature_algorithm", "public_key_algorithm", "subject_key_id", "authority_key_id",
+			"version", "serial_number", "subject_common_name", "issuer_common_name", "signature_algorithm", "public_key_algorithm",
 		},
 		colMap: map[string]string{
 			"version":              "a.tls_version",
@@ -495,8 +479,6 @@ var contentRegistry = map[string]regEntry{
 			"issuer_common_name":   "a.issuer_common_name",
 			"signature_algorithm":  "a.signature_algorithm",
 			"public_key_algorithm": "a.public_key_algorithm",
-			"subject_key_id":       "a.subject_key_id",
-			"authority_key_id":     "a.authority_key_id",
 		},
 	},
 	"url": {

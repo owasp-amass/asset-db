@@ -365,7 +365,7 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	if !since.IsZero() {
 		name += ".since"
 		where = append(where, "e.updated_at >= ?")
-		args = append(args, since.In(time.UTC).Format("2006-01-02 15:04:05"))
+		args = append(args, since.UTC())
 	}
 	q := base + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.updated_at DESC"
 
@@ -411,9 +411,6 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 		}
 		if eg.CreatedAt == nil || eg.UpdatedAt == nil {
 			return nil, errors.New("failed to obtain the timestamps")
-		}
-		if eg.UpdatedAt.Before(since) {
-			continue
 		}
 
 		if content != "" && strings.TrimSpace(content) != "" {

@@ -172,12 +172,6 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.DomainRecord), before, dbt.ContentFilters{
-		"raw": raw_record,
-	})
-	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
-	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
-
 	ents, err = db.FindEntitiesByContent(ctx, string(oam.DomainRecord), time.Time{}, dbt.ContentFilters{
 		"id": object_id,
 	})
