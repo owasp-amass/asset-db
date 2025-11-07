@@ -213,7 +213,7 @@ func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, err
 		return nil, fmt.Errorf("failed to convert subject to asset: %v", err)
 	}
 
-	ent, err := db.FindOneEntityByContent(context.Background(), string(subject.Type), subject.Since, filter)
+	ent, err := db.FindOneEntityByContent(context.Background(), subject.Type, subject.Since, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find the subject in the database: %v", err)
 	}
