@@ -6,6 +6,8 @@ package sqlite3
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -94,9 +96,11 @@ func TestFindEntityTags(t *testing.T) {
 	}
 
 	before1 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	tag1, err := db.CreateEntityProperty(ctx, fqdn, prop1)
 	assert.NoError(t, err, "Failed to create tag for the FQDN")
 	assert.NotNil(t, tag1, "Tag for the FQDN should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after1 := time.Now()
 
 	time.Sleep(time.Second)
@@ -107,9 +111,11 @@ func TestFindEntityTags(t *testing.T) {
 	}
 
 	before2 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	tag2, err := db.CreateEntityProperty(ctx, fqdn, prop2)
 	assert.NoError(t, err, "Failed to create tag for the FQDN")
 	assert.NotNil(t, tag2, "Tag for the FQDN should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after2 := time.Now()
 
 	tests := map[string]struct {
@@ -210,5 +216,92 @@ func TestFindEntityTags(t *testing.T) {
 
 		_, err = db.FindEntityTagById(ctx, tag.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
+	}
+}
+
+func BenchmarkFindEntityTagByID(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	var ids []string
+	for i := range int64(1000) {
+		prop, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
+			PropertyName:  "prop",
+			PropertyValue: fmt.Sprintf("value%d", i),
+		})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		ids = append(ids, prop.ID)
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntityTagById(context.Background(), ids[idx])
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntityTags(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	var names []string
+	for i := range int64(1000) {
+		tag, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		names = append(names, tag.Property.Name())
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntityTags(context.Background(), a, time.Time{}, names[idx])
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntityTagsWithSince(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	var since time.Time
+	for i := range int64(1000) {
+		_, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	var i int64
+	for b.Loop() {
+		_, _ = db.FindEntityTags(context.Background(), a, since)
+		i = (i + 1) % 1000
 	}
 }

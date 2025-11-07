@@ -6,6 +6,8 @@ package sqlite3
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"net/netip"
 	"strconv"
 	"testing"
@@ -129,9 +131,11 @@ func TestFindEdgeTags(t *testing.T) {
 	}
 
 	before1 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	tag1, err := db.CreateEdgeProperty(ctx, edge, prop1)
 	assert.NoError(t, err, "Failed to create tag for the edge")
 	assert.NotNil(t, tag1, "Tag for the edge should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after1 := time.Now()
 
 	time.Sleep(time.Second)
@@ -142,9 +146,11 @@ func TestFindEdgeTags(t *testing.T) {
 	}
 
 	before2 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	tag2, err := db.CreateEdgeProperty(ctx, edge, prop2)
 	assert.NoError(t, err, "Failed to create tag for the edge")
 	assert.NotNil(t, tag2, "Tag for the edge should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after2 := time.Now()
 
 	tests := map[string]struct {
@@ -242,5 +248,122 @@ func TestFindEdgeTags(t *testing.T) {
 
 		_, err = db.FindEdgeTagById(ctx, tag.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
+	}
+}
+
+func BenchmarkFindEdgeTagByID(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
+		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
+		FromEntity: a1,
+		ToEntity:   a2,
+	})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	var ids []string
+	for i := range int64(1000) {
+		prop, err := db.CreateEdgeProperty(context.Background(), edge, &oamgen.SimpleProperty{
+			PropertyName:  "prop",
+			PropertyValue: fmt.Sprintf("value%d", i),
+		})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		ids = append(ids, prop.ID)
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEdgeTagById(context.Background(), ids[idx])
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEdgeTags(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
+		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
+		FromEntity: a1,
+		ToEntity:   a2,
+	})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	var names []string
+	for i := range int64(1000) {
+		tag, err := db.CreateEdgeProperty(context.Background(), edge, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		names = append(names, tag.Property.Name())
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEdgeTags(context.Background(), edge, time.Time{}, names[idx])
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEdgeTagsWithSince(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
+		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
+		FromEntity: a1,
+		ToEntity:   a2,
+	})
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+	var since time.Time
+	for i := range int64(1000) {
+		_, err := db.CreateEdgeProperty(context.Background(), edge, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	var i int64
+	for b.Loop() {
+		_, _ = db.FindEdgeTags(context.Background(), edge, since)
+		i = (i + 1) % 1000
 	}
 }

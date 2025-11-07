@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
@@ -31,6 +32,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	defer cancel()
 
 	before1 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	set1 := stringset.New("example.com", "test.com", "sample.org")
 	for _, name := range set1.Slice() {
 		fqdn, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: name})
@@ -44,11 +46,13 @@ func TestFindEntitiesByType(t *testing.T) {
 	assert.NoError(t, err, "Failed to create asset for the IPAddress")
 	assert.NotNil(t, ip1, "Entity for the IPAddress should not be nil")
 	ip1set := stringset.New("104.20.44.163")
+	time.Sleep(100 * time.Millisecond)
 	after1 := time.Now()
 
 	time.Sleep(1 * time.Second)
 
 	before2 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	set2 := stringset.New("example.net", "demo.com", "website.org")
 	for _, name := range set2.Slice() {
 		fqdn, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: name})
@@ -62,6 +66,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	assert.NoError(t, err, "Failed to create asset for the IPAddress")
 	assert.NotNil(t, ip2, "Entity for the IPAddress should not be nil")
 	ip2set := stringset.New("172.66.157.115")
+	time.Sleep(100 * time.Millisecond)
 	after2 := time.Now()
 
 	tests := map[string]struct {
@@ -188,5 +193,82 @@ func BenchmarkFindEntityByID(b *testing.B) {
 	for b.Loop() {
 		_, _ = db.FindEntityById(context.Background(), ids[idx])
 		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntitiesByContent(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	var names []string
+	for i := range int64(1000) {
+		n := fmt.Sprintf("www%d.example.com", i)
+		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		names = append(names, n)
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, time.Time{}, dbt.ContentFilters{
+			"name": names[idx],
+		})
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	var names []string
+	since := time.Now()
+	time.Sleep(100 * time.Millisecond)
+	for i := range int64(1000) {
+		n := fmt.Sprintf("www%d.example.com", i)
+		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		names = append(names, n)
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, since, dbt.ContentFilters{
+			"name": names[idx],
+		})
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntitiesByType(b *testing.B) {
+	// create a new in-memory SQLite database for testing
+	db, err := setupTestDB(SQLiteMemory, "")
+	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	var since time.Time
+	for i := range int64(1000) {
+		n := fmt.Sprintf("www%d.example.com", i)
+
+		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	for b.Loop() {
+		_, _ = db.FindEntitiesByType(context.Background(), oam.FQDN, since)
 	}
 }

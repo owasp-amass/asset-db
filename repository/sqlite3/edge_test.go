@@ -40,6 +40,7 @@ func TestCreateEdge(t *testing.T) {
 	assert.NotNil(t, ip, "Entity for the IPAddress should not be nil")
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	rel := &oamdns.BasicDNSRelation{
 		Name: "dns_record",
 		Header: oamdns.RRHeader{
@@ -55,6 +56,7 @@ func TestCreateEdge(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create edge for the DNS record")
 	assert.NotNil(t, edge, "Edge should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
 	// check the validity of all three IDs
@@ -117,6 +119,7 @@ func TestIncomingEdges(t *testing.T) {
 	defer cancel()
 
 	before1 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	fqdn1, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn1, "Entity for the FQDN should not be nil")
@@ -140,10 +143,12 @@ func TestIncomingEdges(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create edge for the simple relation")
 	assert.NotNil(t, edge1, "Edge should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after1 := time.Now()
 
 	time.Sleep(2 * time.Second)
 	before2 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 
 	rel2 := &oamgen.SimpleRelation{Name: "node"}
 	edge2, err := db.CreateEdge(ctx, &dbt.Edge{
@@ -153,6 +158,7 @@ func TestIncomingEdges(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create edge for the simple relation")
 	assert.NotNil(t, edge2, "Edge should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after2 := time.Now()
 
 	tests := map[string]struct {
@@ -267,6 +273,7 @@ func TestOutgoingEdges(t *testing.T) {
 	defer cancel()
 
 	before1 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	fqdn1, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn1, "Entity for the FQDN should not be nil")
@@ -290,10 +297,12 @@ func TestOutgoingEdges(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create edge for the simple relation")
 	assert.NotNil(t, edge1, "Edge should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after1 := time.Now()
 
 	time.Sleep(2 * time.Second)
 	before2 := time.Now()
+	time.Sleep(100 * time.Millisecond)
 
 	rel2 := &oamgen.SimpleRelation{Name: "node"}
 	edge2, err := db.CreateEdge(ctx, &dbt.Edge{
@@ -303,6 +312,7 @@ func TestOutgoingEdges(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create edge for the simple relation")
 	assert.NotNil(t, edge2, "Edge should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after2 := time.Now()
 
 	tests := map[string]struct {
