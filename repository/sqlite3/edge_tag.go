@@ -9,7 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"slices"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -67,10 +67,10 @@ func (r *SqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*dbt
 	}
 
 	const q = `
-SELECT m.id, m.edge_id, m.created_at, m.updated_at, 
-	(SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), tg.content
+SELECT m.id, m.edge_id, m.created_at, m.updated_at, tt.name, tg.content
 FROM edge_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
+JOIN tag_type_lu tt ON tt.id = tg.ttype_id
 WHERE m.id = :map_id
 LIMIT 1`
 
@@ -125,23 +125,7 @@ func (r *SqliteRepository) FindEdgeTags(ctx context.Context, edge *dbt.Edge, sin
 		return nil, err
 	}
 
-	tags, err := r.tagsForEdge(ctx, eid, since)
-	if err != nil {
-		return nil, err
-	}
-
-	var out []*dbt.EdgeTag
-	for _, t := range tags {
-		if len(names) > 0 && !slices.Contains(names, t.Property.Name()) {
-			continue
-		}
-		out = append(out, t)
-	}
-
-	if len(out) == 0 {
-		return nil, errors.New("no tags found for edge")
-	}
-	return out, nil
+	return r.tagsForEdge(ctx, eid, since, names...)
 }
 
 func (r *SqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
@@ -198,20 +182,25 @@ func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID, tagID int64) (in
 }
 
 // tagsForEdge lists all tags assigned to an edge.
-func (r *SqliteRepository) tagsForEdge(ctx context.Context, eid int64, since time.Time) ([]*dbt.EdgeTag, error) {
+func (r *SqliteRepository) tagsForEdge(ctx context.Context, eid int64, since time.Time, names ...string) ([]*dbt.EdgeTag, error) {
 	key := "edge.tag.tags_for_edge"
 	args := []any{sql.Named("edge_id", eid)}
 	q := `
-SELECT m.id, m.created_at, m.updated_at, 
-	(SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), tg.content
+SELECT m.id, m.created_at, m.updated_at, tt.name, tg.content
 FROM edge_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
+JOIN tag_type_lu tt ON tt.id = tg.ttype_id
 WHERE m.edge_id = :edge_id`
 
 	if !since.IsZero() {
 		key += ".since"
 		q += " AND m.updated_at >= :since"
 		args = append(args, sql.Named("since", since.UTC()))
+	}
+	if values, vargs := inClause(names); values != "" && len(vargs) > 0 {
+		key += fmt.Sprintf(".names%d", len(vargs))
+		q += " AND tg.property_name IN " + values
+		args = append(args, vargs...)
 	}
 
 	q += " ORDER BY m.updated_at DESC"

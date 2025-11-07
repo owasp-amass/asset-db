@@ -143,12 +143,13 @@ WHERE tag_id = :tag_id
 }
 
 func extractOAMProperty(ttype string, content []byte) (oam.Property, error) {
-	var p oam.Property
 	err := errors.New("failed to extract property from the JSON")
+
 	if len(content) == 0 {
 		return nil, err
 	}
 
+	var p oam.Property
 	switch strings.ToLower(ttype) {
 	case strings.ToLower(string(oam.DNSRecordProperty)):
 		var dp oamdns.DNSRecordProperty

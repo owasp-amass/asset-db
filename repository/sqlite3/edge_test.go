@@ -323,7 +323,7 @@ func TestOutgoingEdges(t *testing.T) {
 		labels []string
 		count  int
 	}{
-		"fqdn2": {
+		"fqdn1": {
 			entity: fqdn1,
 			before: before1,
 			after:  after2,
@@ -331,7 +331,7 @@ func TestOutgoingEdges(t *testing.T) {
 			labels: []string{"dns_record", "node"},
 			count:  2,
 		},
-		"fqdn2 since before1": {
+		"fqdn1 since before1": {
 			entity: fqdn1,
 			before: before1,
 			after:  after2,
@@ -339,21 +339,21 @@ func TestOutgoingEdges(t *testing.T) {
 			labels: nil,
 			count:  2,
 		},
-		"fqdn2 since before2": {
+		"fqdn1 since before2": {
 			entity: fqdn1,
 			before: before2,
 			after:  after2,
 			since:  before2,
 			count:  1,
 		},
-		"fqdn2 since after2": {
+		"fqdn1 since after2": {
 			entity: fqdn1,
 			before: before1,
 			after:  after1,
 			since:  after2,
 			count:  0,
 		},
-		"fqdn2 with label dns_record": {
+		"fqdn1 with label dns_record": {
 			entity: fqdn1,
 			before: before1,
 			after:  after1,
@@ -361,7 +361,7 @@ func TestOutgoingEdges(t *testing.T) {
 			labels: []string{"dns_record"},
 			count:  1,
 		},
-		"fqdn2 with label node": {
+		"fqdn1 with label node": {
 			entity: fqdn1,
 			before: before2,
 			after:  after2,

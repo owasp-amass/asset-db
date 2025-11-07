@@ -10,13 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/owasp-amass/asset-db/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -52,23 +51,7 @@ FROM edge e
 JOIN edge_type_lu t ON t.id = e.etype_id
 WHERE e.edge_id = :edge_id`
 
-type Edge struct {
-	EdgeID       int64           `json:"edge_id"`
-	EType        string          `json:"etype"` // edge_type_lu.name
-	FromEntityID int64           `json:"from_entity_id"`
-	ToEntityID   int64           `json:"to_entity_id"`
-	Content      json.RawMessage `json:"content,omitempty"` // edge.content
-	CreatedAt    *time.Time      `json:"created_at,omitempty"`
-	UpdatedAt    *time.Time      `json:"updated_at,omitempty"`
-}
-
-type EdgeWithTypes struct {
-	Edge
-	FromType string `json:"from_type"`
-	ToType   string `json:"to_type"`
-}
-
-func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
+func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt.Edge, error) {
 	if edge == nil {
 		return nil, fmt.Errorf("nil edge provided")
 	}
@@ -135,29 +118,19 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*t
 		return nil, err
 	}
 
-	sqlEdge, err := r.idToEdge(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve created edge: %v", err)
-	}
-
-	return convertSQLiteEdgeToOAMEdge(sqlEdge)
+	return r.idToEdge(ctx, id)
 }
 
-func (r *SqliteRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
-	edgeID, err := strconv.ParseInt(id, 10, 64)
+func (r *SqliteRepository) FindEdgeById(ctx context.Context, id string) (*dbt.Edge, error) {
+	eid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid edge ID: %v", err)
 	}
 
-	sqlEdge, err := r.idToEdge(ctx, edgeID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve edge: %v", err)
-	}
-
-	return convertSQLiteEdgeToOAMEdge(sqlEdge)
+	return r.idToEdge(ctx, eid)
 }
 
-func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*Edge, error) {
+func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*dbt.Edge, error) {
 	ch := make(chan *rowReadResult, 1)
 	r.rpool.Submit(&rowReadJob{
 		Ctx:     ctx,
@@ -172,149 +145,106 @@ func (r *SqliteRepository) idToEdge(ctx context.Context, id int64) (*Edge, error
 		return nil, result.Err
 	}
 
-	var eg Edge
-	var cAt, uAt string
-	var content string
-	if err := result.Row.Scan(&eg.EdgeID, &cAt, &uAt, &eg.EType,
-		&eg.FromEntityID, &eg.ToEntityID, &content); err != nil {
+	var c, u, etype, raw string
+	var rowid, fromid, toid int64
+	if err := result.Row.Scan(&rowid, &c, &u, &etype, &fromid, &toid, &raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("edge %d not found", id)
 		}
 		return nil, err
 	}
 
-	if content != "" && strings.TrimSpace(content) != "" {
-		eg.Content = json.RawMessage(content)
+	rel, err := extractOAMRelation(etype, json.RawMessage(raw))
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract OAM relation: %v", err)
 	}
 
-	if c, err := parseTimestamp(cAt); err == nil {
-		eg.CreatedAt = &c
+	edge := &dbt.Edge{
+		ID:         strconv.FormatInt(id, 10),
+		Relation:   rel,
+		FromEntity: &dbt.Entity{ID: strconv.FormatInt(fromid, 10)},
+		ToEntity:   &dbt.Entity{ID: strconv.FormatInt(toid, 10)},
+	}
+
+	if created, err := parseTimestamp(c); err == nil {
+		edge.CreatedAt = created
 	} else {
 		return nil, err
 	}
-	if u, err := parseTimestamp(uAt); err == nil {
-		eg.UpdatedAt = &u
+	if updated, err := parseTimestamp(u); err == nil {
+		edge.LastSeen = updated
 	} else {
 		return nil, err
 	}
-	if eg.CreatedAt == nil || eg.UpdatedAt == nil {
+	if edge.CreatedAt.IsZero() || edge.LastSeen.IsZero() {
 		return nil, errors.New("failed to obtain the edge timestamps")
 	}
 
-	return &eg, nil
+	return edge, nil
 }
 
-func convertSQLiteEdgeToOAMEdge(e *Edge) (*types.Edge, error) {
-	if e == nil {
-		return nil, fmt.Errorf("nil edge provided")
+func extractOAMRelation(etype string, content json.RawMessage) (oam.Relation, error) {
+	err := errors.New("failed to extract relation from the JSON")
+
+	if len(content) == 0 {
+		return nil, err
 	}
 
 	var rel oam.Relation
-	switch strings.ToLower(e.EType) {
+	switch strings.ToLower(etype) {
 	case strings.ToLower(string(oam.BasicDNSRelation)):
 		var r oamdns.BasicDNSRelation
-		if err := json.Unmarshal(e.Content, &r); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal BasicDNSRelation: %v", err)
+		if e := json.Unmarshal(content, &r); e == nil {
+			rel = &r
+			err = nil
 		}
-		rel = &r
 	case strings.ToLower(string(oam.PortRelation)):
 		var r oamgen.PortRelation
-		if err := json.Unmarshal(e.Content, &r); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal PortRelation: %v", err)
+		if e := json.Unmarshal(content, &r); e == nil {
+			rel = &r
+			err = nil
 		}
-		rel = &r
 	case strings.ToLower(string(oam.PrefDNSRelation)):
 		var r oamdns.PrefDNSRelation
-		if err := json.Unmarshal(e.Content, &r); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal PrefDNSRelation: %v", err)
+		if e := json.Unmarshal(content, &r); e == nil {
+			rel = &r
+			err = nil
 		}
-		rel = &r
 	case strings.ToLower(string(oam.SimpleRelation)):
 		var r oamgen.SimpleRelation
-		if err := json.Unmarshal(e.Content, &r); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal SimpleRelation: %v", err)
+		if e := json.Unmarshal(content, &r); e == nil {
+			rel = &r
+			err = nil
 		}
-		rel = &r
 	case strings.ToLower(string(oam.SRVDNSRelation)):
 		var r oamdns.SRVDNSRelation
-		if err := json.Unmarshal(e.Content, &r); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal SRVDNSRelation: %v", err)
+		if e := json.Unmarshal(content, &r); e == nil {
+			rel = &r
+			err = nil
 		}
-		rel = &r
 	default:
-		return nil, fmt.Errorf("unsupported edge type: %s", e.EType)
+		return nil, fmt.Errorf("unsupported edge type: %s", etype)
 	}
 
-	return &types.Edge{
-		ID:         fmt.Sprintf("%d", e.EdgeID),
-		CreatedAt:  e.CreatedAt.In(time.UTC).Local(),
-		LastSeen:   e.UpdatedAt.In(time.UTC).Local(),
-		Relation:   rel,
-		FromEntity: &types.Entity{ID: fmt.Sprintf("%d", e.FromEntityID)},
-		ToEntity:   &types.Entity{ID: fmt.Sprintf("%d", e.ToEntityID)},
-	}, nil
+	return rel, err
 }
 
-func (r *SqliteRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (r *SqliteRepository) IncomingEdges(ctx context.Context, entity *dbt.Entity, since time.Time, labels ...string) ([]*dbt.Edge, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid entity ID: %v", err)
 	}
 
-	edges, err := r.findEdgesForEntity(ctx, eid, "in", "", since, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve incoming edges: %v", err)
-	}
-
-	var out []*types.Edge
-	for _, e := range edges {
-		edge, err := convertSQLiteEdgeToOAMEdge(&e.Edge)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert edge: %v", err)
-		}
-
-		if len(labels) > 0 && !slices.Contains(labels, edge.Relation.Label()) {
-			continue
-		}
-
-		out = append(out, edge)
-	}
-
-	if len(out) == 0 {
-		return nil, fmt.Errorf("zero incoming edges found for entity %s", entity.ID)
-	}
-	return out, nil
+	return r.findEdgesForEntity(ctx, eid, "in", since, labels...)
 }
 
-func (r *SqliteRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
+func (r *SqliteRepository) OutgoingEdges(ctx context.Context, entity *dbt.Entity, since time.Time, labels ...string) ([]*dbt.Edge, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid entity ID: %v", err)
 	}
 
-	edges, err := r.findEdgesForEntity(ctx, eid, "out", "", since, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve outgoing edges: %v", err)
-	}
-
-	var out []*types.Edge
-	for _, e := range edges {
-		edge, err := convertSQLiteEdgeToOAMEdge(&e.Edge)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert edge: %v", err)
-		}
-
-		if len(labels) > 0 && !slices.Contains(labels, edge.Relation.Label()) {
-			continue
-		}
-
-		out = append(out, edge)
-	}
-
-	if len(out) == 0 {
-		return nil, fmt.Errorf("zero outgoing edges found for entity %s", entity.ID)
-	}
-	return out, nil
+	return r.findEdgesForEntity(ctx, eid, "out", since, labels...)
 }
 
 func (r *SqliteRepository) DeleteEdge(ctx context.Context, id string) error {
@@ -329,16 +259,11 @@ func (r *SqliteRepository) DeleteEdge(ctx context.Context, id string) error {
 // dir = "out", "in", or "" (both). etype optional ("" = any).
 // since limits by updated_at >= since (zero time => no limit).
 // limit <= 0 => no explicit LIMIT.
-func (r *SqliteRepository) findEdgesForEntity(ctx context.Context, entityID int64, dir, etype string, since time.Time, limit int) ([]EdgeWithTypes, error) {
+func (r *SqliteRepository) findEdgesForEntity(ctx context.Context, eid int64, dir string, since time.Time, labels ...string) ([]*dbt.Edge, error) {
 	base := `
-SELECT e.edge_id, te.name, e.from_entity_id, e.to_entity_id, e.content, 
-	e.created_at, e.updated_at, tf.name AS from_type, tt.name AS to_type
+SELECT e.edge_id, te.name, e.from_entity_id, e.to_entity_id, e.content, e.created_at, e.updated_at
 FROM edge e
 JOIN edge_type_lu te ON te.id = e.etype_id
-JOIN entity a ON a.entity_id = e.from_entity_id
-JOIN entity b ON b.entity_id = e.to_entity_id
-JOIN entity_type_lu tf ON tf.id = a.type_id
-JOIN entity_type_lu tt ON tt.id = b.type_id
 `
 	var args []any
 	var name string
@@ -346,33 +271,29 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	switch strings.ToLower(strings.TrimSpace(dir)) {
 	case "out":
 		name = "edge.outgoing"
-		where = append(where, "e.from_entity_id = ?")
-		args = append(args, entityID)
+		where = append(where, "e.from_entity_id = :entity_id")
+		args = append(args, sql.Named("entity_id", eid))
 	case "in":
 		name = "edge.incoming"
-		where = append(where, "e.to_entity_id = ?")
-		args = append(args, entityID)
+		where = append(where, "e.to_entity_id = :entity_id")
+		args = append(args, sql.Named("entity_id", eid))
 	default:
 		name = "edge.both"
-		where = append(where, "(e.from_entity_id = ? OR e.to_entity_id = ?)")
-		args = append(args, entityID, entityID)
-	}
-	if etype = strings.TrimSpace(etype); etype != "" {
-		name += ".etype"
-		where = append(where, "te.name = ?")
-		args = append(args, strings.ToLower(etype))
+		where = append(where, "(e.from_entity_id = :entity_id OR e.to_entity_id = :entity_id)")
+		args = append(args, sql.Named("entity_id", eid))
 	}
 	if !since.IsZero() {
 		name += ".since"
-		where = append(where, "e.updated_at >= ?")
-		args = append(args, since.UTC())
+		where = append(where, "e.updated_at >= :since")
+		args = append(args, sql.Named("since", since.UTC()))
 	}
-	q := base + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.updated_at DESC"
+	if values, vargs := inClause(labels); values != "" && len(vargs) > 0 {
+		name += fmt.Sprintf(".labels%d", len(vargs))
+		where = append(where, "e.label IN "+values)
+		args = append(args, vargs...)
+	}
 
-	if limit > 0 {
-		name += fmt.Sprintf(".limit%d", limit)
-		q += fmt.Sprintf(" LIMIT %d", limit)
-	}
+	q := base + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.updated_at DESC"
 
 	ch := make(chan *rowsReadResult, 1)
 	r.rpool.Submit(&rowsReadJob{
@@ -389,38 +310,48 @@ JOIN entity_type_lu tt ON tt.id = b.type_id
 	}
 	defer func() { _ = result.Rows.Close() }()
 
-	var out []EdgeWithTypes
+	var out []*dbt.Edge
 	for result.Rows.Next() {
-		var eg EdgeWithTypes
-		var cAt, uAt string
-		var content string
+		var c, u, etype, raw string
+		var rowid, fromid, toid int64
 
-		if err := result.Rows.Scan(&eg.EdgeID, &eg.EType, &eg.FromEntityID,
-			&eg.ToEntityID, &content, &cAt, &uAt, &eg.FromType, &eg.ToType); err != nil {
+		if err := result.Rows.Scan(&rowid, &etype, &fromid, &toid, &raw, &c, &u); err != nil {
 			return nil, err
 		}
-		if c, err := parseTimestamp(cAt); err == nil {
-			eg.CreatedAt = &c
+
+		rel, err := extractOAMRelation(etype, json.RawMessage(raw))
+		if err != nil {
+			continue
+		}
+
+		edge := &dbt.Edge{
+			ID:         strconv.FormatInt(rowid, 10),
+			Relation:   rel,
+			FromEntity: &dbt.Entity{ID: strconv.FormatInt(fromid, 10)},
+			ToEntity:   &dbt.Entity{ID: strconv.FormatInt(toid, 10)},
+		}
+
+		if created, err := parseTimestamp(c); err == nil {
+			edge.CreatedAt = created
 		} else {
 			return nil, err
 		}
-		if u, err := parseTimestamp(uAt); err == nil {
-			eg.UpdatedAt = &u
+		if updated, err := parseTimestamp(u); err == nil {
+			edge.LastSeen = updated
 		} else {
 			return nil, err
 		}
-		if eg.CreatedAt == nil || eg.UpdatedAt == nil {
-			return nil, errors.New("failed to obtain the timestamps")
+		if edge.CreatedAt.IsZero() || edge.LastSeen.IsZero() {
+			continue
 		}
 
-		if content != "" && strings.TrimSpace(content) != "" {
-			eg.Content = json.RawMessage(content)
-		}
-
-		out = append(out, eg)
+		out = append(out, edge)
 	}
 
-	return out, result.Rows.Err()
+	if len(out) == 0 {
+		return nil, fmt.Errorf("zero edges found for entity %d", eid)
+	}
+	return out, nil
 }
 
 // deleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).

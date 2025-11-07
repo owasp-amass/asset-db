@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS tag (
 );
 CREATE INDEX IF NOT EXISTS idx_tag_created_at ON tag(created_at);
 CREATE INDEX IF NOT EXISTS idx_tag_updated_at ON tag(updated_at);
+CREATE INDEX IF NOT EXISTS idx_tag_ttype_id ON tag(ttype_id);
+CREATE INDEX IF NOT EXISTS idx_tag_property_name ON tag(property_name);
 CREATE INDEX IF NOT EXISTS idx_tag_tt_name ON tag(ttype_id, property_name);
 
 -- +migrate StatementBegin
@@ -1180,6 +1182,8 @@ DROP TABLE IF EXISTS entity_tag_map;
 
 DROP TRIGGER IF EXISTS trg_tag_au;
 DROP INDEX IF EXISTS idx_tag_tt_name;
+DROP INDEX IF EXISTS idx_tag_property_value;
+DROP INDEX IF EXISTS idx_tag_ttype_id;
 DROP INDEX IF EXISTS idx_tag_updated_at;
 DROP INDEX IF EXISTS idx_tag_created_at;
 DROP TABLE IF EXISTS tag;

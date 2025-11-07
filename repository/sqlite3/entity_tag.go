@@ -9,8 +9,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"slices"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -66,10 +67,10 @@ func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*d
 	}
 
 	const q = `
-SELECT m.id, m.entity_id, m.created_at, m.updated_at, 
-	(SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), tg.content
+SELECT m.id, m.entity_id, m.created_at, m.updated_at, tt.name, tg.content
 FROM entity_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
+JOIN tag_type_lu tt ON tt.id = tg.ttype_id
 WHERE m.id = :map_id
 LIMIT 1`
 
@@ -124,23 +125,7 @@ func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *dbt.Entit
 		return nil, err
 	}
 
-	tags, err := r.tagsForEntity(ctx, eid, since)
-	if err != nil {
-		return nil, err
-	}
-
-	var out []*dbt.EntityTag
-	for _, t := range tags {
-		if len(names) > 0 && !slices.Contains(names, t.Property.Name()) {
-			continue
-		}
-		out = append(out, t)
-	}
-
-	if len(out) == 0 {
-		return nil, errors.New("no tags found for entity")
-	}
-	return out, nil
+	return r.tagsForEntity(ctx, eid, since, names...)
 }
 
 func (r *SqliteRepository) DeleteEntityTag(ctx context.Context, id string) error {
@@ -197,20 +182,31 @@ func (r *SqliteRepository) tagEntity(ctx context.Context, entityID, tagID int64)
 }
 
 // tagsForEntity lists all tag assignments for an entity (namespaced).
-func (r *SqliteRepository) tagsForEntity(ctx context.Context, eid int64, since time.Time) ([]*dbt.EntityTag, error) {
+func (r *SqliteRepository) tagsForEntity(ctx context.Context, eid int64, since time.Time, names ...string) ([]*dbt.EntityTag, error) {
 	key := "entity.tags_for_entity"
 	args := []any{sql.Named("entity_id", eid)}
 	q := `
-SELECT m.id, m.created_at, m.updated_at, 
-	(SELECT name FROM tag_type_lu WHERE id = tg.ttype_id LIMIT 1), tg.content
+SELECT m.id, m.created_at, m.updated_at, tt.name, tg.content
 FROM entity_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
+JOIN tag_type_lu tt ON tt.id = tg.ttype_id
 WHERE m.entity_id = :entity_id`
 
 	if !since.IsZero() {
 		key += ".since"
 		q += " AND m.updated_at >= :since"
 		args = append(args, sql.Named("since", since.UTC()))
+	}
+
+	if len(names) > 0 {
+		key += "." + strings.Join(names, ".")
+		list := `('` + strings.Join(names, `', '`) + `')`
+		q += " AND tg.property_name IN " + list
+	}
+	if values, vargs := inClause(names); values != "" && len(vargs) > 0 {
+		key += fmt.Sprintf(".names%d", len(vargs))
+		q += " AND tg.property_name IN " + values
+		args = append(args, vargs...)
 	}
 
 	q += " ORDER BY m.updated_at DESC"

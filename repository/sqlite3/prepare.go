@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -450,7 +451,7 @@ func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
 	j.Result <- &rowsReadResult{Rows: rows, Err: err}
 }
 
-// ------------------------------ Scan Utilities ------------------------------
+// ------------------------------ Utilities ------------------------------------
 
 // parseTimestamp converts a *string timestamp into *time.Time (RFC3339 or SQLite
 // default format). If parsing fails, returns nil (non-fatal for presentation purposes).
@@ -480,4 +481,20 @@ func parseTimestamp(s string) (time.Time, error) {
 	}
 
 	return time.Time{}, errors.New("failed to parse timestamp: " + s)
+}
+
+func inClause(params []string) (string, []any) {
+	if len(params) == 0 {
+		return "", nil
+	}
+
+	names := make([]string, 0, len(params))
+	args := make([]any, 0, len(params))
+	for i, p := range params {
+		name := fmt.Sprintf("inparam_%d", i)
+		names = append(names, ":"+name)
+		args = append(args, sql.Named(name, p))
+	}
+
+	return "(" + strings.Join(names, ", ") + ")", args
 }
