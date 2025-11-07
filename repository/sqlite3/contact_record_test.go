@@ -27,10 +27,12 @@ func TestCreateAssetForContactRecord(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	discovered := "Probably some URL"
 	cr, err := db.CreateAsset(ctx, &oamcon.ContactRecord{DiscoveredAt: discovered})
 	assert.NoError(t, err, "Failed to create asset for the ContactRecord")
 	assert.NotNil(t, cr, "Entity for the ContactRecord should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 	assert.WithinRange(t, cr.CreatedAt, before, after, "ContactRecord entity CreatedAt is incorrect")
 	assert.WithinRange(t, cr.LastSeen, before, after, "ContactRecord entity LastSeen is incorrect")
@@ -68,18 +70,20 @@ func TestFindEntitiesByContentForContactRecord(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	discovered := "Probably some URL"
 	cr, err := db.CreateAsset(ctx, &oamcon.ContactRecord{DiscoveredAt: discovered})
 	assert.NoError(t, err, "Failed to create asset for the ContactRecord")
 	assert.NotNil(t, cr, "Entity for the ContactRecord should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, string(oam.ContactRecord), after, dbt.ContentFilters{
+	_, err = db.FindOneEntityByContent(ctx, oam.ContactRecord, after, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, string(oam.ContactRecord), before, dbt.ContentFilters{
+	found, err := db.FindOneEntityByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the ContactRecord")
@@ -90,7 +94,7 @@ func TestFindEntitiesByContentForContactRecord(t *testing.T) {
 	assert.Equal(t, found.ID, cr.ID, "ContactRecord found by content does not have matching IDs")
 	assert.Equal(t, cr2.DiscoveredAt, discovered, "ContactRecord DiscoveredAt found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, string(oam.ContactRecord), before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the ContactRecord")

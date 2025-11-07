@@ -24,8 +24,8 @@ type Repository interface {
 	CreateEntity(ctx context.Context, entity *types.Entity) (*types.Entity, error)
 	CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error)
 	FindEntityById(ctx context.Context, id string) (*types.Entity, error)
-	FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error)
-	FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error)
+	FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) ([]*types.Entity, error)
+	FindOneEntityByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) (*types.Entity, error)
 	FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error)
 	DeleteEntity(ctx context.Context, id string) error
 	CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error)

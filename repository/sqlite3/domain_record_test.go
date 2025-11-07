@@ -27,6 +27,7 @@ func TestCreateAssetForDomainRecord(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	status := []string{"active"}
 	object_id := "test object ID"
 	raw_record := "test raw text"
@@ -53,7 +54,9 @@ func TestCreateAssetForDomainRecord(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create asset for the DomainRecord")
 	assert.NotNil(t, dr, "Entity for the DomainRecord should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
+
 	assert.WithinRange(t, dr.CreatedAt, before, after, "DomainRecord entity CreatedAt is incorrect")
 	assert.WithinRange(t, dr.LastSeen, before, after, "DomainRecord entity LastSeen is incorrect")
 
@@ -100,6 +103,7 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	status := []string{"active"}
 	object_id := "test object ID"
 	raw_record := "test raw text"
@@ -126,14 +130,15 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create asset for the DomainRecord")
 	assert.NotNil(t, dr, "Entity for the DomainRecord should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, string(oam.DomainRecord), after, dbt.ContentFilters{
+	_, err = db.FindOneEntityByContent(ctx, oam.DomainRecord, after, dbt.ContentFilters{
 		"domain": domain,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, string(oam.DomainRecord), before, dbt.ContentFilters{
+	found, err := db.FindOneEntityByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"domain": domain,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the DomainRecord")
@@ -154,31 +159,31 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	assert.Equal(t, dr2.ExpirationDate, expiration, "DomainRecord found by ID does not have a matching ExpirationDate")
 	assert.Equal(t, dr2.Status, status, "DomainRecord found by ID does not have a matching Status")
 
-	ents, err := db.FindEntitiesByContent(ctx, string(oam.DomainRecord), before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"name": record_name,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.DomainRecord), before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"extension": extension,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.DomainRecord), before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"punycode": punycode,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.DomainRecord), time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, time.Time{}, dbt.ContentFilters{
 		"id": object_id,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.DomainRecord), before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")

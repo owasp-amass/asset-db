@@ -39,7 +39,7 @@ func (neo *NeoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 			LastSeen:  time.Now(),
 			Asset:     input.Asset,
 		}
-	} else if entities, err := neo.FindEntitiesByContent(ctx, string(input.Asset.AssetType()), time.Time{}, filter); err == nil && len(entities) > 0 {
+	} else if entities, err := neo.FindEntitiesByContent(ctx, input.Asset.AssetType(), time.Time{}, filter); err == nil && len(entities) > 0 {
 		// ensure that duplicate entities are not entered into the database
 		entity = entities[0]
 		entity.LastSeen = time.Now()
@@ -189,7 +189,7 @@ func (neo *NeoRepository) FindEntityById(ctx context.Context, id string) (*types
 // If since.IsZero(), the parameter will be ignored.
 // The asset data is serialized to JSON and compared against the Content field of the Entity struct.
 // Returns a single matching entity as *types.Entity or an error if the search fails.
-func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
+func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
 	var field, value string
 	for k, v := range filters {
 		field = k
@@ -198,7 +198,7 @@ func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, etype stri
 	}
 
 	// Build the query node based on the asset type and filter
-	qnode := fmt.Sprintf("(%s:%s {%s: '%s'})", "a", etype, field, value)
+	qnode := fmt.Sprintf("(%s:%s {%s: '%s'})", "a", string(atype), field, value)
 
 	query := "MATCH " + qnode + " RETURN a"
 	if !since.IsZero() {
@@ -239,7 +239,7 @@ func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, etype stri
 // If since.IsZero(), the parameter will be ignored.
 // The asset data is serialized to JSON and compared against the Content field of the Entity struct.
 // Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
+func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
 	var field, value string
 	for k, v := range filters {
 		field = k
@@ -248,7 +248,7 @@ func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, etype strin
 	}
 
 	// Build the query node based on the asset type and filter
-	qnode := fmt.Sprintf("(%s:%s {%s: '%s'})", "a", etype, field, value)
+	qnode := fmt.Sprintf("(%s:%s {%s: '%s'})", "a", string(atype), field, value)
 
 	query := "MATCH " + qnode + " RETURN a"
 	if !since.IsZero() {

@@ -38,8 +38,8 @@ func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*dbt.Enti
 	return r.fetchCompleteRepoEntity(ctx, e)
 }
 
-func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
-	ents, err := r.findByContent(ctx, etype, since, filters, 0)
+func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
+	ents, err := r.findByContent(ctx, string(atype), since, filters, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +49,8 @@ func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype stri
 	return ents, nil
 }
 
-func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
-	ent, err := r.findOneByContent(ctx, etype, since, filters)
+func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
+	ent, err := r.findOneByContent(ctx, string(atype), since, filters)
 	if err != nil {
 		return nil, err
 	}

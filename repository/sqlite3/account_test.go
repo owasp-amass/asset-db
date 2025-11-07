@@ -27,6 +27,7 @@ func TestCreateAssetForAccount(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	uid := "test-account-uid-12345"
 	atype := oamacct.Checking
 	username := "testuser"
@@ -42,6 +43,7 @@ func TestCreateAssetForAccount(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create asset for the account")
 	assert.NotNil(t, acc, "Entity for the account should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 	assert.WithinRange(t, acc.CreatedAt, before, after, "Account entity CreatedAt is incorrect")
 	assert.WithinRange(t, acc.LastSeen, before, after, "Account entity LastSeen is incorrect")
@@ -82,6 +84,7 @@ func TestFindEntitiesByContentForAccount(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	uid := "test-account-uid-12345"
 	atype := oamacct.Checking
 	number := "1234567890"
@@ -99,14 +102,15 @@ func TestFindEntitiesByContentForAccount(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create asset for the account")
 	assert.NotNil(t, acc, "Entity for the account should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, string(oam.Account), after, dbt.ContentFilters{
+	_, err = db.FindOneEntityByContent(ctx, oam.Account, after, dbt.ContentFilters{
 		"username": username,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, string(oam.Account), before, dbt.ContentFilters{
+	found, err := db.FindOneEntityByContent(ctx, oam.Account, before, dbt.ContentFilters{
 		"username": username,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the account")
@@ -122,19 +126,19 @@ func TestFindEntitiesByContentForAccount(t *testing.T) {
 	assert.Equal(t, acc2.Balance, balance, "Account Balance found by content for the account does not match")
 	assert.Equal(t, acc2.Active, active, "Account Active found by content for the account does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, string(oam.Account), before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.Account, before, dbt.ContentFilters{
 		"unique_id": uid,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the account")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the account")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.Account), before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.Account, before, dbt.ContentFilters{
 		"account_type": string(atype),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the account")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the account")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.Account), time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.Account, time.Time{}, dbt.ContentFilters{
 		"account_number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the account")

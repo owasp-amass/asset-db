@@ -27,6 +27,7 @@ func TestCreateAssetForAutnumRecord(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	number := 26808
 	handle := "AS-TEST"
 	recname := "Test Autnum Record"
@@ -46,6 +47,7 @@ func TestCreateAssetForAutnumRecord(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create asset for the AutnumRecord")
 	assert.NotNil(t, ar, "Entity for the AutnumRecord should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 	assert.WithinRange(t, ar.CreatedAt, before, after, "AutnumRecord entity CreatedAt is incorrect")
 	assert.WithinRange(t, ar.LastSeen, before, after, "AutnumRecord entity LastSeen is incorrect")
@@ -89,6 +91,7 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	number := 26808
 	handle := "AS-TEST"
 	recname := "Test Autnum Record"
@@ -108,14 +111,15 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	})
 	assert.NoError(t, err, "Failed to create asset for the AutnumRecord")
 	assert.NotNil(t, ar, "Entity for the AutnumRecord should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, string(oam.AutnumRecord), after, dbt.ContentFilters{
+	_, err = db.FindOneEntityByContent(ctx, oam.AutnumRecord, after, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, string(oam.AutnumRecord), before, dbt.ContentFilters{
+	found, err := db.FindOneEntityByContent(ctx, oam.AutnumRecord, before, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the AutnumRecord")
@@ -132,25 +136,25 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	assert.Equal(t, ar2.UpdatedDate, updated, "AutnumRecord UpdatedDate found by content does not match")
 	assert.Equal(t, ar2.Status, status, "AutnumRecord Status found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.AutnumRecord, before, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, before, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, time.Time{}, dbt.ContentFilters{
 		"name": recname,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, string(oam.AutnumRecord), time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, time.Time{}, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")

@@ -27,11 +27,14 @@ func TestCreateAssetForAutonomousSystem(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	number := 26808
 	asn, err := db.CreateAsset(ctx, &oamnet.AutonomousSystem{Number: number})
 	assert.NoError(t, err, "Failed to create asset for the AutonomousSystem")
 	assert.NotNil(t, asn, "Entity for the AutonomousSystem should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
+
 	assert.WithinRange(t, asn.CreatedAt, before, after, "AutonomousSystem entity CreatedAt is incorrect")
 	assert.WithinRange(t, asn.LastSeen, before, after, "AutonomousSystem entity LastSeen is incorrect")
 
@@ -68,18 +71,20 @@ func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
 	defer cancel()
 
 	before := time.Now()
+	time.Sleep(100 * time.Millisecond)
 	number := 26808
 	asn, err := db.CreateAsset(ctx, &oamnet.AutonomousSystem{Number: number})
 	assert.NoError(t, err, "Failed to create asset for the AutonomousSystem")
 	assert.NotNil(t, asn, "Entity for the AutonomousSystem should not be nil")
+	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, string(oam.AutonomousSystem), after, dbt.ContentFilters{
+	_, err = db.FindOneEntityByContent(ctx, oam.AutonomousSystem, after, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, string(oam.AutonomousSystem), before, dbt.ContentFilters{
+	found, err := db.FindOneEntityByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the AutonomousSystem")
@@ -90,7 +95,7 @@ func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
 	assert.Equal(t, found.ID, asn.ID, "AutonomousSystem found by content does not have matching IDs")
 	assert.Equal(t, asn2.Number, number, "AutonomousSystem Number found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, string(oam.AutonomousSystem), before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutonomousSystem")
