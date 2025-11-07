@@ -15,12 +15,12 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/owasp-amass/asset-db/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
 // FindEntityById implements the Repository interface.
-func (r *SqliteRepository) FindEntityById(ctx context.Context, id string) (*types.Entity, error) {
+func (r *SqliteRepository) FindEntityById(ctx context.Context, id string) (*dbt.Entity, error) {
 	entityId, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func (r *SqliteRepository) FindEntityById(ctx context.Context, id string) (*type
 	return r.idToEntity(ctx, entityId)
 }
 
-func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*types.Entity, error) {
+func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*dbt.Entity, error) {
 	e, err := r.loadEntityCore(ctx, eid)
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*types.En
 	return r.fetchCompleteRepoEntity(ctx, e)
 }
 
-func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
+func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype string, since time.Time, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
 	ents, err := r.findByContent(ctx, etype, since, filters, 0)
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, etype stri
 	return ents, nil
 }
 
-func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
+func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype string, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
 	ent, err := r.findOneByContent(ctx, etype, since, filters)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, etype str
 	return ent, nil
 }
 
-func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
+func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*dbt.Entity, error) {
 	ents, err := r.findByType(ctx, string(atype), since, 0)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.Ass
 // asset type, and returns Entity+Asset. Supports multiple matches.
 
 // findOneByContent returns exactly one (first by updated_at desc)
-func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
+func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
 	ents, err := r.findByContent(ctx, atype, since, filters, 1)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, s
 
 // findByContent finds entities for asset type with given filters (on the asset table).
 // limit <= 0 => no explicit LIMIT.
-func (r *SqliteRepository) findByContent(ctx context.Context, atype string, since time.Time, filters types.ContentFilters, limit int) ([]*types.Entity, error) {
+func (r *SqliteRepository) findByContent(ctx context.Context, atype string, since time.Time, filters dbt.ContentFilters, limit int) ([]*dbt.Entity, error) {
 	table := normalizeType(atype)
 	if table == "" {
 		return nil, fmt.Errorf("unknown asset type %q", atype)
@@ -139,7 +139,7 @@ JOIN ` + table + ` a ON a.id = e.row_id`)
 	}
 	defer func() { _ = result.Rows.Close() }()
 
-	var out []*types.Entity
+	var out []*dbt.Entity
 	for result.Rows.Next() {
 		var eid int64
 
@@ -159,7 +159,7 @@ JOIN ` + table + ` a ON a.id = e.row_id`)
 
 // buildWhere validates the provided filters and builds "col = ?" AND ... with args.
 // It honors case-insensitive matching for columns that already use lower() in colMap.
-func buildWhere(table string, reg regEntry, since time.Time, filters types.ContentFilters) (string, []any, error) {
+func buildWhere(table string, reg regEntry, since time.Time, filters dbt.ContentFilters) (string, []any, error) {
 	if len(filters) == 0 {
 		// No filters — allow full scan over that table via entity (but still ordered by updated_at).
 		// Usually caller should set a LIMIT in this case.
@@ -210,7 +210,7 @@ func buildWhere(table string, reg regEntry, since time.Time, filters types.Conte
 // ordered by most recently updated (DESC). Each Entity has its concrete Asset populated.
 //
 // If limit <= 0, it returns all (be careful on large datasets).
-func (r *SqliteRepository) findByType(ctx context.Context, atype string, since time.Time, limit int) ([]*types.Entity, error) {
+func (r *SqliteRepository) findByType(ctx context.Context, atype string, since time.Time, limit int) ([]*dbt.Entity, error) {
 	table := normalizeType(atype)
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
 	base := `
@@ -250,7 +250,7 @@ JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?`
 	}
 	defer func() { _ = result.Rows.Close() }()
 
-	out := make([]*types.Entity, 0, max(0, limit))
+	out := make([]*dbt.Entity, 0, max(0, limit))
 	for result.Rows.Next() {
 		var eid int64
 		var disp string
