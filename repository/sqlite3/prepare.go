@@ -112,7 +112,7 @@ func (ww *writeWorker) run() {
 	batchdur := time.NewTicker(ww.batchDuration)
 	defer batchdur.Stop()
 
-	check := time.NewTicker(250 * time.Millisecond)
+	check := time.NewTicker(25 * time.Millisecond)
 	defer check.Stop()
 
 	var jobs []*writeJob
@@ -184,13 +184,15 @@ func (ww *writeWorker) run() {
 	}
 
 	queueCheck := func() {
-		ww.jobs.Process(func(job any) {
-			if j, valid := job.(*writeJob); valid {
-				jobs = append(jobs, j)
+		for !ww.jobs.Empty() {
+			if job, ok := ww.jobs.Next(); ok {
+				if wj, valid := job.(*writeJob); valid {
+					jobs = append(jobs, wj)
+				}
 			}
-		})
-		if len(jobs) >= ww.batchSize {
-			commit()
+			if len(jobs) >= ww.batchSize {
+				commit()
+			}
 		}
 	}
 
@@ -422,7 +424,6 @@ func (rw *readerWorker) processRowReadJob(j *rowReadJob) {
 		j.Result <- &rowReadResult{Row: nil, Err: sql.ErrNoRows}
 		return
 	}
-
 	j.Result <- &rowReadResult{Row: row, Err: nil}
 }
 
