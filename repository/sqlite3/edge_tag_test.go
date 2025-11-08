@@ -259,17 +259,17 @@ func BenchmarkFindEdgeTagByID(b *testing.B) {
 	defer func() { _ = db.Close() }()
 
 	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the first FQDN asset")
 
 	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the second FQDN asset")
 
 	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
 		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
 		FromEntity: a1,
 		ToEntity:   a2,
 	})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the edge")
 
 	var ids []string
 	for i := range int64(1000) {
@@ -277,15 +277,14 @@ func BenchmarkFindEdgeTagByID(b *testing.B) {
 			PropertyName:  "prop",
 			PropertyValue: fmt.Sprintf("value%d", i),
 		})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		assert.NoError(b, err, "Failed to create the edge property")
 		ids = append(ids, prop.ID)
 	}
 
-	var i int64
 	idx := int64(rand.Intn(1000))
 	for b.Loop() {
 		_, _ = db.FindEdgeTagById(context.Background(), ids[idx])
-		i = (i + 1) % 1000
+		idx = (idx + 1) % 1000
 	}
 }
 
@@ -297,17 +296,17 @@ func BenchmarkFindEdgeTags(b *testing.B) {
 	defer func() { _ = db.Close() }()
 
 	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the first FQDN asset")
 
 	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the second FQDN asset")
 
 	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
 		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
 		FromEntity: a1,
 		ToEntity:   a2,
 	})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the edge")
 
 	var names []string
 	for i := range int64(1000) {
@@ -315,15 +314,14 @@ func BenchmarkFindEdgeTags(b *testing.B) {
 			PropertyName:  fmt.Sprintf("prop%d", i),
 			PropertyValue: "blahblah",
 		})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		assert.NoError(b, err, "Failed to create the edge property")
 		names = append(names, tag.Property.Name())
 	}
 
-	var i int64
 	idx := int64(rand.Intn(1000))
 	for b.Loop() {
 		_, _ = db.FindEdgeTags(context.Background(), edge, time.Time{}, names[idx])
-		i = (i + 1) % 1000
+		idx = (idx + 1) % 1000
 	}
 }
 
@@ -335,17 +333,17 @@ func BenchmarkFindEdgeTagsWithSince(b *testing.B) {
 	defer func() { _ = db.Close() }()
 
 	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the first FQDN asset")
 
 	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the second FQDN asset")
 
 	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
 		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
 		FromEntity: a1,
 		ToEntity:   a2,
 	})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the edge")
 
 	var since time.Time
 	for i := range int64(1000) {
@@ -353,7 +351,7 @@ func BenchmarkFindEdgeTagsWithSince(b *testing.B) {
 			PropertyName:  fmt.Sprintf("prop%d", i),
 			PropertyValue: "blahblah",
 		})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		assert.NoError(b, err, "Failed to create the edge property")
 
 		if i == 950 {
 			since = time.Now()
@@ -361,9 +359,7 @@ func BenchmarkFindEdgeTagsWithSince(b *testing.B) {
 		}
 	}
 
-	var i int64
 	for b.Loop() {
 		_, _ = db.FindEdgeTags(context.Background(), edge, since)
-		i = (i + 1) % 1000
 	}
 }

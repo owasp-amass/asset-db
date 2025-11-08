@@ -56,6 +56,10 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt
 		return nil, fmt.Errorf("nil edge provided")
 	}
 
+	if edge.Relation == nil {
+		return nil, fmt.Errorf("edge relation cannot be nil")
+	}
+
 	if edge.FromEntity == nil || edge.ToEntity == nil {
 		return nil, fmt.Errorf("both FromEntity and ToEntity must be set")
 	}
@@ -65,9 +69,31 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt
 		return nil, fmt.Errorf("invalid FromEntity ID: %v", err)
 	}
 
+	fromEnt, err := r.FindEntityById(ctx, edge.FromEntity.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find FromEntity: %v", err)
+	}
+	fromtype := fromEnt.Asset.AssetType()
+
 	toID, err := strconv.ParseInt(edge.ToEntity.ID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid ToEntity ID: %v", err)
+	}
+
+	toEnt, err := r.FindEntityById(ctx, edge.ToEntity.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find ToEntity: %v", err)
+	}
+	totype := toEnt.Asset.AssetType()
+
+	label := edge.Relation.Label()
+	rtype := edge.Relation.RelationType()
+	if rtype == oam.PortRelation {
+		label = "port"
+	}
+
+	if !oam.ValidRelationship(fromtype, label, rtype, totype) {
+		return nil, fmt.Errorf("invalid relationship between %s and %s", fromtype, totype)
 	}
 
 	content, err := edge.Relation.JSON()
@@ -81,7 +107,7 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt
 		Name:    "edge.upsert",
 		SQLText: ensureEdgeText,
 		Args: []any{
-			sql.Named("etype_name", string(edge.Relation.RelationType())),
+			sql.Named("etype_name", string(rtype)),
 			sql.Named("label", edge.Relation.Label()),
 			sql.Named("from_entity_id", fromID),
 			sql.Named("to_entity_id", toID),
@@ -100,7 +126,7 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt
 		Name:    "edge.id_between",
 		SQLText: selectEdgeIDBetweenText,
 		Args: []any{
-			sql.Named("etype_name", string(edge.Relation.RelationType())),
+			sql.Named("etype_name", string(rtype)),
 			sql.Named("label", edge.Relation.Label()),
 			sql.Named("from_entity_id", fromID),
 			sql.Named("to_entity_id", toID),

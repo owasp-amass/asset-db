@@ -855,7 +855,7 @@ CREATE TABLE IF NOT EXISTS service (
   service_type TEXT NOT NULL,
   output_data TEXT,
   output_length INTEGER,
-  attributes TEXT
+  attributes TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attributes))
 );
 CREATE INDEX IF NOT EXISTS idx_service_created_at ON service(created_at);
 CREATE INDEX IF NOT EXISTS idx_service_updated_at ON service(updated_at);
@@ -938,12 +938,10 @@ CREATE TABLE IF NOT EXISTS url (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   raw_url TEXT NOT NULL UNIQUE,
-  host TEXT NOT NULL,
-  host_norm TEXT GENERATED ALWAYS AS (lower(host)) STORED,
+  host TEXT,
   url_path TEXT,
   port INTEGER,
-  scheme TEXT,
-  UNIQUE(host_norm)
+  scheme TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_url_created_at ON url(created_at);
 CREATE INDEX IF NOT EXISTS idx_url_updated_at ON url(updated_at);

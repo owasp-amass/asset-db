@@ -227,7 +227,7 @@ func BenchmarkFindEntityTagByID(b *testing.B) {
 	defer func() { _ = db.Close() }()
 
 	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the FQDN asset")
 
 	var ids []string
 	for i := range int64(1000) {
@@ -235,15 +235,14 @@ func BenchmarkFindEntityTagByID(b *testing.B) {
 			PropertyName:  "prop",
 			PropertyValue: fmt.Sprintf("value%d", i),
 		})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		assert.NoError(b, err, "Failed to create the entity property")
 		ids = append(ids, prop.ID)
 	}
 
-	var i int64
 	idx := int64(rand.Intn(1000))
 	for b.Loop() {
 		_, _ = db.FindEntityTagById(context.Background(), ids[idx])
-		i = (i + 1) % 1000
+		idx = (idx + 1) % 1000
 	}
 }
 
@@ -255,7 +254,7 @@ func BenchmarkFindEntityTags(b *testing.B) {
 	defer func() { _ = db.Close() }()
 
 	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the FQDN asset")
 
 	var names []string
 	for i := range int64(1000) {
@@ -263,15 +262,14 @@ func BenchmarkFindEntityTags(b *testing.B) {
 			PropertyName:  fmt.Sprintf("prop%d", i),
 			PropertyValue: "blahblah",
 		})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		assert.NoError(b, err, "Failed to create the entity property")
 		names = append(names, tag.Property.Name())
 	}
 
-	var i int64
 	idx := int64(rand.Intn(1000))
 	for b.Loop() {
 		_, _ = db.FindEntityTags(context.Background(), a, time.Time{}, names[idx])
-		i = (i + 1) % 1000
+		idx = (idx + 1) % 1000
 	}
 }
 
@@ -283,7 +281,7 @@ func BenchmarkFindEntityTagsWithSince(b *testing.B) {
 	defer func() { _ = db.Close() }()
 
 	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	assert.NoError(b, err, "Failed to create the FQDN asset")
 
 	var since time.Time
 	for i := range int64(1000) {
@@ -291,7 +289,7 @@ func BenchmarkFindEntityTagsWithSince(b *testing.B) {
 			PropertyName:  fmt.Sprintf("prop%d", i),
 			PropertyValue: "blahblah",
 		})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		assert.NoError(b, err, "Failed to create the entity property")
 
 		if i == 950 {
 			since = time.Now()
@@ -299,9 +297,7 @@ func BenchmarkFindEntityTagsWithSince(b *testing.B) {
 		}
 	}
 
-	var i int64
 	for b.Loop() {
 		_, _ = db.FindEntityTags(context.Background(), a, since)
-		i = (i + 1) % 1000
 	}
 }

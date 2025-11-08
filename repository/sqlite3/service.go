@@ -19,12 +19,16 @@ import (
 // Params: :unique_id, :service_type, :output_data, :output_length, :attributes
 const upsertServiceText = `
 INSERT INTO service(unique_id, service_type, output_data, output_length, attributes)
-VALUES (:unique_id, :service_type, :output_data, :output_length, :attributes)
+VALUES (:unique_id, :service_type, :output_data, :output_length, coalesce(:attributes, '{}'))
 ON CONFLICT(unique_id) DO UPDATE SET
     service_type = COALESCE(excluded.service_type, service.service_type),
     output_data  = COALESCE(excluded.output_data,  service.output_data),
     output_length= COALESCE(excluded.output_length,service.output_length),
-    attributes   = COALESCE(excluded.attributes,   service.attributes),
+	attributes = CASE
+        WHEN json_patch(service.attributes, coalesce(excluded.attributes, '{}')) IS NOT service.attributes
+        THEN json_patch(service.attributes, coalesce(excluded.attributes, '{}'))
+        ELSE service.attributes
+    END,
     updated_at   = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -42,6 +46,15 @@ WHERE id = :row_id
 LIMIT 1`
 
 func (r *SqliteRepository) upsertService(ctx context.Context, a *oamplat.Service) (int64, error) {
+	attributes := "{}"
+	if len(a.Attributes) > 0 {
+		attrs, err := json.Marshal(a.Attributes)
+		if err != nil {
+			return 0, err
+		}
+		attributes = string(attrs)
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -52,7 +65,7 @@ func (r *SqliteRepository) upsertService(ctx context.Context, a *oamplat.Service
 			sql.Named("service_type", a.Type),
 			sql.Named("output_data", a.Output),
 			sql.Named("output_length", a.OutputLen),
-			sql.Named("attributes", a.Attributes),
+			sql.Named("attributes", attributes),
 		},
 		Result: done,
 	})
