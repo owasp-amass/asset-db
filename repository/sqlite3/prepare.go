@@ -112,20 +112,19 @@ func (ww *writeWorker) run() {
 	batchdur := time.NewTicker(ww.batchDuration)
 	defer batchdur.Stop()
 
-	check := time.NewTicker(25 * time.Millisecond)
+	check := time.NewTicker(10 * time.Millisecond)
 	defer check.Stop()
 
-	var jobs []*writeJob
+	var txlist []*writeJob
 
-	errToJobs := func(err error) {
-		for _, job := range jobs {
+	errToJobs := func(j []*writeJob, err error) {
+		for _, job := range j {
 			job.Result <- err
 		}
-		jobs = jobs[:0]
 	}
 
 	commit := func() {
-		if len(jobs) == 0 {
+		if len(txlist) == 0 {
 			return
 		}
 
@@ -141,57 +140,83 @@ func (ww *writeWorker) run() {
 				}
 				tx, err = ww.conn.BeginTx(ctx, nil)
 			} else {
-				errToJobs(err)
+				errToJobs(txlist, err)
+				txlist = txlist[:0]
 				return
 			}
 		}
 		if err != nil {
-			errToJobs(err)
+			errToJobs(txlist, err)
+			txlist = txlist[:0]
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
 
 		var failed bool
 		var goodjobs []*writeJob
-		for i, job := range jobs {
+		for i, job := range txlist {
+			if err := job.Ctx.Err(); err != nil {
+				job.Result <- err
+				continue
+			}
+
 			stmt, err := ww.getOrPrepare(job.Ctx, job.Name, job.SQLText)
 			if err != nil {
 				job.Result <- err
-				goodjobs = append(goodjobs, jobs[i+1:]...)
+				goodjobs = append(goodjobs, txlist[i+1:]...)
 				failed = true
 				break
 			}
 
 			if _, err = tx.StmtContext(job.Ctx, stmt).Exec(job.Args...); err != nil {
 				job.Result <- err
-				goodjobs = append(goodjobs, jobs[i+1:]...)
+				goodjobs = append(goodjobs, txlist[i+1:]...)
 				failed = true
 				break
 			}
 
 			goodjobs = append(goodjobs, job)
 		}
-		if failed {
-			jobs = goodjobs
-			return
-		}
-		if err := tx.Commit(); err != nil {
-			errToJobs(err)
-			return
-		}
 
-		errToJobs(nil)
+		if failed {
+			txlist = goodjobs
+		} else if err := tx.Commit(); err == nil {
+			errToJobs(goodjobs, nil)
+			txlist = txlist[:0]
+		}
 	}
 
 	queueCheck := func() {
 		for !ww.jobs.Empty() {
-			if job, ok := ww.jobs.Next(); ok {
-				if wj, valid := job.(*writeJob); valid {
-					jobs = append(jobs, wj)
-				}
+			job, ok := ww.jobs.Next()
+			if !ok || job == nil {
+				continue
 			}
-			if len(jobs) >= ww.batchSize {
+
+			wj, valid := job.(*writeJob)
+			if !valid || wj.Result == nil {
+				continue
+			}
+
+			if wj.Ctx == nil {
+				wj.Result <- errors.New("context is nil")
+				continue
+			}
+
+			if err := wj.Ctx.Err(); err != nil {
+				wj.Result <- err
+				continue
+			}
+
+			if wj.Name == "" || wj.SQLText == "" {
+				wj.Result <- errors.New("invalid write job")
+				continue
+			}
+
+			txlist = append(txlist, wj)
+			if len(txlist) >= ww.batchSize {
 				commit()
+				return
 			}
 		}
 	}
@@ -199,13 +224,15 @@ func (ww *writeWorker) run() {
 	for {
 		select {
 		case <-ww.quit:
+			for !ww.jobs.Empty() {
+				queueCheck()
+			}
 			commit()
 			return
 		case <-batchdur.C:
+			queueCheck()
 			commit()
 		case <-ww.jobs.Signal():
-			queueCheck()
-		case <-check.C:
 			queueCheck()
 		}
 	}
@@ -369,7 +396,7 @@ func (rw *readerWorker) acquireConn() error {
 func (rw *readerWorker) run() {
 	defer rw.wg.Done()
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -394,6 +421,25 @@ func (rw *readerWorker) processJob(job any) {
 }
 
 func (rw *readerWorker) processRowReadJob(j *rowReadJob) {
+	if j.Result == nil {
+		return
+	}
+
+	if j.Ctx == nil {
+		j.Result <- &rowReadResult{Row: nil, Err: errors.New("context is nil")}
+		return
+	}
+
+	if err := j.Ctx.Err(); err != nil {
+		j.Result <- &rowReadResult{Row: nil, Err: err}
+		return
+	}
+
+	if j.Name == "" || j.SQLText == "" {
+		j.Result <- &rowReadResult{Row: nil, Err: errors.New("invalid read job")}
+		return
+	}
+
 	stmt, err := rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
 	if err != nil {
 		j.Result <- &rowReadResult{Row: nil, Err: err}
@@ -428,6 +474,25 @@ func (rw *readerWorker) processRowReadJob(j *rowReadJob) {
 }
 
 func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
+	if j.Result == nil {
+		return
+	}
+
+	if j.Ctx == nil {
+		j.Result <- &rowsReadResult{Rows: nil, Err: errors.New("context is nil")}
+		return
+	}
+
+	if err := j.Ctx.Err(); err != nil {
+		j.Result <- &rowsReadResult{Rows: nil, Err: err}
+		return
+	}
+
+	if j.Name == "" || j.SQLText == "" {
+		j.Result <- &rowsReadResult{Rows: nil, Err: errors.New("invalid read job")}
+		return
+	}
+
 	stmt, err := rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
 	if err != nil {
 		j.Result <- &rowsReadResult{Rows: nil, Err: err}
