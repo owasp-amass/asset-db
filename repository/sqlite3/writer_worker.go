@@ -76,8 +76,8 @@ func (ww *writeWorker) closeStmts() {
 }
 
 func (ww *writeWorker) getOrPrepare(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
-	st := ww.stmts[key]
-	if st != nil {
+	st, found := ww.stmts[key]
+	if found && st != nil {
 		return st, nil
 	}
 
@@ -191,14 +191,11 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 			}
 			tx, err = ww.conn.BeginTx(ctx, nil)
 		} else {
-			errToJobs(jobs, err)
-			return []*writeJob{}, nil
+			return jobs, err
 		}
 	}
-
 	if err != nil {
-		errToJobs(jobs, err)
-		return []*writeJob{}, nil
+		return jobs, err
 	}
 	defer func() { _ = tx.Rollback() }()
 

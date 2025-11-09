@@ -131,8 +131,8 @@ func (rw *readerWorker) closeStmts() {
 }
 
 func (rw *readerWorker) getOrPrepare(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
-	st := rw.stmts[key]
-	if st != nil {
+	st, found := rw.stmts[key]
+	if found && st != nil {
 		return st, nil
 	}
 
@@ -184,7 +184,9 @@ func (rw *readerWorker) run() {
 		case <-rw.jobs.Signal():
 			rw.jobs.Process(rw.processJob)
 		case <-ticker.C:
-			rw.jobs.Process(rw.processJob)
+			if !rw.jobs.Empty() {
+				rw.jobs.Process(rw.processJob)
+			}
 		}
 	}
 }
@@ -199,20 +201,17 @@ func (rw *readerWorker) processJob(job any) {
 }
 
 func (rw *readerWorker) processRowReadJob(j *rowReadJob) {
-	if j.Result == nil {
+	if j == nil || j.Result == nil {
 		return
 	}
-
 	if j.Ctx == nil {
 		j.Result <- &rowReadResult{Row: nil, Err: errors.New("context is nil")}
 		return
 	}
-
 	if err := j.Ctx.Err(); err != nil {
 		j.Result <- &rowReadResult{Row: nil, Err: err}
 		return
 	}
-
 	if j.Name == "" || j.SQLText == "" {
 		j.Result <- &rowReadResult{Row: nil, Err: errors.New("invalid read job")}
 		return
@@ -243,29 +242,26 @@ func (rw *readerWorker) processRowReadJob(j *rowReadJob) {
 			return
 		}
 	}
-
 	if row == nil {
 		j.Result <- &rowReadResult{Row: nil, Err: sql.ErrNoRows}
 		return
 	}
+
 	j.Result <- &rowReadResult{Row: row, Err: nil}
 }
 
 func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
-	if j.Result == nil {
+	if j == nil || j.Result == nil {
 		return
 	}
-
 	if j.Ctx == nil {
 		j.Result <- &rowsReadResult{Rows: nil, Err: errors.New("context is nil")}
 		return
 	}
-
 	if err := j.Ctx.Err(); err != nil {
 		j.Result <- &rowsReadResult{Rows: nil, Err: err}
 		return
 	}
-
 	if j.Name == "" || j.SQLText == "" {
 		j.Result <- &rowsReadResult{Rows: nil, Err: errors.New("invalid read job")}
 		return
@@ -278,6 +274,11 @@ func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
 	}
 
 	rows, err := stmt.QueryContext(j.Ctx, j.Args...)
+	if rows == nil {
+		j.Result <- &rowsReadResult{Rows: nil, Err: sql.ErrNoRows}
+		return
+	}
+
 	if err != nil {
 		if errors.Is(err, driver.ErrBadConn) {
 			_ = rw.conn.Close()
@@ -291,6 +292,10 @@ func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
 			return
 		}
 	}
+	if err != nil || rows == nil {
+		j.Result <- &rowsReadResult{Rows: nil, Err: sql.ErrNoRows}
+		return
+	}
 
-	j.Result <- &rowsReadResult{Rows: rows, Err: err}
+	j.Result <- &rowsReadResult{Rows: rows, Err: nil}
 }
