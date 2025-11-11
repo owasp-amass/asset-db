@@ -18,8 +18,9 @@ import (
 // Normalized Property Graph (NPG) implemented on SQLite
 
 const (
-	SQLite       string = "sqlite"
-	SQLiteMemory string = "sqlite_memory"
+	SQLite                string = "sqlite"
+	SQLiteMemory          string = "sqlite_memory"
+	numberOfReaderWorkers int    = 8
 )
 
 // SqliteRepository is a repository implementation.
@@ -77,8 +78,8 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 		return nil, err
 	}
 
-	dbro.SetMaxOpenConns(16)
-	dbro.SetMaxIdleConns(16)
+	dbro.SetMaxOpenConns(numberOfReaderWorkers)
+	dbro.SetMaxIdleConns(numberOfReaderWorkers)
 	dbro.SetConnMaxLifetime(0)
 
 	return &SqliteRepository{
@@ -112,8 +113,8 @@ func sqliteMemoryDatabase() (*SqliteRepository, error) {
 		return nil, err
 	}
 
-	dbro.SetMaxOpenConns(16)
-	dbro.SetMaxIdleConns(16)
+	dbro.SetMaxOpenConns(numberOfReaderWorkers)
+	dbro.SetMaxIdleConns(numberOfReaderWorkers)
 	dbro.SetConnMaxLifetime(0)
 
 	return &SqliteRepository{
@@ -124,13 +125,13 @@ func sqliteMemoryDatabase() (*SqliteRepository, error) {
 }
 
 func (sql *SqliteRepository) Prepare(ctx context.Context) error {
-	wworker, err := newWriteWorker(sql.DB, 20, time.Millisecond)
+	wworker, err := newWriteWorker(sql.DB, 20, 500*time.Microsecond)
 	if err != nil {
 		return err
 	}
 	sql.ww = wworker
 
-	rpool, err := newReaderWorkerPool(sql.rodb, 16)
+	rpool, err := newReaderWorkerPool(sql.rodb, numberOfReaderWorkers)
 	if err != nil {
 		return err
 	}

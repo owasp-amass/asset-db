@@ -110,7 +110,7 @@ func (ww *writeWorker) run() {
 	batchdur := time.NewTicker(ww.batchDuration)
 	defer batchdur.Stop()
 
-	check := time.NewTicker(10 * time.Millisecond)
+	check := time.NewTicker(5 * time.Millisecond)
 	defer check.Stop()
 
 	var txlist []*writeJob
