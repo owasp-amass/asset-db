@@ -7,6 +7,8 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
@@ -15,16 +17,15 @@ import (
 	oamacct "github.com/owasp-amass/open-asset-model/account"
 )
 
-// Params: :unique_id, :account_type, :username, :account_number, :balance, :active
+// Params: :unique_id, :account_type, :username, :account_number, :attrs
 const upsertAccountText = `
-INSERT INTO account(unique_id, account_type, username, account_number, balance, active)
-VALUES (:unique_id, :account_type, :username, :account_number, :balance, :active)
+INSERT INTO account(unique_id, account_type, username, account_number, attrs)
+VALUES (:unique_id, :account_type, :username, :account_number, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
 	account_type   = COALESCE(excluded.account_type,   account.account_type),
     username       = COALESCE(excluded.username,       account.username),
     account_number = COALESCE(excluded.account_number, account.account_number),
-    balance        = COALESCE(excluded.balance,        account.balance),
-    active         = COALESCE(excluded.active,         account.active),
+    attrs          = COALESCE(excluded.attrs,          account.attrs),
     updated_at     = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -36,12 +37,39 @@ LIMIT 1`
 
 // Param: :row_id
 const selectAccountByID = `
-SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, balance, active 
+SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, attrs 
 FROM account
 WHERE id = :row_id
 LIMIT 1`
 
+type accountAttributes struct {
+	Balance float64 `json:"balance"`
+	Active  bool    `json:"active"`
+}
+
 func (r *SqliteRepository) upsertAccount(ctx context.Context, a *oamacct.Account) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid account provided")
+	}
+	if a.ID == "" {
+		return 0, errors.New("account unique ID cannot be empty")
+	}
+	if a.Type == "" {
+		return 0, errors.New("account type cannot be empty")
+	}
+	if a.Username == "" && a.Number == "" {
+		return 0, errors.New("account must have either a username or account number")
+	}
+
+	attrs := accountAttributes{
+		Balance: a.Balance,
+		Active:  a.Active,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -52,12 +80,11 @@ func (r *SqliteRepository) upsertAccount(ctx context.Context, a *oamacct.Account
 			sql.Named("account_type", a.Type),
 			sql.Named("username", a.Username),
 			sql.Named("account_number", a.Number),
-			sql.Named("balance", a.Balance),
-			sql.Named("active", a.Active),
+			sql.Named("attrs", string(attrsJSON)),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -98,12 +125,25 @@ func (r *SqliteRepository) fetchAccountByRowID(ctx context.Context, eid, rowID i
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamacct.Account
-	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Type,
-		&a.Username, &a.Number, &a.Balance, &a.Active); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID,
+		&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no account record found")
+	}
+	if a.ID == "" {
+		return nil, errors.New("account unique ID is missing")
+	}
+	if a.Type == "" {
+		return nil, errors.New("account type is missing")
+	}
+	if a.Username == "" && a.Number == "" {
+		return nil, errors.New("account must have either a username or account number")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -117,6 +157,13 @@ func (r *SqliteRepository) fetchAccountByRowID(ctx context.Context, eid, rowID i
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
+
+	var attrs accountAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Balance = attrs.Balance
+	a.Active = attrs.Active
 
 	return e, nil
 }

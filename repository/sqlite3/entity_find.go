@@ -214,7 +214,7 @@ func (r *SqliteRepository) findByType(ctx context.Context, atype string, since t
 	table := normalizeType(atype)
 	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
 	base := `
-SELECT e.entity_id, e.natural_key, e.attrs
+SELECT e.entity_id, e.natural_key
 FROM entity e
 JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ?`
 	key := "entity.by_type.base"
@@ -254,8 +254,7 @@ JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ?`
 	for result.Rows.Next() {
 		var eid int64
 		var disp string
-		var raw string
-		if err := result.Rows.Scan(&eid, &disp, &raw); err != nil {
+		if err := result.Rows.Scan(&eid, &disp); err != nil {
 			return nil, err
 		}
 		// Hydrate via existing logic (populates Type + Asset)
