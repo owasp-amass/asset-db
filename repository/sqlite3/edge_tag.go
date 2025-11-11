@@ -26,7 +26,7 @@ ON CONFLICT(edge_id, tag_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
 
 // Params: :edge_id, :tag_id
 const selectEdgeTagMapIDText = `
-SELECT id FROM edge_tag_map
+SELECT map_id FROM edge_tag_map
 WHERE edge_id = :edge_id AND tag_id = :tag_id 
 LIMIT 1`
 
@@ -67,11 +67,11 @@ func (r *SqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*dbt
 	}
 
 	const q = `
-SELECT m.id, m.edge_id, m.created_at, m.updated_at, tt.name, tg.content
+SELECT m.map_id, m.edge_id, m.created_at, m.updated_at, tt.name, tg.content
 FROM edge_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
 JOIN tag_type_lu tt ON tt.id = tg.ttype_id
-WHERE m.id = :map_id
+WHERE m.map_id = :map_id
 LIMIT 1`
 
 	ch := make(chan *rowReadResult, 1)
@@ -186,7 +186,7 @@ func (r *SqliteRepository) tagsForEdge(ctx context.Context, eid int64, since tim
 	key := "edge.tag.tags_for_edge"
 	args := []any{sql.Named("edge_id", eid)}
 	q := `
-SELECT m.id, m.created_at, m.updated_at, tt.name, tg.content
+SELECT m.map_id, m.created_at, m.updated_at, tt.name, tg.content
 FROM edge_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
 JOIN tag_type_lu tt ON tt.id = tg.ttype_id
@@ -271,7 +271,7 @@ func (r *SqliteRepository) removeEdgeTag(ctx context.Context, mid int64) (int64,
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "edge.tag.remove_edge_tag",
-		SQLText: `DELETE FROM edge_tag_map WHERE id = :map_id`,
+		SQLText: `DELETE FROM edge_tag_map WHERE map_id = :map_id`,
 		Args:    []any{sql.Named("map_id", mid)},
 		Result:  done,
 	})
@@ -284,7 +284,7 @@ func (r *SqliteRepository) edgeMIDToTID(ctx context.Context, mid int64) (int64, 
 SELECT tg.tag_id
 FROM edge_tag_map m
 JOIN tag tg ON tg.tag_id = m.tag_id
-WHERE m.id = :map_id
+WHERE m.map_id = :map_id
 ORDER BY m.updated_at DESC
 LIMIT 1`
 

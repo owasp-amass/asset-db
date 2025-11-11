@@ -34,7 +34,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 // Param: :unique_id
 const selectEntityIDByServiceText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'service' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'service' LIMIT 1)
   AND natural_key = :unique_id
 LIMIT 1`
 

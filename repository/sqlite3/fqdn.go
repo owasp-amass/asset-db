@@ -24,7 +24,7 @@ ON CONFLICT(fqdn_norm) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
 // Param: :fqdn_text
 const selectEntityIDByFQDNText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn' LIMIT 1)
   AND natural_key = lower(:fqdn_text)
 LIMIT 1`
 

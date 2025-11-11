@@ -27,7 +27,7 @@ ON CONFLICT(netblock_cidr) DO UPDATE SET
 // Param: :netblock_cidr
 const selectEntityIDByNetblockText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'netblock' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'netblock' LIMIT 1)
   AND natural_key = :netblock_cidr
 LIMIT 1`
 

@@ -29,7 +29,7 @@ ON CONFLICT(e164) DO UPDATE SET
 // Param: :e164
 const selectEntityIDByPhoneText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'phone' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'phone' LIMIT 1)
   AND natural_key = :e164
 LIMIT 1`
 

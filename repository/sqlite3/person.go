@@ -29,7 +29,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 // Param: :unique_id
 const selectEntityIDByPersonText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'person' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'person' LIMIT 1)
   AND natural_key = :unique_id
 LIMIT 1`
 

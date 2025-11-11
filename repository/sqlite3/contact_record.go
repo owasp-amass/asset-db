@@ -23,7 +23,7 @@ ON CONFLICT(discovered_at) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
 // Param: :discovered_at
 const selectEntityIDByContactRecordText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'contactrecord' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'contactrecord' LIMIT 1)
   AND natural_key = :discovered_at
 LIMIT 1`
 

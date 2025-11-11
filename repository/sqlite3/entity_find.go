@@ -30,12 +30,12 @@ func (r *SqliteRepository) FindEntityById(ctx context.Context, id string) (*dbt.
 }
 
 func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*dbt.Entity, error) {
-	e, err := r.loadEntityCore(ctx, eid)
+	etype, err := r.loadEntityCore(ctx, eid)
 	if err != nil {
 		return nil, err
 	}
 
-	return r.fetchCompleteRepoEntity(ctx, e)
+	return r.fetchCompleteRepoEntity(ctx, eid, etype)
 }
 
 func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
@@ -109,7 +109,7 @@ func (r *SqliteRepository) findByContent(ctx context.Context, atype string, sinc
 	sb := strings.Builder{}
 	sb.WriteString(`
 SELECT e.entity_id FROM entity e
-JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ? 
+JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ? 
 JOIN ` + table + ` a ON a.id = e.row_id`)
 
 	args = append([]any{table}, args...) // prepend type/table to args
@@ -216,7 +216,7 @@ func (r *SqliteRepository) findByType(ctx context.Context, atype string, since t
 	base := `
 SELECT e.entity_id, e.natural_key, e.attrs
 FROM entity e
-JOIN entity_type_lu t ON t.id = e.type_id AND t.name = ?`
+JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ?`
 	key := "entity.by_type.base"
 	q := base
 	args := []any{table}

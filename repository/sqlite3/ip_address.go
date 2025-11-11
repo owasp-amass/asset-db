@@ -27,7 +27,7 @@ ON CONFLICT(ip_address) DO UPDATE SET
 // Param: :ip_address_text
 const selectEntityIDByIPAddressText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'ipaddress' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'ipaddress' LIMIT 1)
   AND natural_key = :ip_address_text
 LIMIT 1`
 

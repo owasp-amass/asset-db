@@ -27,7 +27,7 @@ ON CONFLICT(file_url) DO UPDATE SET
 // Param: :file_url
 const selectEntityIDByFileText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'file' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'file' LIMIT 1)
   AND natural_key = lower(:file_url)
 LIMIT 1`
 

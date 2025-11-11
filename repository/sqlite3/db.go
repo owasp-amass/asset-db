@@ -66,10 +66,10 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, _ = db.ExecContext(ctx, `PRAGMA temp_store = MEMORY`)
-	_, _ = db.ExecContext(ctx, `PRAGMA mmap_size = 268435456`) // 256 MiB map if available
+	_, _ = db.ExecContext(ctx, `PRAGMA temp_store = FILE`)
+	_, _ = db.ExecContext(ctx, `PRAGMA mmap_size = 0`) // disable memory-mapped I/O
 	_, _ = db.ExecContext(ctx, `PRAGMA page_size = 4096`)
-	_, _ = db.ExecContext(ctx, `PRAGMA cache_size = -262144`) // ~256 MiB cache (negative = KiB units)
+	_, _ = db.ExecContext(ctx, `PRAGMA cache_size = -500000`) // set cache size to 500 MiB (in KiB)
 
 	rdsn := dsn + "?mode=ro&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL"
 	dbro, err := sql.Open("sqlite3", rdsn)
@@ -105,9 +105,7 @@ func sqliteMemoryDatabase() (*SqliteRepository, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, _ = db.ExecContext(ctx, `PRAGMA mmap_size = 268435456`) // 256 MiB map if available
 	_, _ = db.ExecContext(ctx, `PRAGMA page_size = 4096`)
-	_, _ = db.ExecContext(ctx, `PRAGMA cache_size = -80000`) // ~80 MiB cache (negative = KiB units)
 
 	dbro, err := sql.Open("sqlite3", name+`?mode=memory&cache=shared&immutable=1`)
 	if err != nil {

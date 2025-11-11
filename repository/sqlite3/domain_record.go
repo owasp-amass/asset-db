@@ -40,7 +40,7 @@ ON CONFLICT(domain) DO UPDATE SET
 // Param: :domain_text
 const selectEntityIDByDomainRecordText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
   AND natural_key = lower(:domain_text)
 LIMIT 1`
 

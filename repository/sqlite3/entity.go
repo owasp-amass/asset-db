@@ -7,13 +7,12 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/owasp-amass/asset-db/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -30,21 +29,11 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-// Entity models a row in `entity` plus its inlined concrete Asset.
-// Attrs is raw JSON from entity.attrs (may be nil/"{}").
-type Entity struct {
-	EntityID     int64           `json:"entity_id"`
-	Type         string          `json:"type"`          // entity_type_lu.name
-	DisplayValue string          `json:"display_value"` // entity.display_value (normalized for some types)
-	Attrs        json.RawMessage `json:"attrs"`         // entity.attrs
-	Asset        any             `json:"asset"`         // concrete asset struct
-}
-
-func (r *SqliteRepository) CreateEntity(ctx context.Context, entity *types.Entity) (*types.Entity, error) {
+func (r *SqliteRepository) CreateEntity(ctx context.Context, entity *dbt.Entity) (*dbt.Entity, error) {
 	return r.CreateAsset(ctx, entity.Asset)
 }
 
-func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error) {
+func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*dbt.Entity, error) {
 	var eid int64
 	var err error
 
@@ -136,13 +125,11 @@ func validateAssetTable(tableName string) string {
 	}
 }
 
-func (r *SqliteRepository) loadEntityCore(ctx context.Context, id int64) (*Entity, error) {
-	var e Entity
-	var raw string
+func (r *SqliteRepository) loadEntityCore(ctx context.Context, eid int64) (string, error) {
 	query := `
-	SELECT e.entity_id, t.name, e.natural_key, e.attrs
-	FROM entity e
-	JOIN entity_type_lu t ON t.id = e.type_id
+	SELECT t.name
+	FROM entity_type_lu t
+	JOIN entity e ON t.id = e.etype_id
 	WHERE e.entity_id = :entity_id`
 
 	ch := make(chan *rowReadResult, 1)
@@ -150,33 +137,30 @@ func (r *SqliteRepository) loadEntityCore(ctx context.Context, id int64) (*Entit
 		Ctx:     ctx,
 		Name:    "entity.by_id",
 		SQLText: query,
-		Args:    []any{sql.Named("entity_id", id)},
+		Args:    []any{sql.Named("entity_id", eid)},
 		Result:  ch,
 	})
 
 	result := <-ch
 	if result.Err != nil {
-		return nil, result.Err
+		return "", result.Err
 	}
 
-	if err := result.Row.Scan(&e.EntityID, &e.Type, &e.DisplayValue, &raw); err != nil {
+	var etype string
+	if err := result.Row.Scan(&etype); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("entity %d not found", id)
+			return "", fmt.Errorf("entity %d not found", eid)
 		}
-		return nil, err
+		return "", err
 	}
 
-	if strings.TrimSpace(raw) != "" {
-		e.Attrs = json.RawMessage(raw)
-	}
-
-	return &e, nil
+	return etype, nil
 }
 
-func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entity) (*types.Entity, error) {
-	table := e.Type
+func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, eid int64, etype string) (*dbt.Entity, error) {
+	table := etype
 	if table == "" {
-		return nil, fmt.Errorf("no table mapping for entity type %q", e.Type)
+		return nil, fmt.Errorf("no table mapping for entity type %q", etype)
 	}
 
 	ch := make(chan *rowReadResult, 1)
@@ -184,7 +168,7 @@ func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entit
 		Ctx:     ctx,
 		Name:    "entity.row_by_id",
 		SQLText: `SELECT row_id FROM entity WHERE entity_id = :entity_id LIMIT 1`,
-		Args:    []any{sql.Named("entity_id", e.EntityID)},
+		Args:    []any{sql.Named("entity_id", eid)},
 		Result:  ch,
 	})
 
@@ -193,17 +177,17 @@ func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, e *Entit
 		return nil, result.Err
 	}
 
-	var rowID int64
-	if err := result.Row.Scan(&rowID); err != nil {
+	var rid int64
+	if err := result.Row.Scan(&rid); err != nil {
 		return nil, err
 	}
 
-	return r.fetchEntityAssetByTableID(ctx, e.EntityID, table, rowID)
+	return r.fetchEntityAssetByTableID(ctx, eid, table, rid)
 }
 
 // fetchEntityAssetByTableID selects the concrete asset row and scans into its struct.
 // Statements are prepared lazily and cached per table name.
-func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity_id int64, table string, id int64) (*types.Entity, error) {
+func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity_id int64, table string, id int64) (*dbt.Entity, error) {
 	switch table {
 	case "account":
 		return r.fetchAccountByRowID(ctx, entity_id, id)

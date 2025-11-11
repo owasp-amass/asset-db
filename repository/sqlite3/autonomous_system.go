@@ -23,7 +23,7 @@ ON CONFLICT(asn) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
 // Param: :asn
 const selectEntityIDByAutonomousSystemText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name='autonomoussystem' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name='autonomoussystem' LIMIT 1)
   AND natural_key = CAST(:asn AS TEXT) 
 LIMIT 1`
 

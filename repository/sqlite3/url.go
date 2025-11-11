@@ -29,7 +29,7 @@ ON CONFLICT(raw_url) DO UPDATE SET
 // Param: :raw_url
 const selectEntityIDByURLText = `
 SELECT entity_id FROM entity
-WHERE type_id = (SELECT id FROM entity_type_lu WHERE name = 'url' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'url' LIMIT 1)
   AND natural_key = lower(:raw_url)
 LIMIT 1`
 
