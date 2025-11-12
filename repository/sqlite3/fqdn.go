@@ -7,6 +7,7 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"time"
 
@@ -15,11 +16,13 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
-// Params: :fqdn_text
+// Params: :fqdn_text, :attrs
 const upsertFQDNText = `
-INSERT INTO fqdn (fqdn)
-VALUES (lower(:fqdn_text))
-ON CONFLICT(fqdn_norm) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
+INSERT INTO fqdn (fqdn, attrs)
+VALUES (:fqdn_text, :attrs)
+ON CONFLICT(fqdn_norm) DO UPDATE SET 
+	attrs      = COALESCE(excluded.attrs, fqdn.attrs),
+	updated_at = CURRENT_TIMESTAMP`
 
 // Param: :fqdn_text
 const selectEntityIDByFQDNText = `
@@ -30,19 +33,29 @@ LIMIT 1`
 
 // Param: :row_id
 const selectFQDNByIDText = `
-SELECT id, created_at, updated_at, fqdn 
+SELECT id, created_at, updated_at, fqdn, attrs
 FROM fqdn
 WHERE id = :row_id
 LIMIT 1`
 
 func (r *SqliteRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid FQDN provided")
+	}
+	if a.Name == "" {
+		return 0, errors.New("FQDN name cannot be empty")
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "asset.fqdn.upsert",
 		SQLText: upsertFQDNText,
-		Args:    []any{sql.Named("fqdn_text", a.Name)},
-		Result:  done,
+		Args: []any{
+			sql.Named("fqdn_text", a.Name),
+			sql.Named("attrs", "{}"),
+		},
+		Result: done,
 	})
 	err := <-done
 	if err != nil {
@@ -85,11 +98,18 @@ func (r *SqliteRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int6
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamdns.FQDN
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Name); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no FQDN record found")
+	}
+	if a.Name == "" {
+		return nil, errors.New("FQDN name is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}

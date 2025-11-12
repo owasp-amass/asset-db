@@ -7,8 +7,10 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -16,17 +18,15 @@ import (
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
-// Params: :handle, :asn, :record_name, :record_status, :created_date, :updated_date, :whois_server
+// Params: :handle, :asn, :record_name, :whois_server, :attrs
 const upsertAutnumRecordText = `
-INSERT INTO autnumrecord(handle, asn, record_name, record_status, created_date, updated_date, whois_server)
-VALUES (:handle, :asn, :record_name, :record_status, :created_date, :updated_date, :whois_server)
+INSERT INTO autnumrecord(handle, asn, record_name, whois_server, attrs)
+VALUES (:handle, :asn, :record_name, :whois_server, :attrs)
 ON CONFLICT(handle) DO UPDATE SET
     asn           = COALESCE(excluded.asn,           autnumrecord.asn),
     record_name   = COALESCE(excluded.record_name,   autnumrecord.record_name),
-    record_status = COALESCE(excluded.record_status, autnumrecord.record_status),
-    created_date  = COALESCE(excluded.created_date,  autnumrecord.created_date),
-    updated_date  = COALESCE(excluded.updated_date,  autnumrecord.updated_date),
     whois_server  = COALESCE(excluded.whois_server,  autnumrecord.whois_server),
+	attrs         = COALESCE(excluded.attrs,         autnumrecord.attrs),
     updated_at    = CURRENT_TIMESTAMP`
 
 // Param: :handle
@@ -38,12 +38,49 @@ LIMIT 1`
 
 // Param: :row_id
 const selectAutnumByID = `
-SELECT id, created_at, updated_at, record_name, handle, asn, record_status, created_date, updated_date, whois_server
+SELECT id, created_at, updated_at, record_name, handle, asn, whois_server, attrs
 FROM autnumrecord
 WHERE id = :row_id
 LIMIT 1`
 
+type autnumAttributes struct {
+	Raw         string   `json:"raw"`
+	Status      []string `json:"status"`
+	CreatedDate string   `json:"created_date"`
+	UpdatedDate string   `json:"updated_date"`
+}
+
 func (r *SqliteRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.AutnumRecord) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid autnum record provided")
+	}
+	if a.Name == "" {
+		return 0, errors.New("autnum record name cannot be empty")
+	}
+	if a.Handle == "" {
+		return 0, errors.New("autnum record handle cannot be empty")
+	}
+	if a.Number == 0 {
+		return 0, errors.New("autnum record ASN cannot be zero")
+	}
+	if _, err := parseTimestamp(a.CreatedDate); err != nil {
+		return 0, fmt.Errorf("autnum record must have a valid created date: %v", err)
+	}
+	if _, err := parseTimestamp(a.UpdatedDate); err != nil {
+		return 0, fmt.Errorf("autnum record must have a valid updated date: %v", err)
+	}
+
+	attrs := autnumAttributes{
+		Raw:         a.Raw,
+		Status:      a.Status,
+		CreatedDate: a.CreatedDate,
+		UpdatedDate: a.UpdatedDate,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -53,14 +90,12 @@ func (r *SqliteRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.Aut
 			sql.Named("handle", a.Handle),
 			sql.Named("asn", a.Number),
 			sql.Named("record_name", a.Name),
-			sql.Named("record_status", strings.Join(a.Status, ",")),
-			sql.Named("created_date", a.CreatedDate),
-			sql.Named("updated_date", a.UpdatedDate),
 			sql.Named("whois_server", a.WhoisServer),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -101,13 +136,25 @@ func (r *SqliteRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, ro
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
-	var status string
 	var a oamreg.AutnumRecord
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &a.Handle, &a.Number,
-		&status, &a.CreatedDate, &a.UpdatedDate, &a.WhoisServer); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Name,
+		&a.Handle, &a.Number, &a.WhoisServer, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no autnum record found")
+	}
+	if a.Name == "" {
+		return nil, errors.New("autnum record name is missing")
+	}
+	if a.Handle == "" {
+		return nil, errors.New("autnum record handle is missing")
+	}
+	if a.Number == 0 {
+		return nil, errors.New("autnum record ASN is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -122,8 +169,20 @@ func (r *SqliteRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, ro
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	if status != "" {
-		a.Status = strings.Split(status, ",")
+	var attrs autnumAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Raw = attrs.Raw
+	a.Status = attrs.Status
+	a.CreatedDate = attrs.CreatedDate
+	a.UpdatedDate = attrs.UpdatedDate
+
+	if _, err := parseTimestamp(a.CreatedDate); err != nil {
+		return nil, fmt.Errorf("autnum record created date is missing or invalid: %v", err)
+	}
+	if _, err := parseTimestamp(a.UpdatedDate); err != nil {
+		return nil, fmt.Errorf("autnum record updated date is missing or invalid: %v", err)
 	}
 
 	return e, nil

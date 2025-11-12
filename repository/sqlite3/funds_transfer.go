@@ -7,6 +7,9 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,17 +18,14 @@ import (
 	oamfin "github.com/owasp-amass/open-asset-model/financial"
 )
 
-// Params: :unique_id, :amount, :reference_number, :currency, :transfer_method, :exchange_date, :exchange_rate
+// Params: :unique_id, :amount, :reference_number, :attrs
 const upsertFundsTransferText = `
-INSERT INTO fundstransfer(unique_id, amount, reference_number, currency, transfer_method, exchange_date, exchange_rate)
+INSERT INTO fundstransfer(unique_id, amount, reference_number, attrs)
 VALUES (:unique_id, :amount, :reference_number, :currency, :transfer_method, :exchange_date, :exchange_rate)
 ON CONFLICT(unique_id) DO UPDATE SET
     amount           = COALESCE(excluded.amount,           fundstransfer.amount),
     reference_number = COALESCE(excluded.reference_number, fundstransfer.reference_number),
-    currency         = COALESCE(excluded.currency,         fundstransfer.currency),
-    transfer_method  = COALESCE(excluded.transfer_method,  fundstransfer.transfer_method),
-    exchange_date    = COALESCE(excluded.exchange_date,    fundstransfer.exchange_date),
-    exchange_rate    = COALESCE(excluded.exchange_rate,    fundstransfer.exchange_rate),
+    attrs            = COALESCE(excluded.attrs,            fundstransfer.attrs),
     updated_at       = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -37,12 +37,46 @@ LIMIT 1`
 
 // Param: :row_id
 const selectFundsTransferByID = `
-SELECT id, created_at, updated_at, unique_id, amount, reference_number, currency, transfer_method, exchange_date, exchange_rate 
+SELECT id, created_at, updated_at, unique_id, amount, reference_number, attrs
 FROM fundstransfer 
 WHERE id = :row_id
 LIMIT 1`
 
+type fundsTransferAttributes struct {
+	Currency       string  `json:"currency"`
+	TransferMethod string  `json:"transfer_method"`
+	ExchangeDate   string  `json:"exchange_date"`
+	ExchangeRate   float64 `json:"exchange_rate"`
+}
+
 func (r *SqliteRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.FundsTransfer) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid funds transfer provided")
+	}
+	if a.ID == "" {
+		return 0, fmt.Errorf("funds transfer unique ID missing")
+	}
+	if a.Amount <= 0 {
+		return 0, fmt.Errorf("funds transfer must have a positive amount")
+	}
+	if a.Currency == "" {
+		return 0, fmt.Errorf("funds transfer must have a currency specified")
+	}
+	if _, err := parseTimestamp(a.ExchangeDate); err != nil {
+		return 0, fmt.Errorf("domain record must have a valid exchange date: %v", err)
+	}
+
+	attrs := fundsTransferAttributes{
+		Currency:       a.Currency,
+		TransferMethod: a.Method,
+		ExchangeDate:   a.ExchangeDate,
+		ExchangeRate:   a.ExchangeRate,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -52,14 +86,11 @@ func (r *SqliteRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.Fu
 			sql.Named("unique_id", a.ID),
 			sql.Named("amount", a.Amount),
 			sql.Named("reference_number", a.ReferenceNumber),
-			sql.Named("currency", a.Currency),
-			sql.Named("transfer_method", a.Method),
-			sql.Named("exchange_date", a.ExchangeDate),
-			sql.Named("exchange_rate", a.ExchangeRate),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -100,12 +131,22 @@ func (r *SqliteRepository) fetchFundsTransferByRowID(ctx context.Context, eid, r
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamfin.FundsTransfer
-	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Amount,
-		&a.ReferenceNumber, &a.Currency, &a.Method, &a.ExchangeDate, &a.ExchangeRate); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID,
+		&a.Amount, &a.ReferenceNumber, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no funds transfer found")
+	}
+	if a.ID == "" {
+		return nil, errors.New("funds transfer unique ID is missing")
+	}
+	if a.Amount <= 0 {
+		return nil, errors.New("funds transfer must have a positive amount")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -118,6 +159,22 @@ func (r *SqliteRepository) fetchFundsTransferByRowID(ctx context.Context, eid, r
 		return nil, err
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
+	}
+
+	var attrs fundsTransferAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Currency = attrs.Currency
+	a.Method = attrs.TransferMethod
+	a.ExchangeDate = attrs.ExchangeDate
+	a.ExchangeRate = attrs.ExchangeRate
+
+	if a.Currency == "" {
+		return nil, errors.New("funds transfer currency is missing")
+	}
+	if _, err := parseTimestamp(a.ExchangeDate); err != nil {
+		return nil, fmt.Errorf("domain record exchange date is missing or invalid: %v", err)
 	}
 
 	return e, nil

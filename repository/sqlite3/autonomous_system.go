@@ -7,6 +7,7 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"time"
 
@@ -15,10 +16,12 @@ import (
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// Params: :asn
+// Params: :asn, :attrs
 const upsertAutonomousSystemText = `
-INSERT INTO autonomoussystem(asn) VALUES (:asn)
-ON CONFLICT(asn) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
+INSERT INTO autonomoussystem(asn, attrs) VALUES (:asn, :attrs)
+ON CONFLICT(asn) DO UPDATE SET 
+	attrs      = COALESCE(excluded.attrs,         autonomoussystem.attrs),
+	updated_at = CURRENT_TIMESTAMP`
 
 // Param: :asn
 const selectEntityIDByAutonomousSystemText = `
@@ -29,19 +32,29 @@ LIMIT 1`
 
 // Param: :row_id
 const selectAutonomousSystemByID = `
-SELECT id, created_at, updated_at, asn 
+SELECT id, created_at, updated_at, asn, attrs
 FROM autonomoussystem
 WHERE id = :row_id
 LIMIT 1`
 
 func (r *SqliteRepository) upsertAutonomousSystem(ctx context.Context, a *oamnet.AutonomousSystem) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid autonomous system provided")
+	}
+	if a.Number == 0 {
+		return 0, errors.New("autonomous system number cannot be zero")
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "asset.autonomous_system.upsert",
 		SQLText: upsertAutonomousSystemText,
-		Args:    []any{sql.Named("asn", a.Number)},
-		Result:  done,
+		Args: []any{
+			sql.Named("asn", a.Number),
+			sql.Named("attrs", "{}"),
+		},
+		Result: done,
 	})
 	err := <-done
 	if err != nil {
@@ -84,9 +97,9 @@ func (r *SqliteRepository) fetchAutonomousSystemByRowID(ctx context.Context, eid
 		return nil, result.Err
 	}
 
-	var c, u string
-	var id, asn int64
-	if err := result.Row.Scan(&id, &c, &u, &asn); err != nil {
+	var row_id, asn int64
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &asn, &attrsJSON); err != nil {
 		return nil, err
 	}
 

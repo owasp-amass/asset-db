@@ -7,8 +7,10 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -16,25 +18,17 @@ import (
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
-// Params: :domain_text, :object_id, :record_name, :raw_record, :record_status, :punycode,
-//
-//	:extension, :created_date, :updated_date, :expiration_date, :whois_server
+// Params: :domain_text, :record_name, :punycode, :extension, :whois_server, :object_id, :attrs
 const upsertDomainRecordText = `
-INSERT INTO domainrecord(domain, object_id, record_name, raw_record, record_status, 
-punycode, extension, created_date, updated_date, expiration_date, whois_server)
-VALUES (lower(:domain_text), :object_id, :record_name, :raw_record, :record_status, :punycode, 
-:extension, :created_date, :updated_date, :expiration_date, :whois_server)
+INSERT INTO domainrecord(domain, record_name, punycode, extension, whois_server, object_id, attrs)
+VALUES (:domain_text, :record_name, :punycode, :extension, :whois_server, :object_id, :attrs)
 ON CONFLICT(domain) DO UPDATE SET
 	record_name   = COALESCE(excluded.record_name,   domainrecord.record_name),
-    raw_record    = COALESCE(excluded.raw_record,    domainrecord.raw_record),
-    record_status = COALESCE(excluded.record_status, domainrecord.record_status),
     punycode      = COALESCE(excluded.punycode,      domainrecord.punycode),
     extension     = COALESCE(excluded.extension,     domainrecord.extension),
-    created_date  = COALESCE(excluded.created_date,  domainrecord.created_date),
-    updated_date  = COALESCE(excluded.updated_date,  domainrecord.updated_date),
-    expiration_date = COALESCE(excluded.expiration_date, domainrecord.expiration_date),
     whois_server  = COALESCE(excluded.whois_server,  domainrecord.whois_server),
-	object_id	  = COALESCE(excluded.object_id, domainrecord.object_id),
+	object_id	  = COALESCE(excluded.object_id,     domainrecord.object_id),
+	attrs         = COALESCE(excluded.attrs,         domainrecord.attrs),
     updated_at    = CURRENT_TIMESTAMP`
 
 // Param: :domain_text
@@ -46,13 +40,59 @@ LIMIT 1`
 
 // Param: :row_id
 const selectDomainRecordByID = `
-SELECT id, created_at, updated_at, object_id, raw_record, record_name, domain, 
-record_status, punycode, extension, created_date, updated_date, expiration_date, whois_server 
+SELECT id, created_at, updated_at, domain, record_name, punycode, extension, whois_server, object_id, attrs
 FROM domainrecord
 WHERE id = :row_id
 LIMIT 1`
 
+type domainRecordAttributes struct {
+	Raw            string   `json:"raw"`
+	Status         []string `json:"status"`
+	CreatedDate    string   `json:"created_date"`
+	UpdatedDate    string   `json:"updated_date"`
+	ExpirationDate string   `json:"expiration_date"`
+	DNSSEC         bool     `json:"dnssec"`
+}
+
 func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.DomainRecord) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid domain record provided")
+	}
+	if a.Domain == "" {
+		return 0, errors.New("domain record domain cannot be empty")
+	}
+	if a.Name == "" {
+		return 0, errors.New("domain record name cannot be empty")
+	}
+	if a.Punycode == "" {
+		return 0, errors.New("domain record punycode cannot be empty")
+	}
+	if a.Extension == "" {
+		return 0, errors.New("domain record extension cannot be empty")
+	}
+	if _, err := parseTimestamp(a.CreatedDate); err != nil {
+		return 0, fmt.Errorf("domain record must have a valid created date: %v", err)
+	}
+	if _, err := parseTimestamp(a.UpdatedDate); err != nil {
+		return 0, fmt.Errorf("domain record must have a valid updated date: %v", err)
+	}
+	if _, err := parseTimestamp(a.ExpirationDate); err != nil {
+		return 0, fmt.Errorf("domain record must have a valid expiration date: %v", err)
+	}
+
+	attrs := domainRecordAttributes{
+		Raw:            a.Raw,
+		Status:         a.Status,
+		CreatedDate:    a.CreatedDate,
+		UpdatedDate:    a.UpdatedDate,
+		ExpirationDate: a.ExpirationDate,
+		DNSSEC:         a.DNSSEC,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -60,20 +100,16 @@ func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.Dom
 		SQLText: upsertDomainRecordText,
 		Args: []any{
 			sql.Named("domain_text", a.Domain),
-			sql.Named("object_id", a.ID),
 			sql.Named("record_name", a.Name),
-			sql.Named("raw_record", a.Raw),
-			sql.Named("record_status", strings.Join(a.Status, ",")),
 			sql.Named("punycode", a.Punycode),
 			sql.Named("extension", a.Extension),
-			sql.Named("created_date", a.CreatedDate),
-			sql.Named("updated_date", a.UpdatedDate),
-			sql.Named("expiration_date", a.ExpirationDate),
 			sql.Named("whois_server", a.WhoisServer),
+			sql.Named("object_id", a.ID),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -114,13 +150,31 @@ func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, ro
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
-	var status string
 	var a oamreg.DomainRecord
-	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Raw, &a.Name, &a.Domain, &status, &a.Punycode,
-		&a.Extension, &a.CreatedDate, &a.UpdatedDate, &a.ExpirationDate, &a.WhoisServer); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Domain, &a.Name,
+		&a.Punycode, &a.Extension, &a.WhoisServer, &a.ID, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no domain record found")
+	}
+	if a.Domain == "" {
+		return nil, errors.New("domain record domain is missing")
+	}
+	if a.Name == "" {
+		return nil, errors.New("domain record name is missing")
+	}
+	if a.Punycode == "" {
+		return nil, errors.New("domain record punycode is missing")
+	}
+	if a.Extension == "" {
+		return nil, errors.New("domain record extension is missing")
+	}
+	if a.WhoisServer == "" {
+		return nil, errors.New("domain record whois server is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -135,8 +189,25 @@ func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, ro
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	if status != "" {
-		a.Status = strings.Split(status, ",")
+	var attrs domainRecordAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Raw = attrs.Raw
+	a.Status = attrs.Status
+	a.CreatedDate = attrs.CreatedDate
+	a.UpdatedDate = attrs.UpdatedDate
+	a.ExpirationDate = attrs.ExpirationDate
+	a.DNSSEC = attrs.DNSSEC
+
+	if _, err := parseTimestamp(a.CreatedDate); err != nil {
+		return nil, fmt.Errorf("domain record created date is missing or invalid: %v", err)
+	}
+	if _, err := parseTimestamp(a.UpdatedDate); err != nil {
+		return nil, fmt.Errorf("domain record updated date is missing or invalid: %v", err)
+	}
+	if _, err := parseTimestamp(a.ExpirationDate); err != nil {
+		return nil, fmt.Errorf("domain record expiration date is missing or invalid: %v", err)
 	}
 
 	return e, nil

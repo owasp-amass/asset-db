@@ -188,22 +188,20 @@ END;
 
 -- Autonomous System Registration records
 CREATE TABLE IF NOT EXISTS autnumrecord (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  record_name   TEXT,
-  handle        TEXT NOT NULL UNIQUE,
-  asn           INTEGER NOT NULL UNIQUE,
-  record_status TEXT,
-  created_date  TEXT,
-  updated_date  TEXT,
-  whois_server  TEXT,
-  attrs         TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  record_name  TEXT,
+  handle       TEXT NOT NULL UNIQUE,
+  asn          INTEGER NOT NULL UNIQUE,
+  whois_server TEXT,
+  whois_norm   TEXT GENERATED ALWAYS AS (lower(whois_server)) STORED,
+  attrs        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
 CREATE INDEX IF NOT EXISTS idx_autnumrecord_created_at ON autnumrecord(created_at);
 CREATE INDEX IF NOT EXISTS idx_autnumrecord_updated_at ON autnumrecord(updated_at);
 CREATE INDEX IF NOT EXISTS idx_autnumrecord_name ON autnumrecord(record_name);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_whois_server ON autnumrecord(whois_server);
+CREATE INDEX IF NOT EXISTS idx_autnumrecord_whois_server ON autnumrecord(whois_norm);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_autnumrecord_ai
@@ -293,17 +291,14 @@ CREATE TABLE IF NOT EXISTS domainrecord (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  raw_record      TEXT,
   record_name     TEXT NOT NULL,
   domain          TEXT NOT NULL UNIQUE,
   domain_norm     TEXT GENERATED ALWAYS AS (lower(domain)) STORED,
-  record_status   TEXT,
   punycode        TEXT,
+  punycode_norm   TEXT GENERATED ALWAYS AS (lower(punycode)) STORED,
   extension       TEXT,
-  created_date    TEXT,
-  updated_date    TEXT,
-  expiration_date TEXT,
   whois_server    TEXT,
+  whois_norm      TEXT GENERATED ALWAYS AS (lower(whois_server)) STORED,
   object_id       TEXT,
   attrs           TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
   UNIQUE(domain_norm)
@@ -312,8 +307,8 @@ CREATE INDEX IF NOT EXISTS idx_domainrecord_created_at ON domainrecord(created_a
 CREATE INDEX IF NOT EXISTS idx_domainrecord_updated_at ON domainrecord(updated_at);
 CREATE INDEX IF NOT EXISTS idx_domainrecord_name ON domainrecord(record_name);
 CREATE INDEX IF NOT EXISTS idx_domainrecord_extension ON domainrecord(extension);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_punycode ON domainrecord(punycode);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_whois_server ON domainrecord(whois_server);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_punycode ON domainrecord(punycode_norm);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_whois_server ON domainrecord(whois_norm);
 CREATE INDEX IF NOT EXISTS idx_domainrecord_object_id ON domainrecord(object_id);
 
 -- +migrate StatementBegin
@@ -530,6 +525,7 @@ CREATE TABLE IF NOT EXISTS ipnetrecord (
   created_date  TEXT,
   updated_date  TEXT,
   whois_server  TEXT,
+  whois_norm    TEXT GENERATED ALWAYS AS (lower(whois_server)) STORED,
   parent_handle TEXT,
   start_address TEXT,
   end_address   TEXT,
@@ -542,7 +538,7 @@ CREATE INDEX IF NOT EXISTS idx_ipnetrecord_name ON ipnetrecord(record_name);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_type ON ipnetrecord(ip_version);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_start_address ON ipnetrecord(start_address);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_end_address ON ipnetrecord(end_address);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_whois_server ON ipnetrecord(whois_server);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_whois_server ON ipnetrecord(whois_norm);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_method ON ipnetrecord(method);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_country ON ipnetrecord(country);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_parent_handle ON ipnetrecord(parent_handle);

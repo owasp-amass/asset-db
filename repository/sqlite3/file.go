@@ -7,6 +7,7 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"time"
 
@@ -15,13 +16,14 @@ import (
 	oamfile "github.com/owasp-amass/open-asset-model/file"
 )
 
-// Params: :file_url, :basename, :file_type
+// Params: :file_url, :basename, :file_type, :attrs
 const upsertFileText = `
-INSERT INTO file(file_url, basename, file_type)
-VALUES (lower(:file_url), :basename, :file_type)
+INSERT INTO file(file_url, basename, file_type, attrs)
+VALUES (lower(:file_url), :basename, :file_type, :attrs)
 ON CONFLICT(file_url) DO UPDATE SET
     basename   = COALESCE(excluded.basename,  file.basename),
     file_type  = COALESCE(excluded.file_type, file.file_type),
+    attrs      = COALESCE(excluded.attrs,     file.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :file_url
@@ -33,12 +35,19 @@ LIMIT 1`
 
 // Param: :row_id
 const selectFileByID = `
-SELECT id, created_at, updated_at, file_url, basename, file_type 
+SELECT id, created_at, updated_at, file_url, basename, file_type, attrs
 FROM file
 WHERE id = :row_id
 LIMIT 1`
 
 func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid file provided")
+	}
+	if a.URL == "" {
+		return 0, errors.New("file URL cannot be empty")
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -48,6 +57,7 @@ func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int
 			sql.Named("file_url", a.URL),
 			sql.Named("basename", a.Name),
 			sql.Named("file_type", a.Type),
+			sql.Named("attrs", "{}"),
 		},
 		Result: done,
 	})
@@ -92,11 +102,18 @@ func (r *SqliteRepository) fetchFileByRowID(ctx context.Context, eid, rowID int6
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamfile.File
-	if err := result.Row.Scan(&row_id, &c, &u, &a.URL, &a.Name, &a.Type); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.URL, &a.Name, &a.Type, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no file found")
+	}
+	if a.URL == "" {
+		return nil, errors.New("file URL is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}

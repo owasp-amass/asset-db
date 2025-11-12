@@ -7,6 +7,7 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"time"
 
@@ -15,10 +16,12 @@ import (
 	"github.com/owasp-amass/open-asset-model/contact"
 )
 
-// Params: :discovered_at
+// Params: :discovered_at, :attrs
 const upsertContactRecord = `
-INSERT INTO contactrecord(discovered_at) VALUES (:discovered_at)
-ON CONFLICT(discovered_at) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
+INSERT INTO contactrecord(discovered_at, attrs) VALUES (:discovered_at, :attrs)
+ON CONFLICT(discovered_at) DO UPDATE SET 
+	attrs      = COALESCE(excluded.attrs,       contactrecord.attrs),
+	updated_at = CURRENT_TIMESTAMP`
 
 // Param: :discovered_at
 const selectEntityIDByContactRecordText = `
@@ -29,19 +32,29 @@ LIMIT 1`
 
 // Param: :row_id
 const selectContactRecordByID = `
-SELECT id, created_at, updated_at, discovered_at 
+SELECT id, created_at, updated_at, discovered_at, attrs
 FROM contactrecord 
 WHERE id = :row_id 
 LIMIT 1`
 
 func (r *SqliteRepository) upsertContactRecord(ctx context.Context, a *contact.ContactRecord) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid contact record provided")
+	}
+	if a.DiscoveredAt == "" {
+		return 0, errors.New("contact record discovered_at cannot be empty")
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "asset.contact.upsert",
 		SQLText: upsertContactRecord,
-		Args:    []any{sql.Named("discovered_at", a.DiscoveredAt)},
-		Result:  done,
+		Args: []any{
+			sql.Named("discovered_at", a.DiscoveredAt),
+			sql.Named("attrs", "{}"),
+		},
+		Result: done,
 	})
 	err := <-done
 	if err != nil {
@@ -84,11 +97,14 @@ func (r *SqliteRepository) fetchContactRecordByRowID(ctx context.Context, eid, r
 		return nil, result.Err
 	}
 
-	var id int64
-	var c, u string
-	var disat string
-	if err := result.Row.Scan(&id, &c, &u, &disat); err != nil {
+	var row_id int64
+	var c, u, disat, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &disat, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if disat == "" {
+		return nil, errors.New("contact record discovered_at is missing")
 	}
 
 	e := &types.Entity{

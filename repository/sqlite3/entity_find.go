@@ -304,7 +304,7 @@ var contentRegistry = map[string]regEntry{
 			"number":       "a.asn",
 			"handle":       "a.handle",
 			"name":         "a.record_name",
-			"whois_server": "a.whois_server",
+			"whois_server": "a.whois_norm",
 		},
 	},
 	"autonomoussystem": {
@@ -322,12 +322,12 @@ var contentRegistry = map[string]regEntry{
 	"domainrecord": {
 		keys: []string{"domain", "name", "extension", "punycode", "id", "whois_server"},
 		colMap: map[string]string{
-			"domain":       "lower(a.domain)",
+			"domain":       "a.domain_norm",
 			"name":         "lower(a.record_name)",
 			"extension":    "a.extension",
-			"punycode":     "a.punycode",
+			"punycode":     "a.punycode_norm",
 			"id":           "a.object_id",
-			"whois_server": "a.whois_server",
+			"whois_server": "a.whois_norm",
 		},
 	},
 	"file": {
@@ -341,18 +341,15 @@ var contentRegistry = map[string]regEntry{
 	"fqdn": {
 		keys: []string{"name"},
 		colMap: map[string]string{
-			"name": "lower(a.fqdn)",
+			"name": "a.fqdn_norm",
 		},
 	},
 	"fundstransfer": {
-		keys: []string{"unique_id", "amount", "reference_number", "currency", "transfer_method", "exchange_rate"},
+		keys: []string{"unique_id", "amount", "reference_number"},
 		colMap: map[string]string{
 			"unique_id":        "a.unique_id",
 			"amount":           "a.amount",
 			"reference_number": "a.reference_number",
-			"currency":         "a.currency",
-			"transfer_method":  "a.transfer_method",
-			"exchange_rate":    "a.exchange_rate",
 		},
 	},
 	"identifier": {
