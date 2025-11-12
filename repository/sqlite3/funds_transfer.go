@@ -54,7 +54,7 @@ func (r *SqliteRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.Fu
 		return 0, errors.New("invalid funds transfer provided")
 	}
 	if a.ID == "" {
-		return 0, fmt.Errorf("funds transfer unique ID missing")
+		return 0, fmt.Errorf("funds transfer unique ID cannot be empty")
 	}
 	if a.Amount <= 0 {
 		return 0, fmt.Errorf("funds transfer must have a positive amount")
@@ -63,7 +63,7 @@ func (r *SqliteRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.Fu
 		return 0, fmt.Errorf("funds transfer must have a currency specified")
 	}
 	if _, err := parseTimestamp(a.ExchangeDate); err != nil {
-		return 0, fmt.Errorf("domain record must have a valid exchange date: %v", err)
+		return 0, fmt.Errorf("funds transfer must have a valid exchange date: %v", err)
 	}
 
 	attrs := fundsTransferAttributes{
@@ -174,7 +174,7 @@ func (r *SqliteRepository) fetchFundsTransferByRowID(ctx context.Context, eid, r
 		return nil, errors.New("funds transfer currency is missing")
 	}
 	if _, err := parseTimestamp(a.ExchangeDate); err != nil {
-		return nil, fmt.Errorf("domain record exchange date is missing or invalid: %v", err)
+		return nil, fmt.Errorf("funds transfer exchange date is missing or invalid: %v", err)
 	}
 
 	return e, nil

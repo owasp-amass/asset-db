@@ -7,6 +7,9 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,12 +18,13 @@ import (
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
-// Params: :id_type, :unique_id
+// Params: :unique_id, :id_type, :attrs
 const upsertIdentifierText = `
-INSERT INTO identifier(id_type, unique_id) 
-VALUES (:id_type, :unique_id) 
+INSERT INTO identifier(unique_id, id_type, attrs) 
+VALUES (:unique_id, :id_type, :attrs) 
 ON CONFLICT(unique_id) DO UPDATE SET
-    id_type   = COALESCE(excluded.id_type, identifier.id_type),
+    id_type    = COALESCE(excluded.id_type, identifier.id_type),
+	attrs      = COALESCE(excluded.attrs,   identifier.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -32,24 +36,53 @@ LIMIT 1`
 
 // Param: :row_id
 const selectIdentifierByID = `
-SELECT id, created_at, updated_at, id_type, unique_id 
+SELECT id, created_at, updated_at, unique_id, id_type, attrs
 FROM identifier 
 WHERE id = :row_id
 LIMIT 1`
 
+type identifierAttributes struct {
+	Status         string `json:"status"`
+	CreatedDate    string `json:"created_date"`
+	UpdatedDate    string `json:"updated_date"`
+	ExpirationDate string `json:"expiration_date"`
+}
+
 func (r *SqliteRepository) upsertIdentifier(ctx context.Context, a *oamgen.Identifier) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid identifier provided")
+	}
+	if a.UniqueID == "" {
+		return 0, fmt.Errorf("identifier unique ID cannot be empty")
+	}
+	if a.Type == "" {
+		return 0, fmt.Errorf("identifier type cannot be empty")
+	}
+
+	attrs := identifierAttributes{
+		Status:         a.Status,
+		CreatedDate:    a.CreationDate,
+		UpdatedDate:    a.UpdatedDate,
+		ExpirationDate: a.ExpirationDate,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "asset.identifier.upsert",
 		SQLText: upsertIdentifierText,
 		Args: []any{
-			sql.Named("id_type", a.Type),
 			sql.Named("unique_id", a.UniqueID),
+			sql.Named("id_type", a.Type),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -90,11 +123,22 @@ func (r *SqliteRepository) fetchIdentifierByRowID(ctx context.Context, eid, rowI
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamgen.Identifier
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Type, &a.UniqueID); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u,
+		&a.UniqueID, &a.Type, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no identifier found")
+	}
+	if a.UniqueID == "" {
+		return nil, errors.New("identifier unique ID is missing")
+	}
+	if a.Type == "" {
+		return nil, fmt.Errorf("identifier type is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -108,6 +152,15 @@ func (r *SqliteRepository) fetchIdentifierByRowID(ctx context.Context, eid, rowI
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
+
+	var attrs identifierAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Status = attrs.Status
+	a.CreationDate = attrs.CreatedDate
+	a.UpdatedDate = attrs.UpdatedDate
+	a.ExpirationDate = attrs.ExpirationDate
 
 	return e, nil
 }

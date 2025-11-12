@@ -360,10 +360,9 @@ var contentRegistry = map[string]regEntry{
 		},
 	},
 	"ipaddress": {
-		keys: []string{"address", "type"},
+		keys: []string{"address"},
 		colMap: map[string]string{
 			"address": "a.ip_address",
-			"type":    "a.ip_version",
 		},
 	},
 	"ipnetrecord": {

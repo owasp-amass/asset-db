@@ -7,6 +7,7 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/netip"
 	"strconv"
 	"time"
@@ -16,12 +17,13 @@ import (
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// Params: :ip_version, :ip_address_text
+// Params: :ip_address_text, :ip_version, :attrs
 const upsertIPAddressText = `
-INSERT INTO ipaddress(ip_version, ip_address)
-VALUES (:ip_version, :ip_address_text)
+INSERT INTO ipaddress(ip_address, ip_version, attrs)
+VALUES (:ip_address_text, :ip_version, :attrs)
 ON CONFLICT(ip_address) DO UPDATE SET
     ip_version = COALESCE(excluded.ip_version, ipaddress.ip_version),
+	attrs      = COALESCE(excluded.attrs,      ipaddress.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :ip_address_text
@@ -33,7 +35,7 @@ LIMIT 1`
 
 // Param: :row_id
 const selectIPAddressByID = `
-SELECT id, created_at, updated_at, ip_version, ip_address 
+SELECT id, created_at, updated_at, ip_address, ip_version, attrs
 FROM ipaddress 
 WHERE id = :row_id
 LIMIT 1`
@@ -45,8 +47,9 @@ func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddr
 		Name:    "asset.ip_address.upsert",
 		SQLText: upsertIPAddressText,
 		Args: []any{
-			sql.Named("ip_version", a.Type),
 			sql.Named("ip_address_text", a.Address.String()),
+			sql.Named("ip_version", a.Type),
+			sql.Named("attrs", "{}"),
 		},
 		Result: done,
 	})
@@ -91,12 +94,19 @@ func (r *SqliteRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
-	var addrstr string
 	var a oamnet.IPAddress
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Type, &addrstr); err != nil {
+	var c, u, addrstr, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u,
+		&addrstr, &a.Type, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no IP address found")
+	}
+	if a.Type == "" {
+		return nil, errors.New("IP address type is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}

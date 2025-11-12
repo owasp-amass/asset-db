@@ -6,7 +6,6 @@
 -- - Uses JSON1 (json_valid/json_extract/json_patch)
 -- - Lowercased “normalized” columns for case-insensitive uniqueness
 -- - Native UPSERT via INSERT ... ON CONFLICT
--- - No partitions (SQLite), but compact indexes
 -- ============================================================================
 
 PRAGMA foreign_keys = ON;
@@ -16,17 +15,17 @@ PRAGMA foreign_keys = ON;
 -- -----------------------------
 CREATE TABLE IF NOT EXISTS entity_type_lu (
   id    INTEGER PRIMARY KEY AUTOINCREMENT,
-  name  TEXT NOT NULL UNIQUE
+  name  TEXT COLLATE NOCASE NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS edge_type_lu (
   id    INTEGER PRIMARY KEY AUTOINCREMENT,
-  name  TEXT NOT NULL UNIQUE
+  name  TEXT COLLATE NOCASE NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS tag_type_lu (
   id    INTEGER PRIMARY KEY AUTOINCREMENT,
-  name  TEXT NOT NULL UNIQUE
+  name  TEXT COLLATE NOCASE NOT NULL UNIQUE
 );
 
 -- Seed common types (extend as needed)
@@ -51,7 +50,7 @@ CREATE TABLE IF NOT EXISTS entity (
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   etype_id    INTEGER NOT NULL REFERENCES entity_type_lu(id),
   natural_key TEXT NOT NULL,
-  table_name  TEXT NOT NULL,
+  table_name  TEXT COLLATE NOCASE NOT NULL,
   row_id      INTEGER NOT NULL,
   UNIQUE (etype_id, row_id),
   UNIQUE (etype_id, natural_key),
@@ -59,10 +58,12 @@ CREATE TABLE IF NOT EXISTS entity (
   UNIQUE (entity_id, etype_id, row_id),
   UNIQUE (entity_id, table_name, row_id)
 );
-CREATE INDEX IF NOT EXISTS idx_entity_created_at ON entity(created_at);
-CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON entity(updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_etype_id ON entity(etype_id);
-CREATE INDEX IF NOT EXISTS idx_entity_natural_key ON entity(natural_key);
+CREATE INDEX IF NOT EXISTS idx_entity_created_at ON entity (created_at);
+CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON entity (updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_etype_id ON entity (etype_id);
+CREATE INDEX IF NOT EXISTS idx_entity_natural_key ON entity (natural_key);
+CREATE INDEX IF NOT EXISTS idx_entity_table_name ON entity (table_name);
+CREATE INDEX IF NOT EXISTS idx_entity_row_id ON entity (row_id);
 
 -- -----------------------------
 -- Graph edges & tags
@@ -72,20 +73,21 @@ CREATE TABLE IF NOT EXISTS edge (
   created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   etype_id       INTEGER NOT NULL REFERENCES edge_type_lu(id),
-  label          TEXT NOT NULL,
+  label          TEXT COLLATE NOCASE NOT NULL,
   content        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(content)),
   from_entity_id INTEGER NOT NULL REFERENCES entity(entity_id) ON DELETE CASCADE,
   to_entity_id   INTEGER NOT NULL REFERENCES entity(entity_id) ON DELETE CASCADE,
   UNIQUE (etype_id, from_entity_id, to_entity_id, label),
   CHECK (from_entity_id <> to_entity_id)
 );
-CREATE INDEX IF NOT EXISTS idx_edge_created_at ON edge(created_at);
-CREATE INDEX IF NOT EXISTS idx_edge_updated_at ON edge(updated_at);
-CREATE INDEX IF NOT EXISTS idx_edge_etype_id ON edge(etype_id);
-CREATE INDEX IF NOT EXISTS idx_edge_from_id ON edge(from_entity_id);
-CREATE INDEX IF NOT EXISTS idx_edge_to_id   ON edge(to_entity_id);
-CREATE INDEX IF NOT EXISTS idx_edge_from ON edge(from_entity_id, etype_id, to_entity_id);
-CREATE INDEX IF NOT EXISTS idx_edge_to   ON edge(to_entity_id, etype_id, from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_created_at ON edge (created_at);
+CREATE INDEX IF NOT EXISTS idx_edge_updated_at ON edge (updated_at);
+CREATE INDEX IF NOT EXISTS idx_edge_etype_id ON edge (etype_id);
+CREATE INDEX IF NOT EXISTS idx_edge_label ON edge (label);
+CREATE INDEX IF NOT EXISTS idx_edge_from_id ON edge (from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_to_id   ON edge (to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_from ON edge (from_entity_id, etype_id, to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_to   ON edge (to_entity_id, etype_id, from_entity_id);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_edge_au
@@ -105,11 +107,11 @@ CREATE TABLE IF NOT EXISTS tag (
   content        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(content)),
   UNIQUE (ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_tag_created_at ON tag(created_at);
-CREATE INDEX IF NOT EXISTS idx_tag_updated_at ON tag(updated_at);
-CREATE INDEX IF NOT EXISTS idx_tag_ttype_id ON tag(ttype_id);
-CREATE INDEX IF NOT EXISTS idx_tag_property_name ON tag(property_name);
-CREATE INDEX IF NOT EXISTS idx_tag_tt_name ON tag(ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_tag_created_at ON tag (created_at);
+CREATE INDEX IF NOT EXISTS idx_tag_updated_at ON tag (updated_at);
+CREATE INDEX IF NOT EXISTS idx_tag_ttype_id ON tag (ttype_id);
+CREATE INDEX IF NOT EXISTS idx_tag_property_name ON tag (property_name);
+CREATE INDEX IF NOT EXISTS idx_tag_tt_name ON tag (ttype_id, property_name);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_tag_au
@@ -127,10 +129,10 @@ CREATE TABLE IF NOT EXISTS entity_tag_map (
   tag_id     INTEGER NOT NULL REFERENCES tag(tag_id) ON DELETE CASCADE,
   UNIQUE (entity_id, tag_id)
 );
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_created_at ON entity_tag_map(created_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_updated_at ON entity_tag_map(updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_id ON entity_tag_map(entity_id);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_tag_id ON entity_tag_map(tag_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_map_created_at ON entity_tag_map (created_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_map_updated_at ON entity_tag_map (updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_id ON entity_tag_map (entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_map_tag_id ON entity_tag_map (tag_id);
 
 CREATE TABLE IF NOT EXISTS edge_tag_map (
   map_id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,10 +142,10 @@ CREATE TABLE IF NOT EXISTS edge_tag_map (
   tag_id     INTEGER NOT NULL REFERENCES tag(tag_id) ON DELETE CASCADE,
   UNIQUE (edge_id, tag_id)
 );
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_created_at ON edge_tag_map(created_at);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_updated_at ON edge_tag_map(updated_at);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_id ON edge_tag_map(edge_id);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_tag_id ON edge_tag_map(tag_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_map_created_at ON edge_tag_map (created_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_map_updated_at ON edge_tag_map (updated_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_id ON edge_tag_map (edge_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_map_tag_id ON edge_tag_map (tag_id);
 
 -- -----------------------------------------------
 -- Asset tables (with normalized columns)
@@ -160,11 +162,11 @@ CREATE TABLE IF NOT EXISTS account (
   account_number TEXT,
   attrs          TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_account_created_at ON account(created_at);
-CREATE INDEX IF NOT EXISTS idx_account_updated_at ON account(updated_at);
-CREATE INDEX IF NOT EXISTS idx_account_account_type ON account(account_type);
-CREATE INDEX IF NOT EXISTS idx_account_username ON account(username);
-CREATE INDEX IF NOT EXISTS idx_account_account_number ON account(account_number);
+CREATE INDEX IF NOT EXISTS idx_account_created_at ON account (created_at);
+CREATE INDEX IF NOT EXISTS idx_account_updated_at ON account (updated_at);
+CREATE INDEX IF NOT EXISTS idx_account_account_type ON account (account_type);
+CREATE INDEX IF NOT EXISTS idx_account_username ON account (username);
+CREATE INDEX IF NOT EXISTS idx_account_account_number ON account (account_number);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_account_ai
@@ -195,13 +197,13 @@ CREATE TABLE IF NOT EXISTS autnumrecord (
   handle       TEXT NOT NULL UNIQUE,
   asn          INTEGER NOT NULL UNIQUE,
   whois_server TEXT,
-  whois_norm   TEXT GENERATED ALWAYS AS (lower(whois_server)) STORED,
+  whois_norm   TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(whois_server)) STORED,
   attrs        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_created_at ON autnumrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_updated_at ON autnumrecord(updated_at);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_name ON autnumrecord(record_name);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_whois_server ON autnumrecord(whois_norm);
+CREATE INDEX IF NOT EXISTS idx_autnumrecord_created_at ON autnumrecord (created_at);
+CREATE INDEX IF NOT EXISTS idx_autnumrecord_updated_at ON autnumrecord (updated_at);
+CREATE INDEX IF NOT EXISTS idx_autnumrecord_name ON autnumrecord (record_name);
+CREATE INDEX IF NOT EXISTS idx_autnumrecord_whois_server ON autnumrecord (whois_norm);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_autnumrecord_ai
@@ -231,8 +233,8 @@ CREATE TABLE IF NOT EXISTS autonomoussystem (
   asn        INTEGER NOT NULL UNIQUE,
   attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_autonomoussystem_created_at ON autonomoussystem(created_at);
-CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at ON autonomoussystem(updated_at);
+CREATE INDEX IF NOT EXISTS idx_autonomoussystem_created_at ON autonomoussystem (created_at);
+CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at ON autonomoussystem (updated_at);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_autonomoussystem_ai
@@ -262,8 +264,8 @@ CREATE TABLE IF NOT EXISTS contactrecord (
   discovered_at TEXT NOT NULL UNIQUE,
   attrs         TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_contactrecord_created_at ON contactrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_contactrecord_updated_at ON contactrecord(updated_at);
+CREATE INDEX IF NOT EXISTS idx_contactrecord_created_at ON contactrecord (created_at);
+CREATE INDEX IF NOT EXISTS idx_contactrecord_updated_at ON contactrecord (updated_at);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_contactrecord_ai
@@ -293,23 +295,23 @@ CREATE TABLE IF NOT EXISTS domainrecord (
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   record_name     TEXT NOT NULL,
   domain          TEXT NOT NULL UNIQUE,
-  domain_norm     TEXT GENERATED ALWAYS AS (lower(domain)) STORED,
+  domain_norm     TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(domain)) STORED,
   punycode        TEXT,
-  punycode_norm   TEXT GENERATED ALWAYS AS (lower(punycode)) STORED,
+  punycode_norm   TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(punycode)) STORED,
   extension       TEXT,
   whois_server    TEXT,
-  whois_norm      TEXT GENERATED ALWAYS AS (lower(whois_server)) STORED,
+  whois_norm      TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(whois_server)) STORED,
   object_id       TEXT,
   attrs           TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
   UNIQUE(domain_norm)
 );
-CREATE INDEX IF NOT EXISTS idx_domainrecord_created_at ON domainrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_updated_at ON domainrecord(updated_at);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_name ON domainrecord(record_name);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_extension ON domainrecord(extension);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_punycode ON domainrecord(punycode_norm);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_whois_server ON domainrecord(whois_norm);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_object_id ON domainrecord(object_id);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_created_at ON domainrecord (created_at);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_updated_at ON domainrecord (updated_at);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_name ON domainrecord (record_name);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_extension ON domainrecord (extension);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_punycode ON domainrecord (punycode_norm);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_whois_server ON domainrecord (whois_norm);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_object_id ON domainrecord (object_id);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_domainrecord_ai
@@ -341,10 +343,10 @@ CREATE TABLE IF NOT EXISTS file (
   file_type  TEXT,
   attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_file_created_at ON file(created_at);
-CREATE INDEX IF NOT EXISTS idx_file_updated_at ON file(updated_at);
-CREATE INDEX IF NOT EXISTS idx_file_basename ON file(basename);
-CREATE INDEX IF NOT EXISTS idx_file_file_type ON file(file_type);
+CREATE INDEX IF NOT EXISTS idx_file_created_at ON file (created_at);
+CREATE INDEX IF NOT EXISTS idx_file_updated_at ON file (updated_at);
+CREATE INDEX IF NOT EXISTS idx_file_basename ON file (basename);
+CREATE INDEX IF NOT EXISTS idx_file_file_type ON file (file_type);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_file_ai
@@ -372,17 +374,16 @@ CREATE TABLE IF NOT EXISTS fqdn (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   fqdn       TEXT NOT NULL,
-  fqdn_norm  TEXT GENERATED ALWAYS AS (lower(fqdn)) STORED,
+  fqdn_norm  TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(fqdn)) STORED,
   attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
   UNIQUE(fqdn_norm)
 );
-CREATE INDEX IF NOT EXISTS idx_fqdn_created_at ON fqdn(created_at);
-CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at ON fqdn(updated_at);
-CREATE INDEX IF NOT EXISTS idx_fqdn_fqdn ON fqdn(fqdn);
+CREATE INDEX IF NOT EXISTS idx_fqdn_created_at ON fqdn (created_at);
+CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at ON fqdn (updated_at);
 
 -- Fires when we insert a new fqdn row
 -- +migrate StatementBegin
-CREATE TRIGGER IF NOT EXISTS trg_fqdn_after_insert
+CREATE TRIGGER IF NOT EXISTS trg_fqdn_ai
 AFTER INSERT ON fqdn
 BEGIN
   INSERT INTO entity (etype_id, natural_key, table_name, row_id)
@@ -393,7 +394,7 @@ END;
 
 -- Fires when an UPSERT takes the DO UPDATE path
 -- +migrate StatementBegin
-CREATE TRIGGER IF NOT EXISTS trg_fqdn_after_update
+CREATE TRIGGER IF NOT EXISTS trg_fqdn_au
 AFTER UPDATE OF fqdn ON fqdn
 BEGIN
   INSERT INTO entity (etype_id, natural_key, table_name, row_id)
@@ -410,19 +411,12 @@ CREATE TABLE IF NOT EXISTS fundstransfer (
   unique_id        TEXT NOT NULL UNIQUE,
   amount           REAL NOT NULL,
   reference_number TEXT,
-  currency         TEXT,
-  transfer_method  TEXT,
-  exchange_date    TEXT,
-  exchange_rate    REAL,
   attrs            TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_created_at ON fundstransfer(created_at);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_updated_at ON fundstransfer(updated_at);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_amount ON fundstransfer(amount);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_reference_number ON fundstransfer(reference_number);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_currency ON fundstransfer(currency);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_transfer_method ON fundstransfer(transfer_method);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_exchange_rate ON fundstransfer(exchange_rate);
+CREATE INDEX IF NOT EXISTS idx_fundstransfer_created_at ON fundstransfer (created_at);
+CREATE INDEX IF NOT EXISTS idx_fundstransfer_updated_at ON fundstransfer (updated_at);
+CREATE INDEX IF NOT EXISTS idx_fundstransfer_amount ON fundstransfer (amount);
+CREATE INDEX IF NOT EXISTS idx_fundstransfer_reference_number ON fundstransfer (reference_number);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_fundstransfer_ai
@@ -453,9 +447,9 @@ CREATE TABLE IF NOT EXISTS identifier (
   id_type    TEXT NOT NULL,
   attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_identifier_created_at ON identifier(created_at);
-CREATE INDEX IF NOT EXISTS idx_identifier_updated_at ON identifier(updated_at);
-CREATE INDEX IF NOT EXISTS idx_identifier_id_type ON identifier(id_type);
+CREATE INDEX IF NOT EXISTS idx_identifier_created_at ON identifier (created_at);
+CREATE INDEX IF NOT EXISTS idx_identifier_updated_at ON identifier (updated_at);
+CREATE INDEX IF NOT EXISTS idx_identifier_id_type ON identifier (id_type);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_identifier_ai
@@ -487,9 +481,8 @@ CREATE TABLE IF NOT EXISTS ipaddress (
   attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
   UNIQUE(ip_address, ip_version)
 );
-CREATE INDEX IF NOT EXISTS idx_ipaddress_created_at ON ipaddress(created_at);
-CREATE INDEX IF NOT EXISTS idx_ipaddress_updated_at ON ipaddress(updated_at);
-CREATE INDEX IF NOT EXISTS idx_ipaddress_ip_version ON ipaddress(ip_version);
+CREATE INDEX IF NOT EXISTS idx_ipaddress_created_at ON ipaddress (created_at);
+CREATE INDEX IF NOT EXISTS idx_ipaddress_updated_at ON ipaddress (updated_at);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_ipaddress_ai
@@ -1078,7 +1071,6 @@ DROP TABLE IF EXISTS ipnetrecord;
 
 DROP TRIGGER IF EXISTS trg_ipaddress_au;
 DROP TRIGGER IF EXISTS trg_ipaddress_ai;
-DROP INDEX IF EXISTS idx_ipaddress_ip_version;
 DROP INDEX IF EXISTS idx_ipaddress_updated_at;
 DROP INDEX IF EXISTS idx_ipaddress_created_at;
 DROP TABLE IF EXISTS ipaddress;
@@ -1092,18 +1084,14 @@ DROP TABLE IF EXISTS identifier;
 
 DROP TRIGGER IF EXISTS trg_fundstransfer_au;
 DROP TRIGGER IF EXISTS trg_fundstransfer_ai;
-DROP INDEX IF EXISTS idx_fundstransfer_exchange_rate;
-DROP INDEX IF EXISTS idx_fundstransfer_transfer_method;
-DROP INDEX IF EXISTS idx_fundstransfer_currency;
 DROP INDEX IF EXISTS idx_fundstransfer_reference_number;
 DROP INDEX IF EXISTS idx_fundstransfer_amount;
 DROP INDEX IF EXISTS idx_fundstransfer_updated_at;
 DROP INDEX IF EXISTS idx_fundstransfer_created_at;
 DROP TABLE IF EXISTS fundstransfer;
 
-DROP TRIGGER IF EXISTS trg_fqdn_after_update;
-DROP TRIGGER IF EXISTS trg_fqdn_after_insert;
-DROP INDEX IF EXISTS idx_fqdn_fqdn;
+DROP TRIGGER IF EXISTS trg_fqdn_au;
+DROP TRIGGER IF EXISTS trg_fqdn_ai;
 DROP INDEX IF EXISTS idx_fqdn_updated_at;
 DROP INDEX IF EXISTS idx_fqdn_created_at;
 DROP TABLE IF EXISTS fqdn;
@@ -1183,11 +1171,14 @@ DROP INDEX IF EXISTS idx_edge_to;
 DROP INDEX IF EXISTS idx_edge_from;
 DROP INDEX IF EXISTS idx_edge_to_id;
 DROP INDEX IF EXISTS idx_edge_from_id;
+DROP INDEX IF EXISTS idx_edge_label;
 DROP INDEX IF EXISTS idx_edge_etype_id;
 DROP INDEX IF EXISTS idx_edge_updated_at;
 DROP INDEX IF EXISTS idx_edge_created_at;
 DROP TABLE IF EXISTS edge;
 
+DROP INDEX IF EXISTS idx_entity_row_id;
+DROP INDEX IF EXISTS idx_entity_table_name;
 DROP INDEX IF EXISTS idx_entity_natural_key;
 DROP INDEX IF EXISTS idx_entity_etype_id;
 DROP INDEX IF EXISTS idx_entity_updated_at;
