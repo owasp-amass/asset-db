@@ -477,9 +477,7 @@ CREATE TABLE IF NOT EXISTS ipaddress (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   ip_address TEXT NOT NULL UNIQUE,
-  ip_version TEXT NOT NULL,
-  attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
-  UNIQUE(ip_address, ip_version)
+  attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
 CREATE INDEX IF NOT EXISTS idx_ipaddress_created_at ON ipaddress (created_at);
 CREATE INDEX IF NOT EXISTS idx_ipaddress_updated_at ON ipaddress (updated_at);
@@ -511,30 +509,21 @@ CREATE TABLE IF NOT EXISTS ipnetrecord (
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   record_cidr   TEXT NOT NULL UNIQUE,
   record_name   TEXT NOT NULL,
-  ip_version    TEXT NOT NULL,
   handle        TEXT NOT NULL UNIQUE,
-  method        TEXT,
-  record_status TEXT,
-  created_date  TEXT,
-  updated_date  TEXT,
   whois_server  TEXT,
   whois_norm    TEXT GENERATED ALWAYS AS (lower(whois_server)) STORED,
   parent_handle TEXT,
   start_address TEXT,
   end_address   TEXT,
-  country       TEXT,
   attrs         TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_created_at ON ipnetrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_updated_at ON ipnetrecord(updated_at);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_name ON ipnetrecord(record_name);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_type ON ipnetrecord(ip_version);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_start_address ON ipnetrecord(start_address);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_end_address ON ipnetrecord(end_address);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_whois_server ON ipnetrecord(whois_norm);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_method ON ipnetrecord(method);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_country ON ipnetrecord(country);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_parent_handle ON ipnetrecord(parent_handle);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_created_at ON ipnetrecord (created_at);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_updated_at ON ipnetrecord (updated_at);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_name ON ipnetrecord (record_name);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_start_address ON ipnetrecord (start_address);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_end_address ON ipnetrecord (end_address);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_whois_server ON ipnetrecord (whois_norm);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_parent_handle ON ipnetrecord (parent_handle);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_ipnetrecord_ai
@@ -573,17 +562,17 @@ CREATE TABLE IF NOT EXISTS location (
   building_number TEXT,
   attrs           TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_location_created_at ON location(created_at);
-CREATE INDEX IF NOT EXISTS idx_location_updated_at ON location(updated_at);
-CREATE INDEX IF NOT EXISTS idx_location_building ON location(building);
-CREATE INDEX IF NOT EXISTS idx_location_building_number ON location(building_number);
-CREATE INDEX IF NOT EXISTS idx_location_province ON location(province);
-CREATE INDEX IF NOT EXISTS idx_location_street_name ON location(street_name);
-CREATE INDEX IF NOT EXISTS idx_location_unit ON location(unit);
-CREATE INDEX IF NOT EXISTS idx_location_locality ON location(locality);
-CREATE INDEX IF NOT EXISTS idx_location_city ON location(city);
-CREATE INDEX IF NOT EXISTS idx_location_country ON location(country);
-CREATE INDEX IF NOT EXISTS idx_location_postal_code ON location(postal_code);
+CREATE INDEX IF NOT EXISTS idx_location_created_at ON location (created_at);
+CREATE INDEX IF NOT EXISTS idx_location_updated_at ON location (updated_at);
+CREATE INDEX IF NOT EXISTS idx_location_building ON location (building);
+CREATE INDEX IF NOT EXISTS idx_location_building_number ON location (building_number);
+CREATE INDEX IF NOT EXISTS idx_location_province ON location (province);
+CREATE INDEX IF NOT EXISTS idx_location_street_name ON location (street_name);
+CREATE INDEX IF NOT EXISTS idx_location_unit ON location (unit);
+CREATE INDEX IF NOT EXISTS idx_location_locality ON location (locality);
+CREATE INDEX IF NOT EXISTS idx_location_city ON location (city);
+CREATE INDEX IF NOT EXISTS idx_location_country ON location (country);
+CREATE INDEX IF NOT EXISTS idx_location_postal_code ON location (postal_code);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_location_ai
@@ -611,12 +600,10 @@ CREATE TABLE IF NOT EXISTS netblock (
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   netblock_cidr TEXT NOT NULL UNIQUE,
-  ip_version    TEXT NOT NULL,
   attrs         TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_netblock_created_at ON netblock(created_at);
-CREATE INDEX IF NOT EXISTS idx_netblock_updated_at ON netblock(updated_at);
-CREATE INDEX IF NOT EXISTS idx_netblock_ip_version ON netblock(ip_version);
+CREATE INDEX IF NOT EXISTS idx_netblock_created_at ON netblock (created_at);
+CREATE INDEX IF NOT EXISTS idx_netblock_updated_at ON netblock (updated_at);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_netblock_ai
@@ -643,21 +630,19 @@ CREATE TABLE IF NOT EXISTS organization (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  org_name        TEXT,
-  active          INTEGER,
   unique_id       TEXT NOT NULL UNIQUE,
+  org_name        TEXT,
   legal_name      TEXT NOT NULL,
   jurisdiction    TEXT,
-  founding_date   TEXT,
   registration_id TEXT,
   attrs           TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_organization_created_at ON organization(created_at);
-CREATE INDEX IF NOT EXISTS idx_organization_updated_at ON organization(updated_at);
-CREATE INDEX IF NOT EXISTS idx_organization_org_name ON organization(org_name);
-CREATE INDEX IF NOT EXISTS idx_organization_legal_name ON organization(legal_name);
-CREATE INDEX IF NOT EXISTS idx_organization_jurisdiction ON organization(jurisdiction);
-CREATE INDEX IF NOT EXISTS idx_organization_registration_id ON organization(registration_id);
+CREATE INDEX IF NOT EXISTS idx_organization_created_at ON organization (created_at);
+CREATE INDEX IF NOT EXISTS idx_organization_updated_at ON organization (updated_at);
+CREATE INDEX IF NOT EXISTS idx_organization_org_name ON organization (org_name);
+CREATE INDEX IF NOT EXISTS idx_organization_legal_name ON organization (legal_name);
+CREATE INDEX IF NOT EXISTS idx_organization_jurisdiction ON organization (jurisdiction);
+CREATE INDEX IF NOT EXISTS idx_organization_registration_id ON organization (registration_id);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_organization_ai
@@ -688,15 +673,13 @@ CREATE TABLE IF NOT EXISTS person (
   unique_id   TEXT NOT NULL UNIQUE,
   first_name  TEXT,
   family_name TEXT,
-  middle_name TEXT,
   attrs       TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_person_created_at ON person(created_at);
-CREATE INDEX IF NOT EXISTS idx_person_updated_at ON person(updated_at);
-CREATE INDEX IF NOT EXISTS idx_person_full_name ON person(full_name);
-CREATE INDEX IF NOT EXISTS idx_person_first_name ON person(first_name);
-CREATE INDEX IF NOT EXISTS idx_person_family_name ON person(family_name);
-CREATE INDEX IF NOT EXISTS idx_person_middle_name ON person(middle_name);
+CREATE INDEX IF NOT EXISTS idx_person_created_at ON person (created_at);
+CREATE INDEX IF NOT EXISTS idx_person_updated_at ON person (updated_at);
+CREATE INDEX IF NOT EXISTS idx_person_full_name ON person (full_name);
+CREATE INDEX IF NOT EXISTS idx_person_first_name ON person (first_name);
+CREATE INDEX IF NOT EXISTS idx_person_family_name ON person (family_name);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_person_ai
@@ -720,22 +703,16 @@ END;
 
 -- Phone numbers
 CREATE TABLE IF NOT EXISTS phone (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  raw_number     TEXT NOT NULL,
-  e164           TEXT NOT NULL UNIQUE,
-  number_type    TEXT,
-  country_code   INTEGER,
-  country_abbrev TEXT,
-  attrs          TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  e164         TEXT NOT NULL UNIQUE,
+  country_code INTEGER,
+  attrs        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_phone_created_at ON phone(created_at);
-CREATE INDEX IF NOT EXISTS idx_phone_updated_at ON phone(updated_at);
-CREATE INDEX IF NOT EXISTS idx_phone_raw ON phone(raw_number);
-CREATE INDEX IF NOT EXISTS idx_phone_number_type ON phone(number_type);
-CREATE INDEX IF NOT EXISTS idx_phone_country_code ON phone(country_code);
-CREATE INDEX IF NOT EXISTS idx_phone_country_abbrev ON phone(country_abbrev);
+CREATE INDEX IF NOT EXISTS idx_phone_created_at ON phone (created_at);
+CREATE INDEX IF NOT EXISTS idx_phone_updated_at ON phone (updated_at);
+CREATE INDEX IF NOT EXISTS idx_phone_country_code ON phone (country_code);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_phone_ai
@@ -759,24 +736,18 @@ END;
 
 -- Products
 CREATE TABLE IF NOT EXISTS product (
-  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-  created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  unique_id           TEXT NOT NULL UNIQUE,
-  product_name        TEXT NOT NULL,
-  product_type        TEXT,
-  category            TEXT,
-  product_description TEXT,
-  country_of_origin   TEXT,
-  attrs               TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  unique_id    TEXT NOT NULL UNIQUE,
+  product_name TEXT NOT NULL,
+  product_type TEXT,
+  attrs        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_product_created_at ON product(created_at);
-CREATE INDEX IF NOT EXISTS idx_product_updated_at ON product(updated_at);
-CREATE INDEX IF NOT EXISTS idx_product_name ON product(product_name);
-CREATE INDEX IF NOT EXISTS idx_product_type ON product(product_type);
-CREATE INDEX IF NOT EXISTS idx_product_category ON product(category);
-CREATE INDEX IF NOT EXISTS idx_product_description ON product(product_description);
-CREATE INDEX IF NOT EXISTS idx_product_country_of_origin ON product(country_of_origin);
+CREATE INDEX IF NOT EXISTS idx_product_created_at ON product (created_at);
+CREATE INDEX IF NOT EXISTS idx_product_updated_at ON product (updated_at);
+CREATE INDEX IF NOT EXISTS idx_product_name ON product (product_name);
+CREATE INDEX IF NOT EXISTS idx_product_type ON product (product_type);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_product_ai
@@ -804,11 +775,10 @@ CREATE TABLE IF NOT EXISTS productrelease (
   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   release_name TEXT NOT NULL UNIQUE,
-  release_date TEXT,
   attrs        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_productrelease_created_at ON productrelease(created_at);
-CREATE INDEX IF NOT EXISTS idx_productrelease_updated_at ON productrelease(updated_at);
+CREATE INDEX IF NOT EXISTS idx_productrelease_created_at ON productrelease (created_at);
+CREATE INDEX IF NOT EXISTS idx_productrelease_updated_at ON productrelease (updated_at);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_productrelease_ai
@@ -837,15 +807,11 @@ CREATE TABLE IF NOT EXISTS service (
   updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   unique_id     TEXT NOT NULL UNIQUE,
   service_type  TEXT NOT NULL,
-  output_data   TEXT,
-  output_length INTEGER,
-  attributes    TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attributes)),
   attrs         TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_service_created_at ON service(created_at);
-CREATE INDEX IF NOT EXISTS idx_service_updated_at ON service(updated_at);
-CREATE INDEX IF NOT EXISTS idx_service_service_type ON service(service_type);
-CREATE INDEX IF NOT EXISTS idx_service_output_length ON service(output_length);
+CREATE INDEX IF NOT EXISTS idx_service_created_at ON service (created_at);
+CREATE INDEX IF NOT EXISTS idx_service_updated_at ON service (updated_at);
+CREATE INDEX IF NOT EXISTS idx_service_service_type ON service (service_type);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_service_ai
@@ -869,32 +835,17 @@ END;
 
 -- TLS Certificates
 CREATE TABLE IF NOT EXISTS tlscertificate (
-  id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-  created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  is_ca                   INTEGER,
-  tls_version             INTEGER,
-  key_usage               TEXT,
-  not_after               TEXT,
-  not_before              TEXT,
-  ext_key_usage           TEXT,
-  serial_number           TEXT NOT NULL UNIQUE,
-  subject_key_id          TEXT,
-  authority_key_id        TEXT,
-  issuer_common_name      TEXT,
-  signature_algorithm     TEXT,
-  subject_common_name     TEXT NOT NULL,
-  public_key_algorithm    TEXT,
-  crl_distribution_points TEXT,
-  attrs                   TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
+  id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  updated_at               TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  serial_number            TEXT NOT NULL UNIQUE,
+  subject_common_name      TEXT NOT NULL,
+  subject_common_name_norm TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(subject_common_name)) STORED,
+  attrs                    TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_created_at ON tlscertificate(created_at);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_updated_at ON tlscertificate(updated_at);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_tls_version ON tlscertificate(tls_version);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_subject_common_name ON tlscertificate(subject_common_name);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_issuer_common_name ON tlscertificate(issuer_common_name);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_signature_algorithm ON tlscertificate(signature_algorithm);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_public_key_algorithm ON tlscertificate(public_key_algorithm);
+CREATE INDEX IF NOT EXISTS idx_tlscertificate_created_at ON tlscertificate (created_at);
+CREATE INDEX IF NOT EXISTS idx_tlscertificate_updated_at ON tlscertificate (updated_at);
+CREATE INDEX IF NOT EXISTS idx_tlscertificate_subject_common_name ON tlscertificate (subject_common_name_norm);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_tlscertificate_ai
@@ -922,18 +873,12 @@ CREATE TABLE IF NOT EXISTS url (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   raw_url    TEXT NOT NULL UNIQUE,
-  host       TEXT,
-  url_path   TEXT,
-  port       INTEGER,
   scheme     TEXT,
   attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
 );
-CREATE INDEX IF NOT EXISTS idx_url_created_at ON url(created_at);
-CREATE INDEX IF NOT EXISTS idx_url_updated_at ON url(updated_at);
-CREATE INDEX IF NOT EXISTS idx_url_host ON url(host);
-CREATE INDEX IF NOT EXISTS idx_url_path ON url(url_path);
-CREATE INDEX IF NOT EXISTS idx_url_port ON url(port);
-CREATE INDEX IF NOT EXISTS idx_url_scheme ON url(scheme);
+CREATE INDEX IF NOT EXISTS idx_url_created_at ON url (created_at);
+CREATE INDEX IF NOT EXISTS idx_url_updated_at ON url (updated_at);
+CREATE INDEX IF NOT EXISTS idx_url_scheme ON url (scheme);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_url_ai
@@ -960,27 +905,19 @@ END;
 DROP TRIGGER IF EXISTS trg_url_au;
 DROP TRIGGER IF EXISTS trg_url_ai;
 DROP INDEX IF EXISTS idx_url_scheme;
-DROP INDEX IF EXISTS idx_url_port;
-DROP INDEX IF EXISTS idx_url_path;
-DROP INDEX IF EXISTS idx_url_host;
 DROP INDEX IF EXISTS idx_url_updated_at;
 DROP INDEX IF EXISTS idx_url_created_at;
 DROP TABLE IF EXISTS url;
 
 DROP TRIGGER IF EXISTS trg_tlscertificate_au;
 DROP TRIGGER IF EXISTS trg_tlscertificate_ai;
-DROP INDEX IF EXISTS idx_tlscertificate_public_key_algorithm;
-DROP INDEX IF EXISTS idx_tlscertificate_signature_algorithm;
-DROP INDEX IF EXISTS idx_tlscertificate_issuer_common_name;
 DROP INDEX IF EXISTS idx_tlscertificate_subject_common_name;
-DROP INDEX IF EXISTS idx_tlscertificate_tls_version;
 DROP INDEX IF EXISTS idx_tlscertificate_updated_at;
 DROP INDEX IF EXISTS idx_tlscertificate_created_at;
 DROP TABLE IF EXISTS tlscertificate;
 
 DROP TRIGGER IF EXISTS trg_service_au;
 DROP TRIGGER IF EXISTS trg_service_ai;
-DROP INDEX IF EXISTS idx_service_output_length;
 DROP INDEX IF EXISTS idx_service_service_type;
 DROP INDEX IF EXISTS idx_service_updated_at;
 DROP INDEX IF EXISTS idx_service_created_at;
@@ -994,9 +931,6 @@ DROP TABLE IF EXISTS productrelease;
 
 DROP TRIGGER IF EXISTS trg_product_au;
 DROP TRIGGER IF EXISTS trg_product_ai;
-DROP INDEX IF EXISTS idx_product_country_of_origin;
-DROP INDEX IF EXISTS idx_product_description;
-DROP INDEX IF EXISTS idx_product_category;
 DROP INDEX IF EXISTS idx_product_type;
 DROP INDEX IF EXISTS idx_product_name;
 DROP INDEX IF EXISTS idx_product_updated_at;
@@ -1005,17 +939,13 @@ DROP TABLE IF EXISTS product;
 
 DROP TRIGGER IF EXISTS trg_phone_au;
 DROP TRIGGER IF EXISTS trg_phone_ai;
-DROP INDEX IF EXISTS idx_phone_country_abbrev;
 DROP INDEX IF EXISTS idx_phone_country_code;
-DROP INDEX IF EXISTS idx_phone_number_type;
-DROP INDEX IF EXISTS idx_phone_raw;
 DROP INDEX IF EXISTS idx_phone_updated_at;
 DROP INDEX IF EXISTS idx_phone_created_at;
 DROP TABLE IF EXISTS phone;
 
 DROP TRIGGER IF EXISTS trg_person_au;
 DROP TRIGGER IF EXISTS trg_person_ai;
-DROP INDEX IF EXISTS idx_person_middle_name;
 DROP INDEX IF EXISTS idx_person_family_name;
 DROP INDEX IF EXISTS idx_person_first_name;
 DROP INDEX IF EXISTS idx_person_full_name;
@@ -1035,7 +965,6 @@ DROP TABLE IF EXISTS organization;
 
 DROP TRIGGER IF EXISTS trg_netblock_au;
 DROP TRIGGER IF EXISTS trg_netblock_ai;
-DROP INDEX IF EXISTS idx_netblock_ip_version;
 DROP INDEX IF EXISTS idx_netblock_updated_at;
 DROP INDEX IF EXISTS idx_netblock_created_at;
 DROP TABLE IF EXISTS netblock;
@@ -1058,12 +987,9 @@ DROP TABLE IF EXISTS location;
 DROP TRIGGER IF EXISTS trg_ipnetrecord_au;
 DROP TRIGGER IF EXISTS trg_ipnetrecord_ai;
 DROP INDEX IF EXISTS idx_ipnetrecord_parent_handle;
-DROP INDEX IF EXISTS idx_ipnetrecord_country;
-DROP INDEX IF EXISTS idx_ipnetrecord_method;
 DROP INDEX IF EXISTS idx_ipnetrecord_whois_server;
 DROP INDEX IF EXISTS idx_ipnetrecord_end_address;
 DROP INDEX IF EXISTS idx_ipnetrecord_start_address;
-DROP INDEX IF EXISTS idx_ipnetrecord_type;
 DROP INDEX IF EXISTS idx_ipnetrecord_name;
 DROP INDEX IF EXISTS idx_ipnetrecord_updated_at;
 DROP INDEX IF EXISTS idx_ipnetrecord_created_at;

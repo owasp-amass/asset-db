@@ -7,6 +7,9 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,17 +18,16 @@ import (
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
-// Params: :unique_id, :legal_name, :org_name, :active, :jurisdiction, :founding_date, :registration_id
+// Params: :unique_id, :legal_name, :org_name, :jurisdiction, :registration_id, :attrs
 const upsertOrganizationText = `
-INSERT INTO organization(unique_id, legal_name, org_name, active, jurisdiction, founding_date, registration_id)
-VALUES (:unique_id, :legal_name, :org_name, :active, :jurisdiction, :founding_date, :registration_id)
+INSERT INTO organization(unique_id, legal_name, org_name, jurisdiction, registration_id, attrs)
+VALUES (:unique_id, :legal_name, :org_name, :jurisdiction, :registration_id, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
     legal_name      = COALESCE(excluded.legal_name,      organization.legal_name),
     org_name        = COALESCE(excluded.org_name,        organization.org_name),
-    active          = COALESCE(excluded.active,          organization.active),
     jurisdiction    = COALESCE(excluded.jurisdiction,    organization.jurisdiction),
-    founding_date   = COALESCE(excluded.founding_date,   organization.founding_date),
     registration_id = COALESCE(excluded.registration_id, organization.registration_id),
+    attrs           = COALESCE(excluded.attrs,           organization.attrs),
     updated_at      = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -37,12 +39,44 @@ LIMIT 1`
 
 // Param: :row_id
 const selectOrganizationByIDText = `
-SELECT id, created_at, updated_at, org_name, active, unique_id, legal_name, jurisdiction, founding_date, registration_id 
+SELECT id, created_at, updated_at, org_name, unique_id, legal_name, jurisdiction, registration_id, attrs
 FROM organization 
 WHERE id = :row_id
 LIMIT 1`
 
+type organizationAttributes struct {
+	FoundingDate  string   `json:"founding_date"`
+	Industry      string   `json:"industry"`
+	TargetMarkets []string `json:"target_markets"`
+	Active        bool     `json:"active"`
+	NonProfit     bool     `json:"non_profit"`
+	Headcount     int      `json:"headcount"`
+}
+
 func (r *SqliteRepository) upsertOrganization(ctx context.Context, a *oamorg.Organization) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid organization provided")
+	}
+	if a.ID == "" {
+		return 0, fmt.Errorf("the organization ID cannot be empty")
+	}
+	if a.Name == "" {
+		return 0, fmt.Errorf("the organization name cannot be empty")
+	}
+
+	attrs := organizationAttributes{
+		FoundingDate:  a.FoundingDate,
+		Industry:      a.Industry,
+		TargetMarkets: a.TargetMarkets,
+		Active:        a.Active,
+		NonProfit:     a.NonProfit,
+		Headcount:     a.Headcount,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -52,14 +86,13 @@ func (r *SqliteRepository) upsertOrganization(ctx context.Context, a *oamorg.Org
 			sql.Named("unique_id", a.ID),
 			sql.Named("org_name", a.Name),
 			sql.Named("legal_name", a.LegalName),
-			sql.Named("founding_date", a.FoundingDate),
 			sql.Named("jurisdiction", a.Jurisdiction),
 			sql.Named("registration_id", a.RegistrationID),
-			sql.Named("active", a.Active),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -100,12 +133,19 @@ func (r *SqliteRepository) fetchOrganizationByRowID(ctx context.Context, eid, ro
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamorg.Organization
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &a.Active, &a.ID,
-		&a.LegalName, &a.Jurisdiction, &a.FoundingDate, &a.RegistrationID); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &a.ID,
+		&a.LegalName, &a.Jurisdiction, &a.RegistrationID, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no organization found")
+	}
+	if a.Name == "" {
+		return nil, errors.New("organization name is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -119,6 +159,17 @@ func (r *SqliteRepository) fetchOrganizationByRowID(ctx context.Context, eid, ro
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
+
+	var attrs organizationAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.FoundingDate = attrs.FoundingDate
+	a.Industry = attrs.Industry
+	a.TargetMarkets = attrs.TargetMarkets
+	a.Active = attrs.Active
+	a.NonProfit = attrs.NonProfit
+	a.Headcount = attrs.Headcount
 
 	return e, nil
 }

@@ -7,6 +7,8 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"net/netip"
 	"strconv"
 	"time"
@@ -16,12 +18,12 @@ import (
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// Params: :netblock_cidr, :ip_version
+// Params: :netblock_cidr, :attrs
 const upsertNetblockText = `
-INSERT INTO netblock (netblock_cidr, ip_version)
-VALUES (:netblock_cidr, :ip_version)
+INSERT INTO netblock (netblock_cidr, attrs)
+VALUES (:netblock_cidr, :attrs)
 ON CONFLICT(netblock_cidr) DO UPDATE SET
-  ip_version = COALESCE(excluded.ip_version, netblock.ip_version),
+  attrs = COALESCE(excluded.attrs, netblock.attrs),
   updated_at = CURRENT_TIMESTAMP`
 
 // Param: :netblock_cidr
@@ -33,12 +35,49 @@ LIMIT 1`
 
 // Param: :row_id
 const selectNetblockByID = `
-SELECT id, created_at, updated_at, netblock_cidr, ip_version 
-FROM netblock 
+SELECT id, created_at, updated_at, netblock_cidr, attrs
+FROM netblock
 WHERE id = :row_id
 LIMIT 1`
 
+type netblockAttributes struct {
+	Type string `json:"type"`
+}
+
 func (r *SqliteRepository) upsertNetblock(ctx context.Context, a *oamnet.Netblock) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid netblock provided")
+	}
+	if !a.CIDR.IsValid() {
+		return 0, errors.New("netblock CIDR is invalid")
+	}
+	if a.CIDR.Addr().IsUnspecified() {
+		return 0, errors.New("unspecified IP addresses are not allowed")
+	}
+
+	switch a.Type {
+	case "":
+		return 0, errors.New("CIDR IP version cannot be empty")
+	case "IPv4":
+		if !a.CIDR.Addr().Is4() {
+			return 0, errors.New("mismatched CIDR IP version and type")
+		}
+	case "IPv6":
+		if !a.CIDR.Addr().Is6() {
+			return 0, errors.New("mismatched CIDR IP version and type")
+		}
+	default:
+		return 0, errors.New("CIDR IP version must be either IPv4 or IPv6")
+	}
+
+	attrs := netblockAttributes{
+		Type: a.Type,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -46,11 +85,11 @@ func (r *SqliteRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbloc
 		SQLText: upsertNetblockText,
 		Args: []any{
 			sql.Named("netblock_cidr", a.CIDR.String()),
-			sql.Named("ip_version", a.Type),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -91,12 +130,15 @@ func (r *SqliteRepository) fetchNetblockByRowID(ctx context.Context, eid, rowID 
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
-	var cidrstr string
 	var a oamnet.Netblock
-	if err := result.Row.Scan(&row_id, &c, &u, &cidrstr, &a.Type); err != nil {
+	var c, u, cidrstr, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &cidrstr, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no netblock record found")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -116,6 +158,34 @@ func (r *SqliteRepository) fetchNetblockByRowID(ctx context.Context, eid, rowID 
 		return nil, err
 	}
 	a.CIDR = cidr
+
+	if !a.CIDR.IsValid() {
+		return nil, errors.New("CIDR is invalid")
+	}
+	if a.CIDR.Addr().IsUnspecified() {
+		return nil, errors.New("the CIDR is unspecified")
+	}
+
+	var attrs netblockAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Type = attrs.Type
+
+	switch a.Type {
+	case "":
+		return nil, errors.New("CIDR IP version cannot be empty")
+	case "IPv4":
+		if !a.CIDR.Addr().Is4() {
+			return nil, errors.New("mismatched CIDR IP version and type")
+		}
+	case "IPv6":
+		if !a.CIDR.Addr().Is6() {
+			return nil, errors.New("mismatched CIDR IP version and type")
+		}
+	default:
+		return nil, errors.New("CIDR IP version must be either IPv4 or IPv6")
+	}
 
 	return e, nil
 }

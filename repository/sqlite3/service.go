@@ -8,6 +8,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -16,19 +18,13 @@ import (
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
-// Params: :unique_id, :service_type, :output_data, :output_length, :attributes
+// Params: :unique_id, :service_type, :attrs
 const upsertServiceText = `
-INSERT INTO service(unique_id, service_type, output_data, output_length, attributes)
-VALUES (:unique_id, :service_type, :output_data, :output_length, coalesce(:attributes, '{}'))
+INSERT INTO service(unique_id, service_type, attrs)
+VALUES (:unique_id, :service_type, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
     service_type = COALESCE(excluded.service_type, service.service_type),
-    output_data  = COALESCE(excluded.output_data,  service.output_data),
-    output_length= COALESCE(excluded.output_length,service.output_length),
-	attributes = CASE
-        WHEN json_patch(service.attributes, coalesce(excluded.attributes, '{}')) IS NOT service.attributes
-        THEN json_patch(service.attributes, coalesce(excluded.attributes, '{}'))
-        ELSE service.attributes
-    END,
+    attrs        = COALESCE(excluded.attrs,        service.attrs),
     updated_at   = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -40,19 +36,36 @@ LIMIT 1`
 
 // Param: :row_id
 const selectServiceByIDText = `
-SELECT id, created_at, updated_at, unique_id, service_type, output_data, output_length, attributes 
+SELECT id, created_at, updated_at, unique_id, service_type, attrs 
 FROM service
 WHERE id = :row_id
 LIMIT 1`
 
+type serviceAttributes struct {
+	Output     string              `json:"output"`
+	OutputLen  int                 `json:"output_length"`
+	Attributes map[string][]string `json:"attributes"`
+}
+
 func (r *SqliteRepository) upsertService(ctx context.Context, a *oamplat.Service) (int64, error) {
-	attributes := "{}"
-	if len(a.Attributes) > 0 {
-		attrs, err := json.Marshal(a.Attributes)
-		if err != nil {
-			return 0, err
-		}
-		attributes = string(attrs)
+	if a == nil {
+		return 0, errors.New("invalid service provided")
+	}
+	if a.ID == "" {
+		return 0, fmt.Errorf("the service does not have a unique identifier")
+	}
+	if a.Type == "" {
+		return 0, fmt.Errorf("the service type cannot be empty")
+	}
+
+	attrs := serviceAttributes{
+		Output:     a.Output,
+		OutputLen:  a.OutputLen,
+		Attributes: a.Attributes,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
 	}
 
 	done := make(chan error, 1)
@@ -63,13 +76,11 @@ func (r *SqliteRepository) upsertService(ctx context.Context, a *oamplat.Service
 		Args: []any{
 			sql.Named("unique_id", a.ID),
 			sql.Named("service_type", a.Type),
-			sql.Named("output_data", a.Output),
-			sql.Named("output_length", a.OutputLen),
-			sql.Named("attributes", attributes),
+			sql.Named("attrs", string(attrsJSON)),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -110,12 +121,21 @@ func (r *SqliteRepository) fetchServiceByRowID(ctx context.Context, eid, rowID i
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
-	var attrs string
 	var a oamplat.Service
-	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Type, &a.Output, &a.OutputLen, &attrs); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Type, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, fmt.Errorf("no service found with row ID %d", rowID)
+	}
+	if a.ID == "" {
+		return nil, fmt.Errorf("the service at row ID %d does not have a unique identifier", rowID)
+	}
+	if a.Type == "" {
+		return nil, fmt.Errorf("the service at row ID %d does not have a type", rowID)
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -130,13 +150,13 @@ func (r *SqliteRepository) fetchServiceByRowID(ctx context.Context, eid, rowID i
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	if attrs != "" {
-		var sattrs map[string][]string
-		if err := json.Unmarshal([]byte(attrs), &sattrs); err != nil {
-			return nil, err
-		}
-		a.Attributes = sattrs
+	var attrs serviceAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
 	}
+	a.Output = attrs.Output
+	a.OutputLen = attrs.OutputLen
+	a.Attributes = attrs.Attributes
 
 	return e, nil
 }

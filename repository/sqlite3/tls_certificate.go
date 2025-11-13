@@ -7,8 +7,10 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -16,34 +18,14 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 )
 
-// Params: :serial_number, :subject_common_name, :is_ca, :tls_version, :key_usage,
-//
-//	:ext_key_usage, :not_before, :not_after, :subject_key_id, :authority_key_id,
-//	:issuer_common_name, :signature_algorithm, :public_key_algorithm, :crl_distribution_points
+// Params: :serial_number, :subject_common_name, :attrs
 const upsertTLSCertificateText = `
-INSERT INTO tlscertificate(
-    serial_number, subject_common_name, is_ca, tls_version, key_usage, ext_key_usage,
-    not_before, not_after, subject_key_id, authority_key_id, issuer_common_name,
-    signature_algorithm, public_key_algorithm, crl_distribution_points) 
-VALUES (
-    :serial_number, :subject_common_name, :is_ca, :tls_version, :key_usage, :ext_key_usage,
-    :not_before, :not_after, :subject_key_id, :authority_key_id, :issuer_common_name,
-    :signature_algorithm, :public_key_algorithm, :crl_distribution_points)
+INSERT INTO tlscertificate(serial_number, subject_common_name, attrs) 
+VALUES (:serial_number, :subject_common_name, :attrs)
 ON CONFLICT(serial_number) DO UPDATE SET
-    subject_common_name   = COALESCE(excluded.subject_common_name,   tlscertificate.subject_common_name),
-    is_ca                 = COALESCE(excluded.is_ca,                 tlscertificate.is_ca),
-    tls_version           = COALESCE(excluded.tls_version,           tlscertificate.tls_version),
-    key_usage             = COALESCE(excluded.key_usage,             tlscertificate.key_usage),
-    ext_key_usage         = COALESCE(excluded.ext_key_usage,         tlscertificate.ext_key_usage),
-    not_before            = COALESCE(excluded.not_before,            tlscertificate.not_before),
-    not_after             = COALESCE(excluded.not_after,             tlscertificate.not_after),
-    subject_key_id        = COALESCE(excluded.subject_key_id,        tlscertificate.subject_key_id),
-    authority_key_id      = COALESCE(excluded.authority_key_id,      tlscertificate.authority_key_id),
-    issuer_common_name    = COALESCE(excluded.issuer_common_name,    tlscertificate.issuer_common_name),
-    signature_algorithm   = COALESCE(excluded.signature_algorithm,   tlscertificate.signature_algorithm),
-    public_key_algorithm  = COALESCE(excluded.public_key_algorithm,  tlscertificate.public_key_algorithm),
-    crl_distribution_points=COALESCE(excluded.crl_distribution_points,tlscertificate.crl_distribution_points),
-    updated_at            = CURRENT_TIMESTAMP`
+    subject_common_name = COALESCE(excluded.subject_common_name, tlscertificate.subject_common_name),
+    attrs               = COALESCE(excluded.attrs,               tlscertificate.attrs),
+    updated_at          = CURRENT_TIMESTAMP`
 
 // Param: :serial_number
 const selectEntityIDByTLSCertificateText = `
@@ -54,38 +36,83 @@ LIMIT 1`
 
 // Param: :row_id
 const selectTLSCertificateByIDText = `
-SELECT id, created_at, updated_at, is_ca, tls_version, key_usage, not_after, not_before, 
-	   ext_key_usage, serial_number, subject_key_id, authority_key_id, issuer_common_name, 
-	   signature_algorithm, public_key_algorithm, crl_distribution_points, subject_common_name 
+SELECT id, created_at, updated_at, serial_number, subject_common_name, attrs
 FROM tlscertificate 
 WHERE id = :row_id
 LIMIT 1`
 
+type tlsCertificateAttributes struct {
+	Version               string   `json:"version"`
+	IssuerCommonName      string   `json:"issuer_common_name"`
+	NotBefore             string   `json:"not_before"`
+	NotAfter              string   `json:"not_after"`
+	KeyUsage              []string `json:"key_usage"`
+	ExtKeyUsage           []string `json:"ext_key_usage"`
+	SignatureAlgorithm    string   `json:"signature_algorithm"`
+	PublicKeyAlgorithm    string   `json:"public_key_algorithm"`
+	IsCA                  bool     `json:"is_ca"`
+	CRLDistributionPoints []string `json:"crl_distribution_points"`
+	SubjectKeyID          string   `json:"subject_key_id"`
+	AuthorityKeyID        string   `json:"authority_key_id"`
+}
+
 func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.TLSCertificate) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid TLS certificate provided")
+	}
+	if a.Version == "" {
+		return 0, fmt.Errorf("the TLS certificate version cannot be empty")
+	} else if v, err := strconv.Atoi(a.Version); err != nil || v > 3 {
+		return 0, fmt.Errorf("the TLS certificate version must be a valid integer <= 3: %v", err)
+	}
+	if a.SerialNumber == "" {
+		return 0, fmt.Errorf("the TLS certificate serial number cannot be empty")
+	}
+	if a.SubjectCommonName == "" {
+		return 0, fmt.Errorf("the TLS certificate subject common name cannot be empty")
+	}
+	if a.IssuerCommonName == "" {
+		return 0, fmt.Errorf("the TLS certificate issuer common name cannot be empty")
+	}
+	if _, err := parseTimestamp(a.NotBefore); err != nil {
+		return 0, fmt.Errorf("the TLS certificate must have a valid NotBefore date: %v", err)
+	}
+	if _, err := parseTimestamp(a.NotAfter); err != nil {
+		return 0, fmt.Errorf("the TLS certificate must have a valid NotAfter date: %v", err)
+	}
+
+	attrs := tlsCertificateAttributes{
+		Version:               a.Version,
+		IssuerCommonName:      a.IssuerCommonName,
+		NotBefore:             a.NotBefore,
+		NotAfter:              a.NotAfter,
+		KeyUsage:              a.KeyUsage,
+		ExtKeyUsage:           a.ExtKeyUsage,
+		SignatureAlgorithm:    a.SignatureAlgorithm,
+		PublicKeyAlgorithm:    a.PublicKeyAlgorithm,
+		IsCA:                  a.IsCA,
+		CRLDistributionPoints: a.CRLDistributionPoints,
+		SubjectKeyID:          a.SubjectKeyID,
+		AuthorityKeyID:        a.AuthorityKeyID,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "asset.tls_certificate.upsert",
 		SQLText: upsertTLSCertificateText,
 		Args: []any{
-			sql.Named("is_ca", a.IsCA),
-			sql.Named("tls_version", a.Version),
-			sql.Named("key_usage", strings.Join(a.KeyUsage, ",")),
-			sql.Named("not_after", a.NotAfter),
-			sql.Named("not_before", a.NotBefore),
-			sql.Named("ext_key_usage", strings.Join(a.ExtKeyUsage, ",")),
 			sql.Named("serial_number", a.SerialNumber),
-			sql.Named("subject_key_id", a.SubjectKeyID),
-			sql.Named("authority_key_id", a.AuthorityKeyID),
-			sql.Named("issuer_common_name", a.IssuerCommonName),
-			sql.Named("signature_algorithm", a.SignatureAlgorithm),
 			sql.Named("subject_common_name", a.SubjectCommonName),
-			sql.Named("public_key_algorithm", a.PublicKeyAlgorithm),
-			sql.Named("crl_distribution_points", strings.Join(a.CRLDistributionPoints, ",")),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -126,14 +153,21 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 		return nil, result.Err
 	}
 
-	var c, u string
-	var row_id, version int64
+	var row_id int64
+	var c, u, attrsJSON string
 	var a oamcert.TLSCertificate
-	var keyusage, extkeyusage, crldp string
-	if err := result.Row.Scan(&row_id, &c, &u, &a.IsCA, &version, &keyusage, &a.NotAfter, &a.NotBefore,
-		&extkeyusage, &a.SerialNumber, &a.SubjectKeyID, &a.AuthorityKeyID, &a.IssuerCommonName,
-		&a.SignatureAlgorithm, &a.PublicKeyAlgorithm, &crldp, &a.SubjectCommonName); err != nil {
+	if err := result.Row.Scan(&row_id, &c, &u, &a.SerialNumber, &a.SubjectCommonName, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, fmt.Errorf("no TLS certificate found with row ID %d", rowID)
+	}
+	if a.SerialNumber == "" {
+		return nil, errors.New("TLS certificate serial number is missing")
+	}
+	if a.SubjectCommonName == "" {
+		return nil, errors.New("TLS certificate subject common name is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -148,20 +182,36 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	if version != 0 {
-		a.Version = strconv.FormatInt(version, 10)
+	var attrs tlsCertificateAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
 	}
+	a.Version = attrs.Version
+	a.IssuerCommonName = attrs.IssuerCommonName
+	a.NotBefore = attrs.NotBefore
+	a.NotAfter = attrs.NotAfter
+	a.KeyUsage = attrs.KeyUsage
+	a.ExtKeyUsage = attrs.ExtKeyUsage
+	a.SignatureAlgorithm = attrs.SignatureAlgorithm
+	a.PublicKeyAlgorithm = attrs.PublicKeyAlgorithm
+	a.IsCA = attrs.IsCA
+	a.CRLDistributionPoints = attrs.CRLDistributionPoints
+	a.SubjectKeyID = attrs.SubjectKeyID
+	a.AuthorityKeyID = attrs.AuthorityKeyID
 
-	if keyusage != "" {
-		a.KeyUsage = strings.Split(keyusage, ",")
+	if a.Version == "" {
+		return nil, fmt.Errorf("the TLS certificate version is missing")
+	} else if v, err := strconv.Atoi(a.Version); err != nil || v > 3 {
+		return nil, fmt.Errorf("the TLS certificate version is not a valid integer <= 3: %v", err)
 	}
-
-	if extkeyusage != "" {
-		a.ExtKeyUsage = strings.Split(extkeyusage, ",")
+	if a.IssuerCommonName == "" {
+		return nil, fmt.Errorf("the TLS certificate issuer common name is missing")
 	}
-
-	if crldp != "" {
-		a.CRLDistributionPoints = strings.Split(crldp, ",")
+	if _, err := parseTimestamp(a.NotBefore); err != nil {
+		return nil, fmt.Errorf("the TLS certificate does not have a valid NotBefore date: %v", err)
+	}
+	if _, err := parseTimestamp(a.NotAfter); err != nil {
+		return nil, fmt.Errorf("the TLS certificate does not have a valid NotAfter date: %v", err)
 	}
 
 	return e, nil

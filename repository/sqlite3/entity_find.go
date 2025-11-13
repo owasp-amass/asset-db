@@ -367,19 +367,16 @@ var contentRegistry = map[string]regEntry{
 	},
 	"ipnetrecord": {
 		keys: []string{
-			"cidr", "handle", "name", "type", "start_address",
-			"end_address", "whois_server", "method", "country", "parent_handle",
+			"cidr", "handle", "name", "start_address",
+			"end_address", "whois_server", "parent_handle",
 		},
 		colMap: map[string]string{
 			"cidr":          "a.record_cidr",
 			"handle":        "a.handle",
 			"name":          "a.record_name",
-			"type":          "a.ip_version",
 			"start_address": "a.start_address",
 			"end_address":   "a.end_address",
-			"whois_server":  "a.whois_server",
-			"method":        "a.method",
-			"country":       "a.country",
+			"whois_server":  "a.whois_norm",
 			"parent_handle": "a.parent_handle",
 		},
 	},
@@ -402,10 +399,9 @@ var contentRegistry = map[string]regEntry{
 		},
 	},
 	"netblock": {
-		keys: []string{"cidr", "type"},
+		keys: []string{"cidr"},
 		colMap: map[string]string{
 			"cidr": "a.netblock_cidr",
-			"type": "a.ip_version",
 		},
 	},
 	"organization": {
@@ -419,34 +415,27 @@ var contentRegistry = map[string]regEntry{
 		},
 	},
 	"person": {
-		keys: []string{"unique_id", "full_name", "first_name", "family_name", "middle_name"},
+		keys: []string{"unique_id", "full_name", "first_name", "family_name"},
 		colMap: map[string]string{
 			"unique_id":   "a.unique_id",
 			"full_name":   "a.full_name",
 			"first_name":  "a.first_name",
 			"family_name": "a.family_name",
-			"middle_name": "a.middle_name",
 		},
 	},
 	"phone": {
-		keys: []string{"type", "e164", "raw", "country_code", "country_abbrev"},
+		keys: []string{"e164", "country_code"},
 		colMap: map[string]string{
-			"type":           "a.number_type",
-			"e164":           "a.e164",
-			"raw":            "a.raw_number",
-			"country_code":   "a.country_code",
-			"country_abbrev": "a.country_abbrev",
+			"e164":         "a.e164",
+			"country_code": "a.country_code",
 		},
 	},
 	"product": {
-		keys: []string{"unique_id", "product_name", "product_type", "category", "description", "country_of_origin"},
+		keys: []string{"unique_id", "product_name", "product_type"},
 		colMap: map[string]string{
-			"unique_id":         "a.unique_id",
-			"product_name":      "a.product_name",
-			"product_type":      "a.product_type",
-			"category":          "a.category",
-			"description":       "a.product_description",
-			"country_of_origin": "a.country_of_origin",
+			"unique_id":    "a.unique_id",
+			"product_name": "a.product_name",
+			"product_type": "a.product_type",
 		},
 	},
 	"productrelease": {
@@ -456,33 +445,25 @@ var contentRegistry = map[string]regEntry{
 		},
 	},
 	"service": {
-		keys: []string{"unique_id", "service_type", "output_length"},
+		keys: []string{"unique_id", "service_type"},
 		colMap: map[string]string{
-			"unique_id":     "a.unique_id",
-			"service_type":  "a.service_type",
-			"output_length": "a.output_length",
+			"unique_id":    "a.unique_id",
+			"service_type": "a.service_type",
 		},
 	},
 	"tlscertificate": {
 		keys: []string{
-			"version", "serial_number", "subject_common_name", "issuer_common_name", "signature_algorithm", "public_key_algorithm",
+			"serial_number", "subject_common_name",
 		},
 		colMap: map[string]string{
-			"version":              "a.tls_version",
-			"serial_number":        "a.serial_number",
-			"subject_common_name":  "a.subject_common_name",
-			"issuer_common_name":   "a.issuer_common_name",
-			"signature_algorithm":  "a.signature_algorithm",
-			"public_key_algorithm": "a.public_key_algorithm",
+			"serial_number":       "a.serial_number",
+			"subject_common_name": "a.subject_common_name_norm",
 		},
 	},
 	"url": {
-		keys: []string{"url", "host", "path", "port", "scheme"},
+		keys: []string{"url", "scheme"},
 		colMap: map[string]string{
 			"url":    "a.raw_url",
-			"host":   "a.host",
-			"path":   "a.url_path",
-			"port":   "a.port",
 			"scheme": "a.scheme",
 		},
 	},

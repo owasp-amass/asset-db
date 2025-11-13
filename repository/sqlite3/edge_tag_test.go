@@ -38,7 +38,7 @@ func TestCreateEdgeProperty(t *testing.T) {
 		Address: netip.MustParseAddr("104.20.44.163"),
 		Type:    "IPv4",
 	})
-	assert.NoError(t, err, "Failed to create asset for the IPAddress")
+	assert.NoError(t, err, "Failed to create asset for the IPAddress: %v", err)
 	assert.NotNil(t, ip, "Entity for the IPAddress should not be nil")
 
 	rel := &oamdns.BasicDNSRelation{

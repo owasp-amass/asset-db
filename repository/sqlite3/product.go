@@ -7,6 +7,9 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,16 +18,14 @@ import (
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
-// Params: :unique_id, :product_name, :product_type, :category, :product_description, :country_of_origin
+// Params: :unique_id, :product_name, :product_type, :attrs
 const upsertProductText = `
-INSERT INTO product(unique_id, product_name, product_type, category, product_description, country_of_origin)
-VALUES (:unique_id, :product_name, :product_type, :category, :product_description, :country_of_origin)
+INSERT INTO product(unique_id, product_name, product_type, attrs)
+VALUES (:unique_id, :product_name, :product_type, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
     product_name        = COALESCE(excluded.product_name,        product.product_name),
     product_type        = COALESCE(excluded.product_type,        product.product_type),
-    category            = COALESCE(excluded.category,            product.category),
-    product_description = COALESCE(excluded.product_description, product.product_description),
-    country_of_origin   = COALESCE(excluded.country_of_origin,   product.country_of_origin),
+    attrs               = COALESCE(excluded.attrs,               product.attrs),
     updated_at          = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -36,12 +37,41 @@ LIMIT 1`
 
 // Param: :row_id
 const selectProductByIDText = `
-SELECT id, created_at, updated_at, unique_id, product_name, product_type, category, product_description, country_of_origin 
+SELECT id, created_at, updated_at, unique_id, product_name, product_type, attrs
 FROM product 
 WHERE id = :row_id
 LIMIT 1`
 
+type productAttributes struct {
+	Category        string `json:"category"`
+	Description     string `json:"description"`
+	CountryOfOrigin string `json:"country_of_origin"`
+}
+
 func (r *SqliteRepository) upsertProduct(ctx context.Context, a *oamplat.Product) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid product provided")
+	}
+	if a.ID == "" {
+		return 0, fmt.Errorf("the product does not have a unique identifier")
+	}
+	if a.Name == "" {
+		return 0, fmt.Errorf("the product name cannot be empty")
+	}
+	if a.Type == "" {
+		return 0, fmt.Errorf("the product type cannot be empty")
+	}
+
+	attrs := productAttributes{
+		Category:        a.Category,
+		Description:     a.Description,
+		CountryOfOrigin: a.CountryOfOrigin,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -51,13 +81,11 @@ func (r *SqliteRepository) upsertProduct(ctx context.Context, a *oamplat.Product
 			sql.Named("unique_id", a.ID),
 			sql.Named("product_name", a.Name),
 			sql.Named("product_type", a.Type),
-			sql.Named("category", a.Category),
-			sql.Named("product_description", a.Description),
-			sql.Named("country_of_origin", a.CountryOfOrigin),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -98,12 +126,24 @@ func (r *SqliteRepository) fetchProductByRowID(ctx context.Context, eid, rowID i
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamplat.Product
-	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Name, &a.Type,
-		&a.Category, &a.Description, &a.CountryOfOrigin); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Name, &a.Type, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, fmt.Errorf("product at row ID %d not found", rowID)
+	}
+	if a.ID == "" {
+		return nil, fmt.Errorf("product unique ID is missing")
+	}
+	if a.Name == "" {
+		return nil, fmt.Errorf("product name is missing")
+	}
+	if a.Type == "" {
+		return nil, fmt.Errorf("product type is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -117,6 +157,14 @@ func (r *SqliteRepository) fetchProductByRowID(ctx context.Context, eid, rowID i
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
+
+	var attrs productAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Category = attrs.Category
+	a.Description = attrs.Description
+	a.CountryOfOrigin = attrs.CountryOfOrigin
 
 	return e, nil
 }

@@ -7,6 +7,9 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,13 +18,13 @@ import (
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
-// Params: :release_name, :release_date
+// Params: :release_name, :attrs
 const upsertProductReleaseText = `
-INSERT INTO productrelease(release_name, release_date)
-VALUES (lower(:release_name), :release_date)
+INSERT INTO productrelease(release_name, attrs)
+VALUES (lower(:release_name), :attrs)
 ON CONFLICT(release_name) DO UPDATE SET
-    release_date = COALESCE(excluded.release_date, productrelease.release_date),
-    updated_at   = CURRENT_TIMESTAMP`
+    attrs      = COALESCE(excluded.attrs, productrelease.attrs),
+    updated_at = CURRENT_TIMESTAMP`
 
 // Param: :release_name
 const selectEntityIDByProductReleaseText = `
@@ -32,12 +35,31 @@ LIMIT 1`
 
 // Param: :row_id
 const selectProductReleaseByIDText = `
-SELECT id, created_at, updated_at, release_name, release_date 
+SELECT id, created_at, updated_at, release_name, attrs 
 FROM productrelease
 WHERE id = :row_id
 LIMIT 1`
 
+type productReleaseAttributes struct {
+	ReleaseDate string `json:"release_date"`
+}
+
 func (r *SqliteRepository) upsertProductRelease(ctx context.Context, a *oamplat.ProductRelease) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid product release provided")
+	}
+	if a.Name == "" {
+		return 0, fmt.Errorf("the product release name cannot be empty")
+	}
+
+	attrs := productReleaseAttributes{
+		ReleaseDate: a.ReleaseDate,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -45,11 +67,11 @@ func (r *SqliteRepository) upsertProductRelease(ctx context.Context, a *oamplat.
 		SQLText: upsertProductReleaseText,
 		Args: []any{
 			sql.Named("release_name", a.Name),
-			sql.Named("release_date", a.ReleaseDate),
+			sql.Named("attrs", string(attrsJSON)),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -90,11 +112,18 @@ func (r *SqliteRepository) fetchProductReleaseByRowID(ctx context.Context, eid, 
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
+	var c, u, attrsJSON string
 	var a oamplat.ProductRelease
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &a.ReleaseDate); err != nil {
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Name, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, fmt.Errorf("no product release found with row ID %d", rowID)
+	}
+	if a.Name == "" {
+		return nil, fmt.Errorf("product release at row ID %d has no name", rowID)
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -108,6 +137,12 @@ func (r *SqliteRepository) fetchProductReleaseByRowID(ctx context.Context, eid, 
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
+
+	var attrs productReleaseAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.ReleaseDate = attrs.ReleaseDate
 
 	return e, nil
 }

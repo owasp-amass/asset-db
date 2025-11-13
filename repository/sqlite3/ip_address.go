@@ -7,6 +7,7 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/netip"
 	"strconv"
@@ -17,13 +18,12 @@ import (
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// Params: :ip_address_text, :ip_version, :attrs
+// Params: :ip_address_text, :attrs
 const upsertIPAddressText = `
-INSERT INTO ipaddress(ip_address, ip_version, attrs)
-VALUES (:ip_address_text, :ip_version, :attrs)
+INSERT INTO ipaddress(ip_address, attrs)
+VALUES (:ip_address_text, :attrs)
 ON CONFLICT(ip_address) DO UPDATE SET
-    ip_version = COALESCE(excluded.ip_version, ipaddress.ip_version),
-	attrs      = COALESCE(excluded.attrs,      ipaddress.attrs),
+	attrs      = COALESCE(excluded.attrs, ipaddress.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :ip_address_text
@@ -35,12 +35,49 @@ LIMIT 1`
 
 // Param: :row_id
 const selectIPAddressByID = `
-SELECT id, created_at, updated_at, ip_address, ip_version, attrs
+SELECT id, created_at, updated_at, ip_address, attrs
 FROM ipaddress 
 WHERE id = :row_id
 LIMIT 1`
 
+type ipAddressAttributes struct {
+	Type string `json:"type"`
+}
+
 func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddress) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid IP address provided")
+	}
+	if !a.Address.IsValid() {
+		return 0, errors.New("IP address is invalid")
+	}
+	if a.Address.IsUnspecified() {
+		return 0, errors.New("unspecified IP addresses are not allowed")
+	}
+
+	switch a.Type {
+	case "":
+		return 0, errors.New("IP address type cannot be empty")
+	case "IPv4":
+		if !a.Address.Is4() {
+			return 0, errors.New("mismatched IP address and type")
+		}
+	case "IPv6":
+		if !a.Address.Is6() {
+			return 0, errors.New("mismatched IP address and type")
+		}
+	default:
+		return 0, errors.New("IP address type must be either IPv4 or IPv6")
+	}
+
+	attrs := ipAddressAttributes{
+		Type: a.Type,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -48,12 +85,11 @@ func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddr
 		SQLText: upsertIPAddressText,
 		Args: []any{
 			sql.Named("ip_address_text", a.Address.String()),
-			sql.Named("ip_version", a.Type),
-			sql.Named("attrs", "{}"),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -97,16 +133,12 @@ func (r *SqliteRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID
 	var row_id int64
 	var a oamnet.IPAddress
 	var c, u, addrstr, attrsJSON string
-	if err := result.Row.Scan(&row_id, &c, &u,
-		&addrstr, &a.Type, &attrsJSON); err != nil {
+	if err := result.Row.Scan(&row_id, &c, &u, &addrstr, &attrsJSON); err != nil {
 		return nil, err
 	}
 
 	if row_id == 0 {
 		return nil, errors.New("no IP address found")
-	}
-	if a.Type == "" {
-		return nil, errors.New("IP address type is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -126,6 +158,34 @@ func (r *SqliteRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID
 		return nil, err
 	}
 	a.Address = addr
+
+	if !a.Address.IsValid() {
+		return nil, errors.New("IP address is invalid")
+	}
+	if a.Address.IsUnspecified() {
+		return nil, errors.New("the IP addresses is unspecified")
+	}
+
+	var attrs ipAddressAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Type = attrs.Type
+
+	switch a.Type {
+	case "":
+		return nil, errors.New("IP address type is missing")
+	case "IPv4":
+		if !a.Address.Is4() {
+			return nil, errors.New("mismatched IP address and type")
+		}
+	case "IPv6":
+		if !a.Address.Is6() {
+			return nil, errors.New("mismatched IP address and type")
+		}
+	default:
+		return nil, errors.New("IP address type must be either IPv4 or IPv6")
+	}
 
 	return e, nil
 }

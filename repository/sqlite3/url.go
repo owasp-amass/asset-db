@@ -7,6 +7,9 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,15 +18,13 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-// Params: :raw_url, :host, :url_path, :port, :scheme
+// Params: :raw_url, :scheme:, :attrs
 const upsertURLText = `
-INSERT INTO url(raw_url, host, url_path, port, scheme)
-VALUES (lower(:raw_url), :host, :url_path, :port, :scheme)
+INSERT INTO url(raw_url, scheme, attrs)
+VALUES (lower(:raw_url), :scheme, :attrs)
 ON CONFLICT(raw_url) DO UPDATE SET
-  host       = COALESCE(excluded.host,       url.host),
-  url_path   = COALESCE(excluded.url_path,   url.url_path),
-  port       = COALESCE(excluded.port,       url.port),
-  scheme     = COALESCE(excluded.scheme,     url.scheme),
+  scheme     = COALESCE(excluded.scheme, url.scheme),
+  attrs      = COALESCE(excluded.attrs,  url.attrs),
   updated_at = CURRENT_TIMESTAMP`
 
 // Param: :raw_url
@@ -35,12 +36,43 @@ LIMIT 1`
 
 // Param: :row_id
 const selectURLByIDText = `
-SELECT id, created_at, updated_at, raw_url, host, url_path, port, scheme 
+SELECT id, created_at, updated_at, raw_url, scheme, attrs
 FROM url
 WHERE id = :row_id
 LIMIT 1`
 
+type urlAttributes struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Path     string `json:"path"`
+	Options  string `json:"options"`
+	Fragment string `json:"fragment"`
+}
+
 func (r *SqliteRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid URL provided")
+	}
+	if a.Raw == "" {
+		return 0, fmt.Errorf("the URL raw string cannot be empty")
+	}
+
+	attrs := urlAttributes{
+		Username: a.Username,
+		Password: a.Password,
+		Host:     a.Host,
+		Port:     a.Port,
+		Path:     a.Path,
+		Options:  a.Options,
+		Fragment: a.Fragment,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -48,14 +80,12 @@ func (r *SqliteRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int64,
 		SQLText: upsertURLText,
 		Args: []any{
 			sql.Named("raw_url", a.Raw),
-			sql.Named("host", a.Host),
-			sql.Named("url_path", a.Path),
-			sql.Named("port", a.Port),
 			sql.Named("scheme", a.Scheme),
+			sql.Named("attrs", string(attrsJSON)),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -96,11 +126,18 @@ func (r *SqliteRepository) fetchURLByRowID(ctx context.Context, eid, rowID int64
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a oamurl.URL
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Raw, &a.Host, &a.Path, &a.Port, &a.Scheme); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.Raw, &a.Scheme, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, fmt.Errorf("no URL found with row ID %d", rowID)
+	}
+	if a.Raw == "" {
+		return nil, fmt.Errorf("URL at row ID %d has a missing raw string", rowID)
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -114,6 +151,18 @@ func (r *SqliteRepository) fetchURLByRowID(ctx context.Context, eid, rowID int64
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
+
+	var attrs urlAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Username = attrs.Username
+	a.Password = attrs.Password
+	a.Host = attrs.Host
+	a.Port = attrs.Port
+	a.Path = attrs.Path
+	a.Options = attrs.Options
+	a.Fragment = attrs.Fragment
 
 	return e, nil
 }

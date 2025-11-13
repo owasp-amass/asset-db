@@ -7,6 +7,8 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
@@ -16,10 +18,10 @@ import (
 )
 
 // Params: :city, :street_address, :country, :unit, :building,
-// :province, :locality, :postal_code, :street_name, :building_number
+// :province, :locality, :postal_code, :street_name, :building_number, :attrs
 const upsertLocationText = `
-INSERT INTO location(city, street_address, country, unit, building, province, locality, postal_code, street_name, building_number)
-VALUES (:city, lower(:street_address), :country, :unit, :building, :province, :locality, :postal_code, :street_name, :building_number)
+INSERT INTO location(city, street_address, country, unit, building, province, locality, postal_code, street_name, building_number, attrs)
+VALUES (:city, lower(:street_address), :country, :unit, :building, :province, :locality, :postal_code, :street_name, :building_number, :attrs)
 ON CONFLICT(street_address) DO UPDATE SET
     city            = COALESCE(excluded.city,            location.city),
     country         = COALESCE(excluded.country,         location.country),
@@ -30,6 +32,7 @@ ON CONFLICT(street_address) DO UPDATE SET
     postal_code     = COALESCE(excluded.postal_code,     location.postal_code),
     street_name     = COALESCE(excluded.street_name,     location.street_name),
     building_number = COALESCE(excluded.building_number, location.building_number),
+    attrs           = COALESCE(excluded.attrs,           location.attrs),
     updated_at      = CURRENT_TIMESTAMP`
 
 // Param: :street_address
@@ -42,12 +45,36 @@ LIMIT 1`
 // Param: :row_id
 const selectLocationByID = `
 SELECT id, created_at, updated_at, city, unit, street_address, country, 
-	   building, province, locality, postal_code, street_name, building_number 
+	   building, province, locality, postal_code, street_name, building_number, attrs
 FROM location 
 WHERE id = :row_id
 LIMIT 1`
 
+type locationAttributes struct {
+	POBox string `json:"po_box"`
+	GLN   int    `json:"gln"`
+}
+
 func (r *SqliteRepository) upsertLocation(ctx context.Context, a *contact.Location) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid location provided")
+	}
+	if a.Address == "" {
+		return 0, errors.New("location street address cannot be empty")
+	}
+	if a.City == "" {
+		return 0, errors.New("location city cannot be empty")
+	}
+
+	attrs := locationAttributes{
+		POBox: a.POBox,
+		GLN:   a.GLN,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -64,10 +91,11 @@ func (r *SqliteRepository) upsertLocation(ctx context.Context, a *contact.Locati
 			sql.Named("postal_code", a.PostalCode),
 			sql.Named("street_name", a.StreetName),
 			sql.Named("building_number", a.BuildingNumber),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -108,12 +136,23 @@ func (r *SqliteRepository) fetchLocationByRowID(ctx context.Context, eid, rowID 
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a contact.Location
-	if err := result.Row.Scan(&row_id, &c, &u, &a.City, &a.Unit, &a.Address, &a.Country,
-		&a.Building, &a.Province, &a.Locality, &a.PostalCode, &a.StreetName, &a.BuildingNumber); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.City, &a.Unit,
+		&a.Address, &a.Country, &a.Building, &a.Province, &a.Locality,
+		&a.PostalCode, &a.StreetName, &a.BuildingNumber, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, errors.New("no location found")
+	}
+	if a.Address == "" {
+		return nil, errors.New("location street address is missing")
+	}
+	if a.City == "" {
+		return nil, errors.New("location city is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -127,6 +166,13 @@ func (r *SqliteRepository) fetchLocationByRowID(ctx context.Context, eid, rowID 
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
+
+	var attrs locationAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.POBox = attrs.POBox
+	a.GLN = attrs.GLN
 
 	return e, nil
 }

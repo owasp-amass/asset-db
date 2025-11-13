@@ -7,6 +7,9 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,15 +18,13 @@ import (
 	"github.com/owasp-amass/open-asset-model/contact"
 )
 
-// Params: :raw_number, :e164, :number_type, :country_code, :country_abbrev
+// Params: :e164, :country_code, :attrs
 const upsertPhoneText = `
-INSERT INTO phone(raw_number, e164, number_type, country_code, country_abbrev)
-VALUES (:raw_number, :e164, :number_type, :country_code, :country_abbrev)
+INSERT INTO phone(e164, country_code, attrs)
+VALUES (:e164, :country_code, :attrs)
 ON CONFLICT(e164) DO UPDATE SET
-    raw_number     = COALESCE(excluded.raw_number,     phone.raw_number),
-    number_type    = COALESCE(excluded.number_type,    phone.number_type),
-    country_code   = COALESCE(excluded.country_code,   phone.country_code),
-    country_abbrev = COALESCE(excluded.country_abbrev, phone.country_abbrev),
+    country_code   = COALESCE(excluded.country_code, phone.country_code),
+    attrs          = COALESCE(excluded.attrs,        phone.attrs),
     updated_at     = CURRENT_TIMESTAMP`
 
 // Param: :e164
@@ -35,27 +36,51 @@ LIMIT 1`
 
 // Param: :row_id
 const selectPhoneByIDText = `
-SELECT id, created_at, updated_at, raw_number, e164, number_type, country_code, country_abbrev 
+SELECT id, created_at, updated_at, e164, country_code, attrs
 FROM phone
 WHERE id = :row_id
 LIMIT 1`
 
+type phoneAttributes struct {
+	Raw           string `json:"raw"`
+	Type          string `json:"type"`
+	CountryAbbrev string `json:"country_abbrev"`
+}
+
 func (r *SqliteRepository) upsertPhone(ctx context.Context, a *contact.Phone) (int64, error) {
+	if a == nil {
+		return 0, errors.New("invalid phone provided")
+	}
+	if a.Raw == "" {
+		return 0, fmt.Errorf("the phone number is not provided in raw format")
+	}
+	if a.E164 == "" {
+		return 0, fmt.Errorf("the phone number %s does not have an E.164 format", a.Raw)
+	}
+
+	attrs := phoneAttributes{
+		Raw:           a.Raw,
+		Type:          a.Type,
+		CountryAbbrev: a.CountryAbbrev,
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	if err != nil {
+		return 0, err
+	}
+
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "asset.phone.upsert",
 		SQLText: upsertPhoneText,
 		Args: []any{
-			sql.Named("raw_number", a.Raw),
 			sql.Named("e164", a.E164),
-			sql.Named("number_type", a.Type),
 			sql.Named("country_code", a.CountryCode),
-			sql.Named("country_abbrev", a.CountryAbbrev),
+			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
 	})
-	err := <-done
+	err = <-done
 	if err != nil {
 		return 0, err
 	}
@@ -96,11 +121,18 @@ func (r *SqliteRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID int
 		return nil, result.Err
 	}
 
-	var c, u string
 	var row_id int64
 	var a contact.Phone
-	if err := result.Row.Scan(&row_id, &c, &u, &a.Raw, &a.E164, &a.Type, &a.CountryCode, &a.CountryAbbrev); err != nil {
+	var c, u, attrsJSON string
+	if err := result.Row.Scan(&row_id, &c, &u, &a.E164, &a.CountryCode, &attrsJSON); err != nil {
 		return nil, err
+	}
+
+	if row_id == 0 {
+		return nil, fmt.Errorf("no phone record found with row ID %d", rowID)
+	}
+	if a.E164 == "" {
+		return nil, fmt.Errorf("phone record with row ID %d is missing E.164 format", rowID)
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -113,6 +145,18 @@ func (r *SqliteRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID int
 		return nil, err
 	} else {
 		e.LastSeen = updated.In(time.UTC).Local()
+	}
+
+	var attrs phoneAttributes
+	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+		return nil, err
+	}
+	a.Raw = attrs.Raw
+	a.Type = attrs.Type
+	a.CountryAbbrev = attrs.CountryAbbrev
+
+	if a.Raw == "" {
+		return nil, fmt.Errorf("phone with row ID %d is missing raw format", rowID)
 	}
 
 	return e, nil
