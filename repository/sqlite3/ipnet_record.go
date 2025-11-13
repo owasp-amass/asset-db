@@ -22,11 +22,10 @@ import (
 // Params: :record_cidr, :record_name, :handle, :whois_server, :parent_handle,
 // :start_address, :end_address, :attrs
 const upsertIPNetRecordText = `
-INSERT INTO ipnetrecord(
-record_cidr, record_name, handle, whois_server, parent_handle, start_address, 
-end_address, country, attrs) 
+INSERT INTO ipnetrecord(record_cidr, record_name, handle, whois_server, 
+parent_handle, start_address, end_address, attrs) 
 VALUES (:record_cidr, :record_name, :handle, :whois_server, :parent_handle, 
-:start_address, :end_address, :country, :attrs)
+:start_address, :end_address, :attrs)
 ON CONFLICT(handle) DO UPDATE SET
 	record_cidr 	= COALESCE(excluded.record_cidr,   ipnetrecord.record_cidr),
     record_name   	= COALESCE(excluded.record_name,   ipnetrecord.record_name),
@@ -130,7 +129,6 @@ func (r *SqliteRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IPNe
 			sql.Named("parent_handle", a.ParentHandle),
 			sql.Named("start_address", a.StartAddress.String()),
 			sql.Named("end_address", a.EndAddress.String()),
-			sql.Named("country", a.Country),
 			sql.Named("attrs", attrsJSON),
 		},
 		Result: done,
@@ -206,11 +204,11 @@ func (r *SqliteRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, row
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	ipnet, err := netip.ParsePrefix(cidrstr)
+	var err error
+	a.CIDR, err = netip.ParsePrefix(cidrstr)
 	if err != nil {
 		return nil, err
 	}
-	a.CIDR = ipnet
 
 	if !a.CIDR.IsValid() {
 		return nil, errors.New("ipnet record CIDR is invalid")
