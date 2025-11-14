@@ -193,7 +193,7 @@ func buildWhere(table string, reg regEntry, since time.Time, filters dbt.Content
 
 		// For lower(a.col) use normalized string value if possible
 		val := filters[k]
-		if strings.HasPrefix(col, "lower(") {
+		if strings.HasPrefix(col, "lower(") || strings.HasSuffix(col, "norm") {
 			if s, ok := val.(string); ok {
 				val = strings.ToLower(s)
 			}
@@ -386,15 +386,15 @@ var contentRegistry = map[string]regEntry{
 			"street_name", "unit", "locality", "city", "country", "postal_code",
 		},
 		colMap: map[string]string{
-			"address":         "a.street_address",
-			"building":        "a.building",
-			"building_number": "a.building_number",
-			"province":        "a.province",
-			"street_name":     "a.street_name",
-			"unit":            "a.unit",
-			"locality":        "a.locality",
-			"city":            "a.city",
-			"country":         "a.country",
+			"address":         "a.street_address_norm",
+			"building":        "a.building_norm",
+			"building_number": "a.building_number_norm",
+			"province":        "a.province_norm",
+			"street_name":     "a.street_name_norm",
+			"unit":            "a.unit_norm",
+			"locality":        "a.locality_norm",
+			"city":            "a.city_norm",
+			"country":         "a.country_norm",
 			"postal_code":     "a.postal_code",
 		},
 	},
@@ -441,7 +441,7 @@ var contentRegistry = map[string]regEntry{
 	"productrelease": {
 		keys: []string{"name"},
 		colMap: map[string]string{
-			"name": "a.release_name",
+			"name": "a.release_name_norm",
 		},
 	},
 	"service": {

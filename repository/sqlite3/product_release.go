@@ -21,8 +21,8 @@ import (
 // Params: :release_name, :attrs
 const upsertProductReleaseText = `
 INSERT INTO productrelease(release_name, attrs)
-VALUES (lower(:release_name), :attrs)
-ON CONFLICT(release_name) DO UPDATE SET
+VALUES (:release_name, :attrs)
+ON CONFLICT(release_name_norm) DO UPDATE SET
     attrs      = COALESCE(excluded.attrs, productrelease.attrs),
     updated_at = CURRENT_TIMESTAMP`
 

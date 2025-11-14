@@ -49,6 +49,7 @@ func TestCreateAssetForAutnumRecord(t *testing.T) {
 	assert.NotNil(t, ar, "Entity for the AutnumRecord should not be nil")
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
+
 	assert.WithinRange(t, ar.CreatedAt, before, after, "AutnumRecord entity CreatedAt is incorrect")
 	assert.WithinRange(t, ar.LastSeen, before, after, "AutnumRecord entity LastSeen is incorrect")
 

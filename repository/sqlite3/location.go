@@ -21,8 +21,8 @@ import (
 // :province, :locality, :postal_code, :street_name, :building_number, :attrs
 const upsertLocationText = `
 INSERT INTO location(city, street_address, country, unit, building, province, locality, postal_code, street_name, building_number, attrs)
-VALUES (:city, lower(:street_address), :country, :unit, :building, :province, :locality, :postal_code, :street_name, :building_number, :attrs)
-ON CONFLICT(street_address) DO UPDATE SET
+VALUES (:city, :street_address, :country, :unit, :building, :province, :locality, :postal_code, :street_name, :building_number, :attrs)
+ON CONFLICT(street_address_norm) DO UPDATE SET
     city            = COALESCE(excluded.city,            location.city),
     country         = COALESCE(excluded.country,         location.country),
     unit            = COALESCE(excluded.unit,            location.unit),

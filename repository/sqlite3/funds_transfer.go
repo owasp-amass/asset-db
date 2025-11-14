@@ -21,7 +21,7 @@ import (
 // Params: :unique_id, :amount, :reference_number, :attrs
 const upsertFundsTransferText = `
 INSERT INTO fundstransfer(unique_id, amount, reference_number, attrs)
-VALUES (:unique_id, :amount, :reference_number, :currency, :transfer_method, :exchange_date, :exchange_rate)
+VALUES (:unique_id, :amount, :reference_number, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
     amount           = COALESCE(excluded.amount,           fundstransfer.amount),
     reference_number = COALESCE(excluded.reference_number, fundstransfer.reference_number),

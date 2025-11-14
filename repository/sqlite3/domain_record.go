@@ -23,13 +23,13 @@ const upsertDomainRecordText = `
 INSERT INTO domainrecord(domain, record_name, punycode, extension, whois_server, object_id, attrs)
 VALUES (:domain_text, :record_name, :punycode, :extension, :whois_server, :object_id, :attrs)
 ON CONFLICT(domain) DO UPDATE SET
-	record_name   = COALESCE(excluded.record_name,   domainrecord.record_name),
-    punycode      = COALESCE(excluded.punycode,      domainrecord.punycode),
-    extension     = COALESCE(excluded.extension,     domainrecord.extension),
-    whois_server  = COALESCE(excluded.whois_server,  domainrecord.whois_server),
-	object_id	  = COALESCE(excluded.object_id,     domainrecord.object_id),
-	attrs         = COALESCE(excluded.attrs,         domainrecord.attrs),
-    updated_at    = CURRENT_TIMESTAMP`
+	record_name  = COALESCE(excluded.record_name,  domainrecord.record_name),
+    punycode     = COALESCE(excluded.punycode,     domainrecord.punycode),
+    extension    = COALESCE(excluded.extension,    domainrecord.extension),
+    whois_server = COALESCE(excluded.whois_server, domainrecord.whois_server),
+	object_id    = COALESCE(excluded.object_id,    domainrecord.object_id),
+	attrs        = COALESCE(excluded.attrs,        domainrecord.attrs),
+    updated_at   = CURRENT_TIMESTAMP`
 
 // Param: :domain_text
 const selectEntityIDByDomainRecordText = `

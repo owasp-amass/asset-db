@@ -550,28 +550,38 @@ CREATE TABLE IF NOT EXISTS location (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  city            TEXT NOT NULL,
-  unit            TEXT,
-  street_address  TEXT NOT NULL UNIQUE,
-  country         TEXT NOT NULL,
+  street_address  TEXT NOT NULL,
+  street_address_norm TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(street_address)) STORED,
   building        TEXT,
-  province        TEXT,
-  locality        TEXT,
-  postal_code     TEXT,
-  street_name     TEXT,
+  building_norm   TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(building)) STORED,
   building_number TEXT,
-  attrs           TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
+  building_number_norm TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(building_number)) STORED,
+  street_name     TEXT,
+  street_name_norm TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(street_name)) STORED,
+  unit            TEXT,
+  unit_norm       TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(unit)) STORED,
+  city            TEXT NOT NULL,
+  city_norm       TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(city)) STORED,
+  locality        TEXT,
+  locality_norm   TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(locality)) STORED,
+  province        TEXT,
+  province_norm   TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(province)) STORED,
+  country         TEXT NOT NULL,
+  country_norm    TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(country)) STORED,
+  postal_code     TEXT,
+  attrs           TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
+  UNIQUE(street_address_norm)
 );
 CREATE INDEX IF NOT EXISTS idx_location_created_at ON location (created_at);
 CREATE INDEX IF NOT EXISTS idx_location_updated_at ON location (updated_at);
-CREATE INDEX IF NOT EXISTS idx_location_building ON location (building);
-CREATE INDEX IF NOT EXISTS idx_location_building_number ON location (building_number);
-CREATE INDEX IF NOT EXISTS idx_location_province ON location (province);
-CREATE INDEX IF NOT EXISTS idx_location_street_name ON location (street_name);
-CREATE INDEX IF NOT EXISTS idx_location_unit ON location (unit);
-CREATE INDEX IF NOT EXISTS idx_location_locality ON location (locality);
-CREATE INDEX IF NOT EXISTS idx_location_city ON location (city);
-CREATE INDEX IF NOT EXISTS idx_location_country ON location (country);
+CREATE INDEX IF NOT EXISTS idx_location_building ON location (building_norm);
+CREATE INDEX IF NOT EXISTS idx_location_building_number ON location (building_number_norm);
+CREATE INDEX IF NOT EXISTS idx_location_street_name ON location (street_name_norm);
+CREATE INDEX IF NOT EXISTS idx_location_unit ON location (unit_norm);
+CREATE INDEX IF NOT EXISTS idx_location_city ON location (city_norm);
+CREATE INDEX IF NOT EXISTS idx_location_locality ON location (locality_norm);
+CREATE INDEX IF NOT EXISTS idx_location_province ON location (province_norm);
+CREATE INDEX IF NOT EXISTS idx_location_country ON location (country_norm);
 CREATE INDEX IF NOT EXISTS idx_location_postal_code ON location (postal_code);
 
 -- +migrate StatementBegin
@@ -579,7 +589,7 @@ CREATE TRIGGER IF NOT EXISTS trg_location_ai
 AFTER INSERT ON location
 BEGIN
   INSERT INTO entity(etype_id, natural_key, table_name, row_id)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='location' LIMIT 1), NEW.street_address, 'location', NEW.id)
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='location' LIMIT 1), NEW.street_address_norm, 'location', NEW.id)
   ON CONFLICT(etype_id, row_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;
 END;
 -- +migrate StatementEnd
@@ -589,7 +599,7 @@ CREATE TRIGGER IF NOT EXISTS trg_location_au
 AFTER UPDATE ON location
 BEGIN
   INSERT INTO entity(etype_id, natural_key, table_name, row_id)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='location' LIMIT 1), NEW.street_address, 'location', NEW.id)
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='location' LIMIT 1), NEW.street_address_norm, 'location', NEW.id)
   ON CONFLICT(etype_id, row_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;
 END;
 -- +migrate StatementEnd
@@ -774,8 +784,10 @@ CREATE TABLE IF NOT EXISTS productrelease (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  release_name TEXT NOT NULL UNIQUE,
-  attrs        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
+  release_name TEXT NOT NULL,
+  release_name_norm TEXT COLLATE NOCASE GENERATED ALWAYS AS (lower(release_name)) STORED,
+  attrs        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
+  UNIQUE(release_name_norm)
 );
 CREATE INDEX IF NOT EXISTS idx_productrelease_created_at ON productrelease (created_at);
 CREATE INDEX IF NOT EXISTS idx_productrelease_updated_at ON productrelease (updated_at);
@@ -785,7 +797,7 @@ CREATE TRIGGER IF NOT EXISTS trg_productrelease_ai
 AFTER INSERT ON productrelease
 BEGIN
   INSERT INTO entity(etype_id, natural_key, table_name, row_id)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='productrelease' LIMIT 1), NEW.release_name, 'productrelease', NEW.id)
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='productrelease' LIMIT 1), NEW.release_name_norm, 'productrelease', NEW.id)
   ON CONFLICT(etype_id, row_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;
 END;
 -- +migrate StatementEnd
@@ -795,7 +807,7 @@ CREATE TRIGGER IF NOT EXISTS trg_productrelease_au
 AFTER UPDATE ON productrelease
 BEGIN
   INSERT INTO entity(etype_id, natural_key, table_name, row_id)
-  VALUES ((SELECT id FROM entity_type_lu WHERE name='productrelease' LIMIT 1), NEW.release_name, 'productrelease', NEW.id)
+  VALUES ((SELECT id FROM entity_type_lu WHERE name='productrelease' LIMIT 1), NEW.release_name_norm, 'productrelease', NEW.id)
   ON CONFLICT(etype_id, row_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP;
 END;
 -- +migrate StatementEnd

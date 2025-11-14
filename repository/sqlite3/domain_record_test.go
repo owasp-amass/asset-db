@@ -34,7 +34,7 @@ func TestCreateAssetForDomainRecord(t *testing.T) {
 	record_name := "test record name"
 	domain := "test.com"
 	punycode := "test puny code"
-	extension := "test extension text"
+	extension := "com"
 	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
@@ -110,7 +110,7 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	record_name := "test record name"
 	domain := "test.com"
 	punycode := "test puny code"
-	extension := "test extension text"
+	extension := "com"
 	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
