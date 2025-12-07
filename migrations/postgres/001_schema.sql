@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS public.tag_type_lu (
   name  text NOT NULL UNIQUE
 );
 
--- Seed known entity types (add more as needed)
 INSERT INTO public.entity_type_lu(name) VALUES
   ('account'),('autnumrecord'),('autonomoussystem'),('contactrecord'),('domainrecord'),('file'),
   ('fqdn'),('fundstransfer'),('identifier'),('ipaddress'),('ipnetrecord'),('location'),('netblock'),
@@ -39,12 +38,10 @@ INSERT INTO public.entity_type_lu(name) VALUES
   ('url')
 ON CONFLICT DO NOTHING;
 
--- Seed common edge types (examples)
 INSERT INTO public.edge_type_lu(name) VALUES
   ('basicdnsrelation'),('portrelation'),('prefdnsrelation'),('simplerelation'),('srvdnsrelation')
 ON CONFLICT DO NOTHING;
 
--- Seed common tag types (examples)
 INSERT INTO public.tag_type_lu(name) VALUES
   ('dnsrecordproperty'),('simpleproperty'),('sourceproperty'),('vulnproperty')
 ON CONFLICT DO NOTHING;
@@ -61,23 +58,22 @@ CREATE TABLE IF NOT EXISTS public.entity (
   attrs         jsonb       NOT NULL DEFAULT '{}'::jsonb,
   table_name   citext        NOT NULL,                -- source table name
   row_id       bigint     NOT NULL,                -- source table row id
-  UNIQUE (type_id, row_id),
-  UNIQUE (type_id, natural_key),
+  UNIQUE (etype_id, row_id),
+  UNIQUE (etype_id, natural_key),
   UNIQUE (table_name, row_id),
-  UNIQUE (entity_id, type_id, row_id),
+  UNIQUE (entity_id, etype_id, row_id),
   UNIQUE (entity_id, table_name, row_id)
 );
 CREATE INDEX IF NOT EXISTS idx_entity_created_at ON public.entity(created_at);
 CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON public.entity(updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_type ON public.entity(type_id);
+CREATE INDEX IF NOT EXISTS idx_entity_type ON public.entity(etype_id);
 CREATE INDEX IF NOT EXISTS idx_entity_natural_key ON public.entity(natural_key);
 -- For attrs existence/containment queries
 CREATE INDEX IF NOT EXISTS gin_entity_attrs ON public.entity USING gin (attrs jsonb_path_ops);
 
 -- -----------------------------
--- Graph edges & tags
+-- Graph edges
 -- -----------------------------
--- Directed edge between entities, with a string label (etype) + JSON content
 CREATE TABLE IF NOT EXISTS public.edge (
   edge_id        bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at     timestamp without time zone NOT NULL DEFAULT now(),
@@ -87,7 +83,7 @@ CREATE TABLE IF NOT EXISTS public.edge (
   from_entity_id bigint      NOT NULL REFERENCES public.entity(entity_id) ON DELETE CASCADE,
   to_entity_id   bigint      NOT NULL REFERENCES public.entity(entity_id) ON DELETE CASCADE,
   content        jsonb       NOT NULL DEFAULT '{}'::jsonb,
-  UNIQUE (etype, from_entity_id, to_entity_id, label),
+  UNIQUE (etype_id, from_entity_id, to_entity_id, label),
   CHECK (from_entity_id <> to_entity_id)
 );
 CREATE INDEX IF NOT EXISTS idx_edge_created_at ON public.edge(created_at);
@@ -99,6 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_edge_from ON public.edge(from_entity_id, etype_id
 CREATE INDEX IF NOT EXISTS idx_edge_to   ON public.edge(to_entity_id, etype_id, from_entity_id);
 CREATE INDEX IF NOT EXISTS gin_edge_content ON public.edge USING gin (content jsonb_path_ops);
 
+-- -----------------------------
+-- Graph tags
+-- -----------------------------
 CREATE TABLE IF NOT EXISTS public.tag (
   tag_id          bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
@@ -142,507 +141,9 @@ CREATE INDEX IF NOT EXISTS idx_edge_tag_map_updated_at ON public.edge_tag_map(up
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_id ON public.edge_tag_map(edge_id);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_tag_id ON public.edge_tag_map(tag_id);
 
--- --- Asset tables (native types where helpful) -------------------------------
-CREATE TABLE IF NOT EXISTS public.account (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  unique_id   citext NOT NULL UNIQUE,
-  account_type text NOT NULL,
-  username    text,
-  account_number text,
-  balance numeric,
-  active boolean
-);
-CREATE INDEX IF NOT EXISTS idx_account_created_at ON public.account(created_at);
-CREATE INDEX IF NOT EXISTS idx_account_updated_at ON public.account(updated_at);
-CREATE INDEX IF NOT EXISTS idx_account_account_type ON public.account(account_type);
-CREATE INDEX IF NOT EXISTS idx_account_username ON public.account(username);
-CREATE INDEX IF NOT EXISTS idx_account_account_number ON public.account(account_number);
-
-CREATE TABLE IF NOT EXISTS public.autnumrecord (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  record_name text,
-  handle text NOT NULL UNIQUE,
-  asn integer NOT NULL UNIQUE,
-  record_status text,
-  created_date timestamp without time zone,
-  updated_date timestamp without time zone,
-  whois_server citext
-);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_created_at ON public.autnumrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_updated_at ON public.autnumrecord(updated_at);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_name ON public.autnumrecord(record_name);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_whois_server ON public.autnumrecord(whois_server);
-
-CREATE TABLE IF NOT EXISTS public.autonomoussystem (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  asn integer NOT NULL UNIQUE
-);
-CREATE INDEX IF NOT EXISTS idx_autonomoussystem_created_at ON public.autonomoussystem(created_at);
-CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at ON public.autonomoussystem(updated_at);
-
-CREATE TABLE IF NOT EXISTS public.contactrecord (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  discovered_at text NOT NULL UNIQUE
-);
-CREATE INDEX IF NOT EXISTS idx_contactrecord_created_at ON public.contactrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_contactrecord_updated_at ON public.contactrecord(updated_at);
-
-CREATE TABLE IF NOT EXISTS public.domainrecord (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  raw_record text,
-  record_name text NOT NULL,
-  domain citext NOT NULL UNIQUE,
-  record_status text[],
-  punycode text,
-  extension text,
-  created_date timestamp without time zone,
-  updated_date timestamp without time zone,
-  expiration_date timestamp without time zone,
-  whois_server citext,
-  object_id text
-);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_created_at ON public.domainrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_updated_at ON public.domainrecord(updated_at);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_name ON public.domainrecord(record_name);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_extension ON public.domainrecord(extension);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_punycode ON public.domainrecord(punycode);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_whois_server ON public.domainrecord(whois_server);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_object_id ON public.domainrecord(object_id);
-
-CREATE TABLE IF NOT EXISTS public.file (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  file_url text NOT NULL UNIQUE,
-  basename text,
-  file_type text
-);
-CREATE INDEX IF NOT EXISTS idx_file_created_at ON public.file(created_at);
-CREATE INDEX IF NOT EXISTS idx_file_updated_at ON public.file(updated_at);
-CREATE INDEX IF NOT EXISTS idx_file_basename ON public.file(basename);
-CREATE INDEX IF NOT EXISTS idx_file_file_type ON public.file(file_type);
-
-CREATE TABLE IF NOT EXISTS public.fqdn (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  fqdn citext NOT NULL UNIQUE
-);
-CREATE INDEX IF NOT EXISTS idx_fqdn_created_at ON public.fqdn(created_at);
-CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at ON public.fqdn(updated_at);
-
-CREATE TABLE IF NOT EXISTS public.fundstransfer (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  unique_id text NOT NULL UNIQUE,
-  amount numeric NOT NULL,
-  reference_number text,
-  currency text,
-  transfer_method text,
-  exchange_date timestamp without time zone,
-  exchange_rate numeric
-);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_created_at ON public.fundstransfer(created_at);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_updated_at ON public.fundstransfer(updated_at);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_amount ON public.fundstransfer(amount);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_reference_number ON public.fundstransfer(reference_number);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_currency ON public.fundstransfer(currency);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_transfer_method ON public.fundstransfer(transfer_method);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_exchange_rate ON public.fundstransfer(exchange_rate);
-
-CREATE TABLE IF NOT EXISTS public.identifier (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  id_type text,
-  unique_id text NOT NULL UNIQUE
-);
-CREATE INDEX IF NOT EXISTS idx_identifier_created_at ON public.identifier(created_at);
-CREATE INDEX IF NOT EXISTS idx_identifier_updated_at ON public.identifier(updated_at);
-CREATE INDEX IF NOT EXISTS idx_identifier_id_type ON public.identifier(id_type);
-
-CREATE TABLE IF NOT EXISTS public.ipaddress (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  ip_version text NOT NULL,
-  ip_address inet NOT NULL UNIQUE
-);
-CREATE INDEX IF NOT EXISTS idx_ipaddress_created_at ON public.ipaddress(created_at);
-CREATE INDEX IF NOT EXISTS idx_ipaddress_updated_at ON public.ipaddress(updated_at);
-CREATE INDEX IF NOT EXISTS idx_ipaddress_ip_version ON public.ipaddress(ip_version);
-
-CREATE TABLE IF NOT EXISTS public.ipnetrecord (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  record_cidr cidr NOT NULL UNIQUE,
-  record_name text NOT NULL,
-  ip_version text NOT NULL,
-  handle text NOT NULL UNIQUE,
-  method text,
-  record_status text[],
-  created_date timestamp without time zone,
-  updated_date timestamp without time zone,
-  whois_server citext,
-  parent_handle text,
-  start_address inet,
-  end_address inet,
-  country text
-);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_created_at ON public.ipnetrecord(created_at);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_updated_at ON public.ipnetrecord(updated_at);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_name ON public.ipnetrecord(record_name);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_type ON public.ipnetrecord(ip_version);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_start_address ON public.ipnetrecord(start_address);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_end_address ON public.ipnetrecord(end_address);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_whois_server ON public.ipnetrecord(whois_server);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_method ON public.ipnetrecord(method);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_country ON public.ipnetrecord(country);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_parent_handle ON public.ipnetrecord(parent_handle);
-
-CREATE TABLE IF NOT EXISTS public.location (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  city text NOT NULL,
-  unit text,
-  street_address text NOT NULL UNIQUE,
-  country text NOT NULL,
-  building text,
-  province text,
-  locality text,
-  postal_code text,
-  street_name text,
-  building_number text
-);
-CREATE INDEX IF NOT EXISTS idx_location_created_at ON public.location(created_at);
-CREATE INDEX IF NOT EXISTS idx_location_updated_at ON public.location(updated_at);
-CREATE INDEX IF NOT EXISTS idx_location_building ON public.location(building);
-CREATE INDEX IF NOT EXISTS idx_location_building_number ON public.location(building_number);
-CREATE INDEX IF NOT EXISTS idx_location_province ON public.location(province);
-CREATE INDEX IF NOT EXISTS idx_location_street_name ON public.location(street_name);
-CREATE INDEX IF NOT EXISTS idx_location_unit ON public.location(unit);
-CREATE INDEX IF NOT EXISTS idx_location_locality ON public.location(locality);
-CREATE INDEX IF NOT EXISTS idx_location_city ON public.location(city);
-CREATE INDEX IF NOT EXISTS idx_location_country ON public.location(country);
-CREATE INDEX IF NOT EXISTS idx_location_postal_code ON public.location(postal_code);
-
-CREATE TABLE IF NOT EXISTS public.netblock (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  netblock_cidr cidr NOT NULL UNIQUE,
-  ip_version text NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_netblock_created_at ON public.netblock(created_at);
-CREATE INDEX IF NOT EXISTS idx_netblock_updated_at ON public.netblock(updated_at);
-CREATE INDEX IF NOT EXISTS idx_netblock_ip_version ON public.netblock(ip_version);
-
-CREATE TABLE IF NOT EXISTS public.organization (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  org_name text,
-  active boolean,
-  unique_id text NOT NULL UNIQUE,
-  legal_name text NOT NULL,
-  jurisdiction text,
-  founding_date timestamp without time zone,
-  registration_id text
-);
-CREATE INDEX IF NOT EXISTS idx_organization_created_at ON public.organization(created_at);
-CREATE INDEX IF NOT EXISTS idx_organization_updated_at ON public.organization(updated_at);
-CREATE INDEX IF NOT EXISTS idx_organization_org_name ON public.organization(org_name);
-CREATE INDEX IF NOT EXISTS idx_organization_legal_name ON public.organization(legal_name);
-CREATE INDEX IF NOT EXISTS idx_organization_jurisdiction ON public.organization(jurisdiction);
-CREATE INDEX IF NOT EXISTS idx_organization_registration_id ON public.organization(registration_id);
-
-CREATE TABLE IF NOT EXISTS public.person (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  full_name text,
-  unique_id text NOT NULL UNIQUE,
-  first_name text,
-  family_name text,
-  middle_name text
-);
-CREATE INDEX IF NOT EXISTS idx_person_created_at ON public.person(created_at);
-CREATE INDEX IF NOT EXISTS idx_person_updated_at ON public.person(updated_at);
-CREATE INDEX IF NOT EXISTS idx_person_full_name ON public.person(full_name);
-CREATE INDEX IF NOT EXISTS idx_person_first_name ON public.person(first_name);
-CREATE INDEX IF NOT EXISTS idx_person_family_name ON public.person(family_name);
-CREATE INDEX IF NOT EXISTS idx_person_middle_name ON public.person(middle_name);
-
-CREATE TABLE IF NOT EXISTS public.phone (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  raw_number text NOT NULL,
-  e164 text NOT NULL UNIQUE,
-  number_type text,
-  country_code integer,
-  country_abbrev text
-);
-CREATE INDEX IF NOT EXISTS idx_phone_created_at ON public.phone(created_at);
-CREATE INDEX IF NOT EXISTS idx_phone_updated_at ON public.phone(updated_at);
-CREATE INDEX IF NOT EXISTS idx_phone_raw ON public.phone(raw_number);
-CREATE INDEX IF NOT EXISTS idx_phone_number_type ON public.phone(number_type);
-CREATE INDEX IF NOT EXISTS idx_phone_country_code ON public.phone(country_code);
-CREATE INDEX IF NOT EXISTS idx_phone_country_abbrev ON public.phone(country_abbrev);
-
-CREATE TABLE IF NOT EXISTS public.product (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  unique_id text NOT NULL UNIQUE,
-  product_name text NOT NULL,
-  product_type text,
-  category text,
-  product_description text,
-  country_of_origin text
-);
-CREATE INDEX IF NOT EXISTS idx_product_created_at ON public.product(created_at);
-CREATE INDEX IF NOT EXISTS idx_product_updated_at ON public.product(updated_at);
-CREATE INDEX IF NOT EXISTS idx_product_name ON public.product(product_name);
-CREATE INDEX IF NOT EXISTS idx_product_type ON public.product(product_type);
-CREATE INDEX IF NOT EXISTS idx_product_category ON public.product(category);
-CREATE INDEX IF NOT EXISTS idx_product_description ON public.product(product_description);
-CREATE INDEX IF NOT EXISTS idx_product_country_of_origin ON public.product(country_of_origin);
-
-CREATE TABLE IF NOT EXISTS public.productrelease (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  release_name text NOT NULL UNIQUE,
-  release_date timestamp without time zone
-);
-CREATE INDEX IF NOT EXISTS idx_productrelease_created_at ON public.productrelease(created_at);
-CREATE INDEX IF NOT EXISTS idx_productrelease_updated_at ON public.productrelease(updated_at);
-
-CREATE TABLE IF NOT EXISTS public.service (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  unique_id text NOT NULL UNIQUE,
-  service_type text NOT NULL,
-  output_data text,
-  output_length integer,
-  attributes jsonb NOT NULL DEFAULT '{}'::jsonb
-);
-CREATE INDEX IF NOT EXISTS idx_service_created_at ON public.service(created_at);
-CREATE INDEX IF NOT EXISTS idx_service_updated_at ON public.service(updated_at);
-CREATE INDEX IF NOT EXISTS idx_service_service_type ON public.service(service_type);
-CREATE INDEX IF NOT EXISTS idx_service_output_length ON public.service(output_length);
-
-CREATE TABLE IF NOT EXISTS public.tlscertificate (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  is_ca boolean,
-  tls_version integer,
-  key_usage text,
-  not_after timestamp without time zone,
-  not_before timestamp without time zone,
-  ext_key_usage text,
-  serial_number text NOT NULL UNIQUE,
-  subject_key_id text,
-  authority_key_id text,
-  issuer_common_name text,
-  signature_algorithm text,
-  subject_common_name text NOT NULL,
-  public_key_algorithm text,
-  crl_distribution_points text
-);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_created_at ON public.tlscertificate(created_at);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_updated_at ON public.tlscertificate(updated_at);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_tls_version ON public.tlscertificate(tls_version);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_subject_common_name ON public.tlscertificate(subject_common_name);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_issuer_common_name ON public.tlscertificate(issuer_common_name);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_signature_algorithm ON public.tlscertificate(signature_algorithm);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_public_key_algorithm ON public.tlscertificate(public_key_algorithm);
-
-CREATE TABLE IF NOT EXISTS public.url (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  raw_url text NOT NULL UNIQUE,
-  host citext NOT NULL,
-  url_path text,
-  port integer,
-  scheme text
-);
-CREATE INDEX IF NOT EXISTS idx_url_created_at ON public.url(created_at);
-CREATE INDEX IF NOT EXISTS idx_url_updated_at ON public.url(updated_at);
-CREATE INDEX IF NOT EXISTS idx_url_host ON public.url(host);
-CREATE INDEX IF NOT EXISTS idx_url_path ON public.url(url_path);
-CREATE INDEX IF NOT EXISTS idx_url_port ON public.url(port);
-CREATE INDEX IF NOT EXISTS idx_url_scheme ON public.url(scheme);
-
 COMMIT;
 
 -- +migrate Down
-
-DROP INDEX IF EXISTS idx_url_scheme;
-DROP INDEX IF EXISTS idx_url_port;
-DROP INDEX IF EXISTS idx_url_path;
-DROP INDEX IF EXISTS idx_url_host;
-DROP INDEX IF EXISTS idx_url_updated_at;
-DROP INDEX IF EXISTS idx_url_created_at;
-DROP TABLE IF EXISTS public.url;
-
-DROP INDEX IF EXISTS idx_tlscertificate_public_key_algorithm;
-DROP INDEX IF EXISTS idx_tlscertificate_signature_algorithm;
-DROP INDEX IF EXISTS idx_tlscertificate_issuer_common_name;
-DROP INDEX IF EXISTS idx_tlscertificate_subject_common_name;
-DROP INDEX IF EXISTS idx_tlscertificate_tls_version;
-DROP INDEX IF EXISTS idx_tlscertificate_updated_at;
-DROP INDEX IF EXISTS idx_tlscertificate_created_at;
-DROP TABLE IF EXISTS public.tlscertificate;
-
-DROP INDEX IF EXISTS idx_service_output_length;
-DROP INDEX IF EXISTS idx_service_service_type;
-DROP INDEX IF EXISTS idx_service_updated_at;
-DROP INDEX IF EXISTS idx_service_created_at;
-DROP TABLE IF EXISTS public.service;
-
-DROP INDEX IF EXISTS idx_productrelease_updated_at;
-DROP INDEX IF EXISTS idx_productrelease_created_at;
-DROP TABLE IF EXISTS public.productrelease;
-
-DROP INDEX IF EXISTS idx_product_country_of_origin;
-DROP INDEX IF EXISTS idx_product_description;
-DROP INDEX IF EXISTS idx_product_category;
-DROP INDEX IF EXISTS idx_product_type;
-DROP INDEX IF EXISTS idx_product_name;
-DROP INDEX IF EXISTS idx_product_updated_at;
-DROP INDEX IF EXISTS idx_product_created_at;
-DROP TABLE IF EXISTS public.product;
-
-DROP INDEX IF EXISTS idx_phone_country_abbrev;
-DROP INDEX IF EXISTS idx_phone_country_code;
-DROP INDEX IF EXISTS idx_phone_number_type;
-DROP INDEX IF EXISTS idx_phone_raw;
-DROP INDEX IF EXISTS idx_phone_updated_at;
-DROP INDEX IF EXISTS idx_phone_created_at;
-DROP TABLE IF EXISTS public.phone;
-
-DROP INDEX IF EXISTS idx_person_middle_name;
-DROP INDEX IF EXISTS idx_person_family_name;
-DROP INDEX IF EXISTS idx_person_first_name;
-DROP INDEX IF EXISTS idx_person_full_name;
-DROP INDEX IF EXISTS idx_person_updated_at;
-DROP INDEX IF EXISTS idx_person_created_at;
-DROP TABLE IF EXISTS public.person;
-
-DROP INDEX IF EXISTS idx_organization_registration_id;
-DROP INDEX IF EXISTS idx_organization_jurisdiction;
-DROP INDEX IF EXISTS idx_organization_legal_name;
-DROP INDEX IF EXISTS idx_organization_org_name;
-DROP INDEX IF EXISTS idx_organization_updated_at;
-DROP INDEX IF EXISTS idx_organization_created_at;
-DROP TABLE IF EXISTS public.organization;
-
-DROP INDEX IF EXISTS idx_netblock_ip_version;
-DROP INDEX IF EXISTS idx_netblock_updated_at;
-DROP INDEX IF EXISTS idx_netblock_created_at;
-DROP TABLE IF EXISTS public.netblock;
-
-DROP INDEX IF EXISTS idx_location_postal_code;
-DROP INDEX IF EXISTS idx_location_country;
-DROP INDEX IF EXISTS idx_location_city;
-DROP INDEX IF EXISTS idx_location_locality;
-DROP INDEX IF EXISTS idx_location_unit;
-DROP INDEX IF EXISTS idx_location_street_name;
-DROP INDEX IF EXISTS idx_location_province;
-DROP INDEX IF EXISTS idx_location_building_number;
-DROP INDEX IF EXISTS idx_location_building;
-DROP INDEX IF EXISTS idx_location_updated_at;
-DROP INDEX IF EXISTS idx_location_created_at;
-DROP TABLE IF EXISTS public.location;
-
-DROP INDEX IF EXISTS idx_ipnetrecord_parent_handle;
-DROP INDEX IF EXISTS idx_ipnetrecord_country;
-DROP INDEX IF EXISTS idx_ipnetrecord_method;
-DROP INDEX IF EXISTS idx_ipnetrecord_whois_server;
-DROP INDEX IF EXISTS idx_ipnetrecord_end_address;
-DROP INDEX IF EXISTS idx_ipnetrecord_start_address;
-DROP INDEX IF EXISTS idx_ipnetrecord_type;
-DROP INDEX IF EXISTS idx_ipnetrecord_name;
-DROP INDEX IF EXISTS idx_ipnetrecord_updated_at;
-DROP INDEX IF EXISTS idx_ipnetrecord_created_at;
-DROP TABLE IF EXISTS public.ipnetrecord;
-
-DROP INDEX IF EXISTS idx_ipaddress_ip_version;
-DROP INDEX IF EXISTS idx_ipaddress_updated_at;
-DROP INDEX IF EXISTS idx_ipaddress_created_at;
-DROP TABLE IF EXISTS public.ipaddress;
-
-DROP INDEX IF EXISTS idx_identifier_id_type;
-DROP INDEX IF EXISTS idx_identifier_updated_at;
-DROP INDEX IF EXISTS idx_identifier_created_at;
-DROP TABLE IF EXISTS public.identifier;
-
-DROP INDEX IF EXISTS idx_fundstransfer_exchange_rate;
-DROP INDEX IF EXISTS idx_fundstransfer_transfer_method;
-DROP INDEX IF EXISTS idx_fundstransfer_currency;
-DROP INDEX IF EXISTS idx_fundstransfer_reference_number;
-DROP INDEX IF EXISTS idx_fundstransfer_amount;
-DROP INDEX IF EXISTS idx_fundstransfer_updated_at;
-DROP INDEX IF EXISTS idx_fundstransfer_created_at;
-DROP TABLE IF EXISTS public.fundstransfer;
-
-DROP INDEX IF EXISTS idx_fqdn_updated_at;
-DROP INDEX IF EXISTS idx_fqdn_created_at;
-DROP TABLE IF EXISTS public.fqdn;
-
-DROP INDEX IF EXISTS idx_file_file_type;
-DROP INDEX IF EXISTS idx_file_basename;
-DROP INDEX IF EXISTS idx_file_updated_at;
-DROP INDEX IF EXISTS idx_file_created_at;
-DROP TABLE IF EXISTS public.file;
-
-DROP INDEX IF EXISTS idx_domainrecord_object_id;
-DROP INDEX IF EXISTS idx_domainrecord_whois_server;
-DROP INDEX IF EXISTS idx_domainrecord_punycode;
-DROP INDEX IF EXISTS idx_domainrecord_extension;
-DROP INDEX IF EXISTS idx_domainrecord_record_name;
-DROP INDEX IF EXISTS idx_domainrecord_updated_at;
-DROP INDEX IF EXISTS idx_domainrecord_created_at;
-DROP TABLE IF EXISTS public.domainrecord;
-
-DROP INDEX IF EXISTS idx_contactrecord_updated_at;
-DROP INDEX IF EXISTS idx_contactrecord_created_at;
-DROP TABLE IF EXISTS public.contactrecord;
-
-DROP INDEX IF EXISTS idx_autonomoussystem_updated_at;
-DROP INDEX IF EXISTS idx_autonomoussystem_created_at;
-DROP TABLE IF EXISTS public.autonomoussystem;
-
-DROP INDEX IF EXISTS idx_autnumrecord_whois_server;
-DROP INDEX IF EXISTS idx_autnumrecord_name;
-DROP INDEX IF EXISTS idx_autnumrecord_updated_at;
-DROP INDEX IF EXISTS idx_autnumrecord_created_at;
-DROP TABLE IF EXISTS public.autnumrecord;
-
-DROP INDEX IF EXISTS idx_account_account_number;
-DROP INDEX IF EXISTS idx_account_username;
-DROP INDEX IF EXISTS idx_account_account_type;
-DROP INDEX IF EXISTS idx_account_updated_at;
-DROP INDEX IF EXISTS idx_account_created_at;
-DROP TABLE IF EXISTS public.account;
 
 DROP INDEX IF EXISTS idx_edge_tag_map_tag_id;
 DROP INDEX IF EXISTS idx_edge_tag_map_edge_id;
