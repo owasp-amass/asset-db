@@ -11,17 +11,92 @@ CREATE TABLE IF NOT EXISTS public.autonomoussystem (
   id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
   updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  asn integer NOT NULL UNIQUE
+  asn integer NOT NULL UNIQUE,
+  attrs jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_autonomoussystem_created_at
   ON public.autonomoussystem(created_at);
 CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at
   ON public.autonomoussystem(updated_at);
 
+-- Upsert an AutonomousSystem AND its corresponding Entity.
+-- Returns the entity_id.
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.autonomoussystem_upsert_entity(
+    _asn   integer,
+    _attrs jsonb DEFAULT '{}'::jsonb
+) RETURNS bigint
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+    v_row       bigint;
+    v_entity_id bigint;
+BEGIN
+    IF _asn IS NULL THEN
+        RAISE EXCEPTION 'autonomoussystem_upsert_entity requires non-NULL asn';
+    END IF;
+
+    -- 1) Upsert into autonomoussystem by ASN.
+    v_row := public.autonomoussystem_upsert(
+        _asn   := _asn,
+        _attrs := '{}'::jsonb
+    );
+
+    -- 2) Upsert into entity via the generic helper (entity_upsert).
+    v_entity_id := public.entity_upsert(
+        _etype_name  := 'autonomoussystem'::citext, -- e.g. 'autonomoussystem'
+        _natural_key := _asn::text::citext,         -- natural key: ASN as text
+        _table_name  := 'autonomoussystem'::citext,
+        _row_id      := v_row,
+        _attrs       := '{}'::jsonb
+    );
+
+    RETURN v_entity_id;
+END
+$fn$;
+-- +migrate StatementEnd
+
+-- JSONB upsert variant.
+-- Upsert an AutonomousSystem AND its corresponding Entity.
+-- Returns the entity_id.
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.autonomoussystem_upsert_entity_json(_rec jsonb)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+    v_asn       integer;
+    v_row       bigint;
+    v_entity_id bigint;
+BEGIN
+    v_asn := NULLIF(_rec->>'asn', '')::integer;
+
+    IF v_asn IS NULL THEN
+        RAISE EXCEPTION 'autonomoussystem_upsert_entity_json requires non-NULL asn';
+    END IF;
+
+    -- 1) Upsert into autonomoussystem by ASN.
+    v_row := public.autonomoussystem_upsert_json(_rec);
+
+    -- 2) Upsert into entity via the generic helper (entity_upsert).
+    v_entity_id := public.entity_upsert(
+        _etype_name  := 'autonomoussystem'::citext, -- e.g. 'autonomoussystem'
+        _natural_key := v_asn::text::citext,        -- natural key: ASN as text
+        _table_name  := 'autonomoussystem'::citext,
+        _row_id      := v_row,
+        _attrs       := '{}'::jsonb
+    );
+
+    RETURN v_entity_id;
+END
+$fn$;
+-- +migrate StatementEnd
+
 -- Upsert by ASN (scalar param). Returns the row id.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.autonomoussystem_upsert(
-    _asn integer
+    _asn   integer,
+    _attrs jsonb DEFAULT '{}'::jsonb
 ) RETURNS bigint
 LANGUAGE plpgsql
 AS $fn$
@@ -33,9 +108,11 @@ BEGIN
     END IF;
 
     INSERT INTO public.autonomoussystem (
-        asn
+        asn,
+        attrs
     ) VALUES (
-        _asn
+        _asn,
+        _attrs
     )
     ON CONFLICT (asn) DO UPDATE
     SET
@@ -58,7 +135,10 @@ DECLARE
 BEGIN
     v_asn := NULLIF(_rec->>'asn', '')::integer;
 
-    RETURN public.autonomoussystem_upsert(v_asn);
+    RETURN public.autonomoussystem_upsert(
+        _asn   := v_asn,
+        _attrs := '{}'::jsonb
+    );
 END
 $fn$;
 -- +migrate StatementEnd
@@ -103,57 +183,6 @@ AS $fn$
     FROM public.autonomoussystem
     WHERE updated_at >= _ts
     ORDER BY updated_at ASC, id ASC;
-$fn$;
--- +migrate StatementEnd
-
--- Upsert an AutonomousSystem AND its corresponding Entity.
--- Returns the entity_id.
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_upsert_entity(
-    _asn         integer,
-    _extra_attrs jsonb  DEFAULT '{}'::jsonb,       -- for caller-provided extra attributes
-    _etype_name  citext DEFAULT 'autonomoussystem'::citext
-) RETURNS bigint
-LANGUAGE plpgsql
-AS $fn$
-DECLARE
-    v_row       public.autonomoussystem%ROWTYPE;
-    v_entity_id bigint;
-    v_attrs     jsonb;
-BEGIN
-    IF _asn IS NULL THEN
-        RAISE EXCEPTION 'autonomoussystem_upsert_entity requires non-NULL asn';
-    END IF;
-
-    -- 1) Upsert into autonomoussystem by ASN.
-    INSERT INTO public.autonomoussystem (
-        asn
-    ) VALUES (
-        _asn
-    )
-    ON CONFLICT (asn) DO UPDATE
-    SET
-        updated_at = now()
-    RETURNING * INTO v_row;
-
-    -- 2) Build attrs from the autonomoussystem plus any caller-supplied extras.
-    v_attrs := jsonb_strip_nulls(
-        jsonb_build_object(
-            'asn', v_row.asn
-        )
-    ) || COALESCE(_extra_attrs, '{}'::jsonb);
-
-    -- 3) Upsert into entity via the generic helper (entity_upsert).
-    v_entity_id := public.entity_upsert(
-        _etype_name  := _etype_name,                 -- e.g. 'autonomoussystem'
-        _natural_key := v_row.asn::text::citext,     -- natural key: ASN as text
-        _table_name  := 'autonomoussystem'::citext,
-        _row_id      := v_row.id,
-        _attrs       := v_attrs
-    );
-
-    RETURN v_entity_id;
-END
 $fn$;
 -- +migrate StatementEnd
 
@@ -210,15 +239,16 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.autonomoussystem_upsert(integer);
-DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_json(jsonb);
-DROP FUNCTION IF EXISTS public.autonomoussystem_get_id_by_asn(integer);
-DROP FUNCTION IF EXISTS public.autonomoussystem_get_by_asn(integer);
-DROP FUNCTION IF EXISTS public.autonomoussystem_updated_since(timestamp without time zone);
-
-DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_entity(integer, jsonb, citext);
-DROP FUNCTION IF EXISTS public.autonomoussystem_get_entity_id_by_asn(integer);
 DROP FUNCTION IF EXISTS public.autonomoussystem_get_with_entity_by_asn(integer);
+DROP FUNCTION IF EXISTS public.autonomoussystem_get_entity_id_by_asn(integer);
+DROP FUNCTION IF EXISTS public.autonomoussystem_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.autonomoussystem_get_by_asn(integer);
+DROP FUNCTION IF EXISTS public.autonomoussystem_get_id_by_asn(integer);
+
+DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_json(jsonb);
+DROP FUNCTION IF EXISTS public.autonomoussystem_upsert(integer, jsonb);
+DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_entity_json(jsonb);
+DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_entity(integer, jsonb);
 
 DROP INDEX IF EXISTS idx_autonomoussystem_updated_at;
 DROP INDEX IF EXISTS idx_autonomoussystem_created_at;
