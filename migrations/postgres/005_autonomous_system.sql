@@ -8,55 +8,15 @@
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.autonomoussystem (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
   updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  asn integer NOT NULL UNIQUE,
-  attrs jsonb NOT NULL DEFAULT '{}'::jsonb
+  asn        integer NOT NULL UNIQUE,
+  attrs      jsonb NOT NULL DEFAULT '{}'::jsonb
 );
-CREATE INDEX IF NOT EXISTS idx_autonomoussystem_created_at
-  ON public.autonomoussystem(created_at);
-CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at
-  ON public.autonomoussystem(updated_at);
+CREATE INDEX IF NOT EXISTS idx_autonomoussystem_created_at ON public.autonomoussystem (created_at);
+CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at ON public.autonomoussystem (updated_at);
 
--- Upsert an AutonomousSystem AND its corresponding Entity.
--- Returns the entity_id.
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_upsert_entity(
-    _asn   integer,
-    _attrs jsonb DEFAULT '{}'::jsonb
-) RETURNS bigint
-LANGUAGE plpgsql
-AS $fn$
-DECLARE
-    v_row       bigint;
-    v_entity_id bigint;
-BEGIN
-    IF _asn IS NULL THEN
-        RAISE EXCEPTION 'autonomoussystem_upsert_entity requires non-NULL asn';
-    END IF;
-
-    -- 1) Upsert into autonomoussystem by ASN.
-    v_row := public.autonomoussystem_upsert(
-        _asn   := _asn,
-        _attrs := '{}'::jsonb
-    );
-
-    -- 2) Upsert into entity via the generic helper (entity_upsert).
-    v_entity_id := public.entity_upsert(
-        _etype_name  := 'autonomoussystem'::citext, -- e.g. 'autonomoussystem'
-        _natural_key := _asn::text::citext,         -- natural key: ASN as text
-        _table_name  := 'autonomoussystem'::citext,
-        _row_id      := v_row,
-        _attrs       := '{}'::jsonb
-    );
-
-    RETURN v_entity_id;
-END
-$fn$;
--- +migrate StatementEnd
-
--- JSONB upsert variant.
 -- Upsert an AutonomousSystem AND its corresponding Entity.
 -- Returns the entity_id.
 -- +migrate StatementBegin
@@ -69,11 +29,7 @@ DECLARE
     v_row       bigint;
     v_entity_id bigint;
 BEGIN
-    v_asn := NULLIF(_rec->>'asn', '')::integer;
-
-    IF v_asn IS NULL THEN
-        RAISE EXCEPTION 'autonomoussystem_upsert_entity_json requires non-NULL asn';
-    END IF;
+    v_asn := (_rec->>'number')::integer;
 
     -- 1) Upsert into autonomoussystem by ASN.
     v_row := public.autonomoussystem_upsert_json(_rec);
@@ -83,8 +39,7 @@ BEGIN
         _etype_name  := 'autonomoussystem'::citext, -- e.g. 'autonomoussystem'
         _natural_key := v_asn::text::citext,        -- natural key: ASN as text
         _table_name  := 'autonomoussystem'::citext,
-        _row_id      := v_row,
-        _attrs       := '{}'::jsonb
+        _row_id      := v_row
     );
 
     RETURN v_entity_id;
@@ -116,6 +71,11 @@ BEGIN
     )
     ON CONFLICT (asn) DO UPDATE
     SET
+        attrs = CASE
+                  WHEN public.autonomoussystem.attrs IS DISTINCT FROM EXCLUDED.attrs
+                    THEN public.autonomoussystem.attrs || EXCLUDED.attrs
+                  ELSE public.autonomoussystem.attrs
+                END,
         updated_at = now()
     RETURNING id INTO v_id;
 
@@ -133,7 +93,7 @@ AS $fn$
 DECLARE
     v_asn integer;
 BEGIN
-    v_asn := NULLIF(_rec->>'asn', '')::integer;
+    v_asn := (_rec->>'number')::integer;
 
     RETURN public.autonomoussystem_upsert(
         _asn   := v_asn,
@@ -143,30 +103,16 @@ END
 $fn$;
 -- +migrate StatementEnd
 
--- Get the id by ASN (NULL if not found)
+-- Return the full row by id
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_get_id_by_asn(_asn integer)
-RETURNS bigint
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT id
-    FROM public.autonomoussystem
-    WHERE asn = _asn
-    LIMIT 1;
-$fn$;
--- +migrate StatementEnd
-
--- Return the full row by ASN
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_get_by_asn(_asn integer)
+CREATE OR REPLACE FUNCTION public.autonomoussystem_get_by_id(_row_id bigint)
 RETURNS public.autonomoussystem
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
+    SELECT id, created_at, updated_at, asn, attrs
     FROM public.autonomoussystem
-    WHERE asn = _asn
+    WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
@@ -179,59 +125,10 @@ CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
+    SELECT id, created_at, updated_at, asn, attrs
     FROM public.autonomoussystem
     WHERE updated_at >= _ts
     ORDER BY updated_at ASC, id ASC;
-$fn$;
--- +migrate StatementEnd
-
--- Map ASN -> entity_id (if present)
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_get_entity_id_by_asn(
-    _asn integer
-) RETURNS bigint
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT e.entity_id
-    FROM public.autonomoussystem a
-    JOIN public.entity e
-      ON e.table_name = 'autonomoussystem'
-     AND e.row_id     = a.id
-    WHERE a.asn = _asn
-    ORDER BY e.entity_id
-    LIMIT 1;
-$fn$;
--- +migrate StatementEnd
-
--- Get Entity+AutonomousSystem by ASN
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_get_with_entity_by_asn(
-    _asn integer
-) RETURNS TABLE (
-    entity_id    bigint,
-    etype_id     smallint,
-    natural_key  citext,
-    entity_attrs jsonb,
-    autonomous   public.autonomoussystem
-)
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT
-        e.entity_id,
-        e.etype_id,
-        e.natural_key,
-        e.attrs,
-        a
-    FROM public.autonomoussystem a
-    JOIN public.entity e
-      ON e.table_name = 'autonomoussystem'
-     AND e.row_id     = a.id
-    WHERE a.asn = _asn
-    ORDER BY e.entity_id
-    LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
@@ -239,16 +136,12 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.autonomoussystem_get_with_entity_by_asn(integer);
-DROP FUNCTION IF EXISTS public.autonomoussystem_get_entity_id_by_asn(integer);
 DROP FUNCTION IF EXISTS public.autonomoussystem_updated_since(timestamp without time zone);
-DROP FUNCTION IF EXISTS public.autonomoussystem_get_by_asn(integer);
-DROP FUNCTION IF EXISTS public.autonomoussystem_get_id_by_asn(integer);
+DROP FUNCTION IF EXISTS public.autonomoussystem_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_json(jsonb);
 DROP FUNCTION IF EXISTS public.autonomoussystem_upsert(integer, jsonb);
 DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_entity_json(jsonb);
-DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_entity(integer, jsonb);
 
 DROP INDEX IF EXISTS idx_autonomoussystem_updated_at;
 DROP INDEX IF EXISTS idx_autonomoussystem_created_at;

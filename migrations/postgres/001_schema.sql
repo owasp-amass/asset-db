@@ -53,23 +53,22 @@ CREATE TABLE IF NOT EXISTS public.entity (
   entity_id     bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at    timestamp without time zone NOT NULL DEFAULT now(),
   updated_at    timestamp without time zone NOT NULL DEFAULT now(),
-  etype_id      smallint      NOT NULL REFERENCES public.entity_type_lu(id),
-  natural_key   citext      NOT NULL,                -- canonical display string
-  attrs         jsonb       NOT NULL DEFAULT '{}'::jsonb,
-  table_name   citext        NOT NULL,                -- source table name
-  row_id       bigint     NOT NULL,                -- source table row id
+  etype_id      smallint  NOT NULL REFERENCES public.entity_type_lu(id),
+  natural_key   citext    NOT NULL,       -- canonical display string
+  table_name    citext    NOT NULL,       -- source table name
+  row_id        bigint    NOT NULL,       -- source table row id
   UNIQUE (etype_id, row_id),
   UNIQUE (etype_id, natural_key),
   UNIQUE (table_name, row_id),
   UNIQUE (entity_id, etype_id, row_id),
   UNIQUE (entity_id, table_name, row_id)
 );
-CREATE INDEX IF NOT EXISTS idx_entity_created_at ON public.entity(created_at);
-CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON public.entity(updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_type ON public.entity(etype_id);
-CREATE INDEX IF NOT EXISTS idx_entity_natural_key ON public.entity(natural_key);
--- For attrs existence/containment queries
-CREATE INDEX IF NOT EXISTS gin_entity_attrs ON public.entity USING gin (attrs jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_entity_created_at ON public.entity (created_at);
+CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON public.entity (updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_type ON public.entity (etype_id);
+CREATE INDEX IF NOT EXISTS idx_entity_natural_key ON public.entity (natural_key);
+CREATE INDEX IF NOT EXISTS idx_entity_table_name ON public.entity (table_name);
+CREATE INDEX IF NOT EXISTS idx_entity_row_id ON public.entity (row_id);
 
 -- -----------------------------
 -- Graph edges
@@ -80,20 +79,22 @@ CREATE TABLE IF NOT EXISTS public.edge (
   updated_at     timestamp without time zone NOT NULL DEFAULT now(),
   etype_id       smallint    NOT NULL REFERENCES public.edge_type_lu(id),
   label          citext      NOT NULL,
+  content        jsonb       NOT NULL DEFAULT '{}'::jsonb,
   from_entity_id bigint      NOT NULL REFERENCES public.entity(entity_id) ON DELETE CASCADE,
   to_entity_id   bigint      NOT NULL REFERENCES public.entity(entity_id) ON DELETE CASCADE,
-  content        jsonb       NOT NULL DEFAULT '{}'::jsonb,
   UNIQUE (etype_id, from_entity_id, to_entity_id, label),
   CHECK (from_entity_id <> to_entity_id)
 );
-CREATE INDEX IF NOT EXISTS idx_edge_created_at ON public.edge(created_at);
-CREATE INDEX IF NOT EXISTS idx_edge_updated_at ON public.edge(updated_at);
-CREATE INDEX IF NOT EXISTS idx_edge_etype ON public.edge(etype_id);
-CREATE INDEX IF NOT EXISTS idx_edge_from_id ON public.edge(from_entity_id);
-CREATE INDEX IF NOT EXISTS idx_edge_to_id   ON public.edge(to_entity_id);
-CREATE INDEX IF NOT EXISTS idx_edge_from ON public.edge(from_entity_id, etype_id, to_entity_id);
-CREATE INDEX IF NOT EXISTS idx_edge_to   ON public.edge(to_entity_id, etype_id, from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_created_at ON public.edge (created_at);
+CREATE INDEX IF NOT EXISTS idx_edge_updated_at ON public.edge (updated_at);
+CREATE INDEX IF NOT EXISTS idx_edge_etype ON public.edge (etype_id);
+CREATE INDEX IF NOT EXISTS idx_edge_label ON public.edge (label);
 CREATE INDEX IF NOT EXISTS gin_edge_content ON public.edge USING gin (content jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_edge_from_id ON public.edge (from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_to_id   ON public.edge (to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_from ON public.edge (from_entity_id, etype_id, to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edge_to   ON public.edge (to_entity_id, etype_id, from_entity_id);
+
 
 -- -----------------------------
 -- Graph tags
@@ -165,17 +166,19 @@ DROP INDEX IF EXISTS idx_tag_updated_at;
 DROP INDEX IF EXISTS idx_tag_created_at;
 DROP TABLE IF EXISTS public.tag;
 
-DROP INDEX IF EXISTS gin_edge_content;
 DROP INDEX IF EXISTS idx_edge_from;
 DROP INDEX IF EXISTS idx_edge_to;
 DROP INDEX IF EXISTS idx_edge_from_id;
 DROP INDEX IF EXISTS idx_edge_to_id;
+DROP INDEX IF EXISTS gin_edge_content
+DROP INDEX IF EXISTS idx_edge_label;
 DROP INDEX IF EXISTS idx_edge_etype;
 DROP INDEX IF EXISTS idx_edge_updated_at;
 DROP INDEX IF EXISTS idx_edge_created_at;
 DROP TABLE IF EXISTS public.edge;
 
-DROP INDEX IF EXISTS gin_entity_attrs;
+DROP INDEX IF EXISTS idx_entity_row_id;
+DROP INDEX IF EXISTS idx_entity_table_name;
 DROP INDEX IF EXISTS idx_entity_natural_key;
 DROP INDEX IF EXISTS idx_entity_type;
 DROP INDEX IF EXISTS idx_entity_updated_at;

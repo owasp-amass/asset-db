@@ -15,8 +15,7 @@ CREATE OR REPLACE FUNCTION public.entity_upsert(
     _etype_name  citext,
     _natural_key citext,
     _table_name  citext,
-    _row_id      bigint,
-    _attrs       jsonb DEFAULT '{}'::jsonb
+    _row_id      bigint
 ) RETURNS bigint
 LANGUAGE plpgsql
 AS $fn$
@@ -43,25 +42,18 @@ BEGIN
     INSERT INTO public.entity (
         etype_id,
         natural_key,
-        attrs,
         table_name,
         row_id
     )
     VALUES (
         v_etype_id,
         lower(_natural_key)::citext,
-        COALESCE(_attrs, '{}'::jsonb),
         lower(_table_name)::citext,
         _row_id
     )
     ON CONFLICT (etype_id, row_id) DO UPDATE
     SET
         natural_key = EXCLUDED.natural_key,
-        attrs = CASE
-                  WHEN public.entity.attrs IS DISTINCT FROM EXCLUDED.attrs
-                    THEN public.entity.attrs || EXCLUDED.attrs
-                  ELSE public.entity.attrs
-                END,
         updated_at = now()
     RETURNING entity_id INTO v_entity_id;
 
@@ -444,4 +436,4 @@ DROP FUNCTION IF EXISTS public.tag_upsert(text, text, text, jsonb);
 
 DROP FUNCTION IF EXISTS public.edge_updated_since(timestamp without time zone);
 DROP FUNCTION IF EXISTS public.edge_get_id(text, text, bigint, bigint);
-DROP FUNCTION IF EXISTS public.edge_upsert(text, text, bigint, bigint, jsonb);
+DROP FUNCTION IF EXISTS public.edge_upsert(text, text, bigint, bigint);
