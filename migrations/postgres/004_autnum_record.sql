@@ -30,24 +30,21 @@ RETURNS bigint
 LANGUAGE plpgsql
 AS $fn$
 DECLARE
-    v_row       bigint;
-    v_entity_id bigint;
-    v_handle    text;
+    v_row    bigint;
+    v_handle text;
 BEGIN
     v_handle := (_rec->>'handle');
 
     -- 1) Upsert into autnumrecord.
     v_row := public.autnumrecord_upsert_json(_rec);
 
-    -- 2) Upsert into entity via the generic helper (entity_upsert).
-    v_entity_id := public.entity_upsert(
-        _etype_name  := 'autnumrecord'::citext,  -- e.g. 'autnumrecord'
-        _natural_key := v_handle::citext,        -- natural key: handle
+    -- 2) Upsert into entity via the generic helper.
+    RETURN public.entity_upsert(
+        _etype_name  := 'autnumrecord'::citext,
+        _natural_key := v_handle::citext,
         _table_name  := 'autnumrecord'::citext,
         _row_id      := v_row
     );
-
-    RETURN v_entity_id;
 END
 $fn$;
 -- +migrate StatementEnd
@@ -89,9 +86,9 @@ BEGIN
         UPDATE public.autnumrecord
         SET
             asn           = _asn,
-            record_name   = COALESCE(_record_name,   record_name),
-            whois_server  = COALESCE(_whois_server,  whois_server),
-            attrs         = COALESCE(_attrs, attrs),
+            record_name   = COALESCE(_record_name,  record_name),
+            whois_server  = COALESCE(_whois_server, whois_server),
+            attrs         = attrs || _attrs,
             updated_at    = now()
         WHERE id = v_id_handle;
 
@@ -108,9 +105,9 @@ BEGIN
         SET
             handle        = _handle, -- keep the canonical handle in sync too
             asn           = _asn,
-            record_name   = COALESCE(_record_name,   record_name),
-            whois_server  = COALESCE(_whois_server,  whois_server),
-            attrs         = COALESCE(_attrs, attrs),
+            record_name   = COALESCE(_record_name,  record_name),
+            whois_server  = COALESCE(_whois_server, whois_server),
+            attrs         = attrs || _attrs,
             updated_at    = now()
         WHERE id = v_id;
 
@@ -145,23 +142,26 @@ DECLARE
     v_created_date  timestamp without time zone;
     v_updated_date  timestamp without time zone;
     v_whois_server  citext;
+    v_attrs         jsonb;
 BEGIN
-    v_raw           := (_rec->>'raw');
-    v_handle        := (_rec->>'handle');
-    v_asn           := (_rec->>'asn')::integer;
+    v_raw           := NULLIF(_rec->>'raw', '');
+    v_handle        := NULLIF(_rec->>'handle', '');
+    v_asn           := NULLIF(_rec->>'asn', '')::integer;
     v_record_name   := (_rec->>'name');
-    v_record_status := (_rec->>'status');
-    v_created_date  := NULLIF((_rec->>'created_date'), '')::timestamp;
-    v_updated_date  := NULLIF((_rec->>'updated_date'), '')::timestamp;
+    v_record_status := NULLIF(_rec->>'status', '');
+    v_created_date  := NULLIF(_rec->>'created_date', '')::timestamp;
+    v_updated_date  := NULLIF(_rec->>'updated_date', '')::timestamp;
     v_whois_server  := (_rec->>'whois_server');
 
     -- Build attrs from the appropriate fields.
-    v_attrs := jsonb_build_object(
-        'raw',          v_raw,
-        'status',       v_record_status,
-        'created_date', v_created_date,
-        'updated_date', v_updated_date
-    );
+    v_attrs := jsonb_strip_nulls(
+        jsonb_build_object(
+            'raw',          v_raw,
+            'status',       v_record_status,
+            'created_date', v_created_date,
+            'updated_date', v_updated_date
+        )
+    ) || '{}'::jsonb;
 
     RETURN public.autnumrecord_upsert(
         v_record_name,

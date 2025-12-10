@@ -32,7 +32,6 @@ LANGUAGE plpgsql
 AS $fn$
 DECLARE
     v_row       bigint;
-    v_entity_id bigint;
     v_unique_id text;
 BEGIN
     v_unique_id := (_rec->>'unique_id');
@@ -40,15 +39,13 @@ BEGIN
     -- 1) Upsert into account by unique_id.
     v_row := public.account_upsert_json(_rec);
 
-    -- 2) Upsert into entity via the generic helper (entity_upsert).
-    v_entity_id := public.entity_upsert(
-        _etype_name  := 'account'::citext,     -- e.g. 'account'
-        _natural_key := v_unique_id::citext,   -- natural key: unique_id
+    -- 2) Upsert into entity via the generic helper.
+    RETURN public.entity_upsert(
+        _etype_name  := 'account'::citext,
+        _natural_key := v_unique_id::citext,
         _table_name  := 'account'::citext,
         _row_id      := v_row
     );
-
-    RETURN v_entity_id;
 END
 $fn$;
 -- +migrate StatementEnd
@@ -78,14 +75,10 @@ BEGIN
     )
     ON CONFLICT (unique_id) DO UPDATE
     SET
-        account_type   = EXCLUDED.account_type,
+        account_type   = COALESCE(EXCLUDED.account_type,   account.account_type),
         username       = COALESCE(EXCLUDED.username,       account.username),
         account_number = COALESCE(EXCLUDED.account_number, account.account_number),
-        attrs          = CASE
-                            WHEN public.account.attrs IS DISTINCT FROM EXCLUDED.attrs
-                                THEN public.account.attrs || EXCLUDED.attrs
-                            ELSE public.account.attrs
-                         END,
+        attrs          = public.account.attrs || _attrs,
         updated_at     = now()
     RETURNING id INTO v_id;
 
@@ -109,14 +102,14 @@ DECLARE
     v_active         boolean;
     v_attrs          jsonb;
 BEGIN
-    v_unique_id      := (_rec->>'unique_id');
-    v_account_type   := (_rec->>'account_type');
-    v_username       := NULLIF(_rec->>'username', '');
+    v_unique_id      := NULLIF(_rec->>'unique_id', '');
+    v_account_type   := NULLIF(_rec->>'account_type', '');
+    v_username       := (_rec->>'username');
     v_account_number := (_rec->>'account_number');
     v_balance        := (_rec->>'balance')::numeric;
     v_active         := CASE
-                          WHEN _rec ? 'active' THEN (_rec->>'active')::boolean
-                          ELSE NULL
+                            WHEN _rec ? 'active' THEN (_rec->>'active')::boolean
+                            ELSE FALSE
                         END;
 
     -- Build attrs from the appropriate fields.
@@ -172,7 +165,7 @@ DROP FUNCTION IF EXISTS public.account_updated_since(timestamp without time zone
 DROP FUNCTION IF EXISTS public.account_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.account_upsert_json(jsonb);
-DROP FUNCTION IF EXISTS public.account_upsert(text, text, text, text, numeric, boolean);
+DROP FUNCTION IF EXISTS public.account_upsert(text, text, text, text, jsonb);
 DROP FUNCTION IF EXISTS public.account_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_account_account_number;

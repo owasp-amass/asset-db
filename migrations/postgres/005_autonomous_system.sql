@@ -25,24 +25,21 @@ RETURNS bigint
 LANGUAGE plpgsql
 AS $fn$
 DECLARE
-    v_asn       integer;
-    v_row       bigint;
-    v_entity_id bigint;
+    v_asn integer;
+    v_row bigint;
 BEGIN
     v_asn := (_rec->>'number')::integer;
 
     -- 1) Upsert into autonomoussystem by ASN.
     v_row := public.autonomoussystem_upsert_json(_rec);
 
-    -- 2) Upsert into entity via the generic helper (entity_upsert).
-    v_entity_id := public.entity_upsert(
-        _etype_name  := 'autonomoussystem'::citext, -- e.g. 'autonomoussystem'
-        _natural_key := v_asn::text::citext,        -- natural key: ASN as text
+    -- 2) Upsert into entity via the generic helper.
+    RETURN public.entity_upsert(
+        _etype_name  := 'autonomoussystem'::citext,
+        _natural_key := v_asn::text::citext,
         _table_name  := 'autonomoussystem'::citext,
         _row_id      := v_row
     );
-
-    RETURN v_entity_id;
 END
 $fn$;
 -- +migrate StatementEnd
@@ -63,19 +60,13 @@ BEGIN
     END IF;
 
     INSERT INTO public.autonomoussystem (
-        asn,
-        attrs
+        asn, attrs
     ) VALUES (
-        _asn,
-        _attrs
+        _asn, _attrs
     )
     ON CONFLICT (asn) DO UPDATE
     SET
-        attrs = CASE
-                  WHEN public.autonomoussystem.attrs IS DISTINCT FROM EXCLUDED.attrs
-                    THEN public.autonomoussystem.attrs || EXCLUDED.attrs
-                  ELSE public.autonomoussystem.attrs
-                END,
+        attrs      = public.autonomoussystem.attrs || _attrs,
         updated_at = now()
     RETURNING id INTO v_id;
 
@@ -93,12 +84,9 @@ AS $fn$
 DECLARE
     v_asn integer;
 BEGIN
-    v_asn := (_rec->>'number')::integer;
+    v_asn := NULLIF(_rec->>'number', '')::integer;
 
-    RETURN public.autonomoussystem_upsert(
-        _asn   := v_asn,
-        _attrs := '{}'::jsonb
-    );
+    RETURN public.autonomoussystem_upsert(v_asn);
 END
 $fn$;
 -- +migrate StatementEnd
