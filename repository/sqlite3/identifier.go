@@ -23,8 +23,8 @@ const upsertIdentifierText = `
 INSERT INTO identifier(unique_id, id_type, attrs) 
 VALUES (:unique_id, :id_type, :attrs) 
 ON CONFLICT(unique_id) DO UPDATE SET
-    id_type    = COALESCE(excluded.id_type, identifier.id_type),
-	attrs      = COALESCE(excluded.attrs,   identifier.attrs),
+    id_type    = COALESCE(excluded.id_type,   identifier.id_type),
+	attrs      = json_patch(identifier.attrs, excluded.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -42,10 +42,10 @@ WHERE id = :row_id
 LIMIT 1`
 
 type identifierAttributes struct {
-	Status         string `json:"status"`
-	CreatedDate    string `json:"created_date"`
-	UpdatedDate    string `json:"updated_date"`
-	ExpirationDate string `json:"expiration_date"`
+	Status         string `json:"status,omitempty"`
+	CreatedDate    string `json:"created_date,omitempty"`
+	UpdatedDate    string `json:"updated_date,omitempty"`
+	ExpirationDate string `json:"expiration_date,omitempty"`
 }
 
 func (r *SqliteRepository) upsertIdentifier(ctx context.Context, a *oamgen.Identifier) (int64, error) {

@@ -24,7 +24,7 @@ INSERT INTO phone(e164, country_code, attrs)
 VALUES (:e164, :country_code, :attrs)
 ON CONFLICT(e164) DO UPDATE SET
     country_code   = COALESCE(excluded.country_code, phone.country_code),
-    attrs          = COALESCE(excluded.attrs,        phone.attrs),
+    attrs          = json_patch(phone.attrs,         excluded.attrs),
     updated_at     = CURRENT_TIMESTAMP`
 
 // Param: :e164
@@ -42,9 +42,9 @@ WHERE id = :row_id
 LIMIT 1`
 
 type phoneAttributes struct {
-	Raw           string `json:"raw"`
-	Type          string `json:"type"`
-	CountryAbbrev string `json:"country_abbrev"`
+	Raw           string `json:"raw,omitempty"`
+	Type          string `json:"type,omitempty"`
+	CountryAbbrev string `json:"country_abbrev,omitempty"`
 }
 
 func (r *SqliteRepository) upsertPhone(ctx context.Context, a *contact.Phone) (int64, error) {

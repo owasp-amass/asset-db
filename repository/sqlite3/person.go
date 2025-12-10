@@ -26,7 +26,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
     full_name   = COALESCE(excluded.full_name,   person.full_name),
     first_name  = COALESCE(excluded.first_name,  person.first_name),
     family_name = COALESCE(excluded.family_name, person.family_name),
-    attrs       = COALESCE(excluded.attrs,       person.attrs),
+    attrs       = json_patch(person.attrs,       excluded.attrs),
     updated_at  = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -44,9 +44,9 @@ WHERE id = :row_id
 LIMIT 1`
 
 type personAttributes struct {
-	MiddleName string `json:"middle_name"`
-	BirthDate  string `json:"birth_date"`
-	Gender     string `json:"gender"`
+	MiddleName string `json:"middle_name,omitempty"`
+	BirthDate  string `json:"birth_date,omitempty"`
+	Gender     string `json:"gender,omitempty"`
 }
 
 func (r *SqliteRepository) upsertPerson(ctx context.Context, a *people.Person) (int64, error) {

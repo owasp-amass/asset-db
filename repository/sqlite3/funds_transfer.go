@@ -25,7 +25,7 @@ VALUES (:unique_id, :amount, :reference_number, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
     amount           = COALESCE(excluded.amount,           fundstransfer.amount),
     reference_number = COALESCE(excluded.reference_number, fundstransfer.reference_number),
-    attrs            = COALESCE(excluded.attrs,            fundstransfer.attrs),
+    attrs            = json_patch(fundstransfer.attrs,     excluded.attrs),
     updated_at       = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -43,10 +43,10 @@ WHERE id = :row_id
 LIMIT 1`
 
 type fundsTransferAttributes struct {
-	Currency       string  `json:"currency"`
-	TransferMethod string  `json:"transfer_method"`
-	ExchangeDate   string  `json:"exchange_date"`
-	ExchangeRate   float64 `json:"exchange_rate"`
+	Currency       string  `json:"currency,omitempty"`
+	TransferMethod string  `json:"transfer_method,omitempty"`
+	ExchangeDate   string  `json:"exchange_date,omitempty"`
+	ExchangeRate   float64 `json:"exchange_rate,omitempty"`
 }
 
 func (r *SqliteRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.FundsTransfer) (int64, error) {

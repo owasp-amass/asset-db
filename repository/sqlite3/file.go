@@ -23,7 +23,7 @@ VALUES (lower(:file_url), :basename, :file_type, :attrs)
 ON CONFLICT(file_url) DO UPDATE SET
     basename   = COALESCE(excluded.basename,  file.basename),
     file_type  = COALESCE(excluded.file_type, file.file_type),
-    attrs      = COALESCE(excluded.attrs,     file.attrs),
+    attrs      = json_patch(file.attrs,       excluded.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :file_url

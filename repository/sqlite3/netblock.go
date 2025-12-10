@@ -23,7 +23,7 @@ const upsertNetblockText = `
 INSERT INTO netblock (netblock_cidr, attrs)
 VALUES (:netblock_cidr, :attrs)
 ON CONFLICT(netblock_cidr) DO UPDATE SET
-  attrs = COALESCE(excluded.attrs, netblock.attrs),
+  attrs      = json_patch(netblock.attrs, excluded.attrs),
   updated_at = CURRENT_TIMESTAMP`
 
 // Param: :netblock_cidr
@@ -41,7 +41,7 @@ WHERE id = :row_id
 LIMIT 1`
 
 type netblockAttributes struct {
-	Type string `json:"type"`
+	Type string `json:"type,omitempty"`
 }
 
 func (r *SqliteRepository) upsertNetblock(ctx context.Context, a *oamnet.Netblock) (int64, error) {

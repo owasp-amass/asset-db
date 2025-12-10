@@ -21,7 +21,7 @@ const upsertFQDNText = `
 INSERT INTO fqdn (fqdn, attrs)
 VALUES (:fqdn_text, :attrs)
 ON CONFLICT(fqdn_norm) DO UPDATE SET 
-	attrs      = COALESCE(excluded.attrs, fqdn.attrs),
+	attrs      = json_patch(fqdn.attrs, excluded.attrs),
 	updated_at = CURRENT_TIMESTAMP`
 
 // Param: :fqdn_text

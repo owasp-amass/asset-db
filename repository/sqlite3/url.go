@@ -24,7 +24,7 @@ INSERT INTO url(raw_url, scheme, attrs)
 VALUES (lower(:raw_url), :scheme, :attrs)
 ON CONFLICT(raw_url) DO UPDATE SET
   scheme     = COALESCE(excluded.scheme, url.scheme),
-  attrs      = COALESCE(excluded.attrs,  url.attrs),
+  attrs      = json_patch(url.attrs,     excluded.attrs),
   updated_at = CURRENT_TIMESTAMP`
 
 // Param: :raw_url
@@ -42,13 +42,13 @@ WHERE id = :row_id
 LIMIT 1`
 
 type urlAttributes struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Path     string `json:"path"`
-	Options  string `json:"options"`
-	Fragment string `json:"fragment"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Host     string `json:"host,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Options  string `json:"options,omitempty"`
+	Fragment string `json:"fragment,omitempty"`
 }
 
 func (r *SqliteRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int64, error) {

@@ -23,7 +23,7 @@ const upsertIPAddressText = `
 INSERT INTO ipaddress(ip_address, attrs)
 VALUES (:ip_address_text, :attrs)
 ON CONFLICT(ip_address) DO UPDATE SET
-	attrs      = COALESCE(excluded.attrs, ipaddress.attrs),
+	attrs      = json_patch(ipaddress.attrs, excluded.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :ip_address_text
@@ -41,7 +41,7 @@ WHERE id = :row_id
 LIMIT 1`
 
 type ipAddressAttributes struct {
-	Type string `json:"type"`
+	Type string `json:"type,omitempty"`
 }
 
 func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddress) (int64, error) {

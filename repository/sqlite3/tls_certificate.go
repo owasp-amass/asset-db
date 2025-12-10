@@ -24,7 +24,7 @@ INSERT INTO tlscertificate(serial_number, subject_common_name, attrs)
 VALUES (:serial_number, :subject_common_name, :attrs)
 ON CONFLICT(serial_number) DO UPDATE SET
     subject_common_name = COALESCE(excluded.subject_common_name, tlscertificate.subject_common_name),
-    attrs               = COALESCE(excluded.attrs,               tlscertificate.attrs),
+    attrs               = json_patch(tlscertificate.attrs,       excluded.attrs),
     updated_at          = CURRENT_TIMESTAMP`
 
 // Param: :serial_number
@@ -42,18 +42,18 @@ WHERE id = :row_id
 LIMIT 1`
 
 type tlsCertificateAttributes struct {
-	Version               string   `json:"version"`
-	IssuerCommonName      string   `json:"issuer_common_name"`
-	NotBefore             string   `json:"not_before"`
-	NotAfter              string   `json:"not_after"`
-	KeyUsage              []string `json:"key_usage"`
-	ExtKeyUsage           []string `json:"ext_key_usage"`
-	SignatureAlgorithm    string   `json:"signature_algorithm"`
-	PublicKeyAlgorithm    string   `json:"public_key_algorithm"`
-	IsCA                  bool     `json:"is_ca"`
-	CRLDistributionPoints []string `json:"crl_distribution_points"`
-	SubjectKeyID          string   `json:"subject_key_id"`
-	AuthorityKeyID        string   `json:"authority_key_id"`
+	Version               string   `json:"version,omitempty"`
+	IssuerCommonName      string   `json:"issuer_common_name,omitempty"`
+	NotBefore             string   `json:"not_before,omitempty"`
+	NotAfter              string   `json:"not_after,omitempty"`
+	KeyUsage              []string `json:"key_usage,omitempty"`
+	ExtKeyUsage           []string `json:"ext_key_usage,omitempty"`
+	SignatureAlgorithm    string   `json:"signature_algorithm,omitempty"`
+	PublicKeyAlgorithm    string   `json:"public_key_algorithm,omitempty"`
+	IsCA                  bool     `json:"is_ca,omitempty"`
+	CRLDistributionPoints []string `json:"crl_distribution_points,omitempty"`
+	SubjectKeyID          string   `json:"subject_key_id,omitempty"`
+	AuthorityKeyID        string   `json:"authority_key_id,omitempty"`
 }
 
 func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.TLSCertificate) (int64, error) {

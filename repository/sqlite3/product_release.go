@@ -23,7 +23,7 @@ const upsertProductReleaseText = `
 INSERT INTO productrelease(release_name, attrs)
 VALUES (:release_name, :attrs)
 ON CONFLICT(release_name_norm) DO UPDATE SET
-    attrs      = COALESCE(excluded.attrs, productrelease.attrs),
+    attrs      = json_patch(productrelease.attrs, excluded.attrs),
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :release_name
@@ -41,7 +41,7 @@ WHERE id = :row_id
 LIMIT 1`
 
 type productReleaseAttributes struct {
-	ReleaseDate string `json:"release_date"`
+	ReleaseDate string `json:"release_date,omitempty"`
 }
 
 func (r *SqliteRepository) upsertProductRelease(ctx context.Context, a *oamplat.ProductRelease) (int64, error) {

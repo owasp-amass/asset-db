@@ -26,7 +26,7 @@ ON CONFLICT(handle) DO UPDATE SET
     asn           = COALESCE(excluded.asn,           autnumrecord.asn),
     record_name   = COALESCE(excluded.record_name,   autnumrecord.record_name),
     whois_server  = COALESCE(excluded.whois_server,  autnumrecord.whois_server),
-	attrs         = COALESCE(excluded.attrs,         autnumrecord.attrs),
+	attrs         = json_patch(autnumrecord.attrs,   excluded.attrs),
     updated_at    = CURRENT_TIMESTAMP`
 
 // Param: :handle
@@ -44,10 +44,10 @@ WHERE id = :row_id
 LIMIT 1`
 
 type autnumAttributes struct {
-	Raw         string   `json:"raw"`
-	Status      []string `json:"status"`
-	CreatedDate string   `json:"created_date"`
-	UpdatedDate string   `json:"updated_date"`
+	Raw         string   `json:"raw,omitempty"`
+	Status      []string `json:"status,omitempty"`
+	CreatedDate string   `json:"created_date,omitempty"`
+	UpdatedDate string   `json:"updated_date,omitempty"`
 }
 
 func (r *SqliteRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.AutnumRecord) (int64, error) {

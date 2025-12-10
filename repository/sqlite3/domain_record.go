@@ -28,7 +28,7 @@ ON CONFLICT(domain) DO UPDATE SET
     extension    = COALESCE(excluded.extension,    domainrecord.extension),
     whois_server = COALESCE(excluded.whois_server, domainrecord.whois_server),
 	object_id    = COALESCE(excluded.object_id,    domainrecord.object_id),
-	attrs        = COALESCE(excluded.attrs,        domainrecord.attrs),
+	attrs        = json_patch(domainrecord.attrs,  excluded.attrs),
     updated_at   = CURRENT_TIMESTAMP`
 
 // Param: :domain_text
@@ -46,11 +46,11 @@ WHERE id = :row_id
 LIMIT 1`
 
 type domainRecordAttributes struct {
-	Raw            string   `json:"raw"`
-	Status         []string `json:"status"`
-	CreatedDate    string   `json:"created_date"`
-	UpdatedDate    string   `json:"updated_date"`
-	ExpirationDate string   `json:"expiration_date"`
+	Raw            string   `json:"raw,omitempty"`
+	Status         []string `json:"status,omitempty"`
+	CreatedDate    string   `json:"created_date,omitempty"`
+	UpdatedDate    string   `json:"updated_date,omitempty"`
+	ExpirationDate string   `json:"expiration_date,omitempty"`
 	DNSSEC         bool     `json:"dnssec"`
 }
 

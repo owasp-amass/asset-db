@@ -25,7 +25,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
 	account_type   = COALESCE(excluded.account_type,   account.account_type),
     username       = COALESCE(excluded.username,       account.username),
     account_number = COALESCE(excluded.account_number, account.account_number),
-    attrs          = COALESCE(excluded.attrs,          account.attrs),
+    attrs          = json_patch(account.attrs,         excluded.attrs),
     updated_at     = CURRENT_TIMESTAMP`
 
 // Param: :unique_id

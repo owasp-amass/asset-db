@@ -27,7 +27,7 @@ ON CONFLICT(unique_id) DO UPDATE SET
     org_name        = COALESCE(excluded.org_name,        organization.org_name),
     jurisdiction    = COALESCE(excluded.jurisdiction,    organization.jurisdiction),
     registration_id = COALESCE(excluded.registration_id, organization.registration_id),
-    attrs           = COALESCE(excluded.attrs,           organization.attrs),
+    attrs           = json_patch(organization.attrs,     excluded.attrs),
     updated_at      = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -45,12 +45,12 @@ WHERE id = :row_id
 LIMIT 1`
 
 type organizationAttributes struct {
-	FoundingDate  string   `json:"founding_date"`
-	Industry      string   `json:"industry"`
-	TargetMarkets []string `json:"target_markets"`
+	FoundingDate  string   `json:"founding_date,omitempty"`
+	Industry      string   `json:"industry,omitempty"`
+	TargetMarkets []string `json:"target_markets,omitempty"`
 	Active        bool     `json:"active"`
-	NonProfit     bool     `json:"non_profit"`
-	Headcount     int      `json:"headcount"`
+	NonProfit     bool     `json:"non_profit,omitempty"`
+	Headcount     int      `json:"headcount,omitempty"`
 }
 
 func (r *SqliteRepository) upsertOrganization(ctx context.Context, a *oamorg.Organization) (int64, error) {

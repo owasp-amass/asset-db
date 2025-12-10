@@ -20,7 +20,7 @@ import (
 const upsertContactRecord = `
 INSERT INTO contactrecord(discovered_at, attrs) VALUES (:discovered_at, :attrs)
 ON CONFLICT(discovered_at) DO UPDATE SET 
-	attrs      = COALESCE(excluded.attrs,       contactrecord.attrs),
+	attrs      = json_patch(contactrecord.attrs, excluded.attrs),
 	updated_at = CURRENT_TIMESTAMP`
 
 // Param: :discovered_at

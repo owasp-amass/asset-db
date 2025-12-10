@@ -23,10 +23,7 @@ DECLARE
     v_etype_id  smallint;
     v_entity_id bigint;
 BEGIN
-    IF _etype_name IS NULL
-       OR _natural_key IS NULL
-       OR _table_name IS NULL
-       OR _row_id IS NULL THEN
+    IF _etype_name IS NULL OR _natural_key IS NULL OR _table_name IS NULL OR _row_id IS NULL THEN
         RAISE EXCEPTION 'entity_upsert requires non-NULL etype_name, natural_key, table_name, row_id';
     END IF;
 
@@ -40,27 +37,22 @@ BEGIN
     END IF;
 
     INSERT INTO public.entity (
-        etype_id,
-        natural_key,
-        table_name,
-        row_id
+        etype_id, natural_key, table_name, row_id
     )
     VALUES (
-        v_etype_id,
-        lower(_natural_key)::citext,
-        lower(_table_name)::citext,
-        _row_id
+        v_etype_id, lower(_natural_key)::citext, lower(_table_name)::citext, _row_id
     )
     ON CONFLICT (etype_id, row_id) DO UPDATE
     SET
         natural_key = EXCLUDED.natural_key,
-        updated_at = now()
+        updated_at  = now()
     RETURNING entity_id INTO v_entity_id;
 
     RETURN v_entity_id;
 END
 $fn$;
 -- +migrate StatementEnd
+
 
 -- ---------------------------------------------------------------------------
 -- EDGE UPSERT + HELPERS
@@ -81,6 +73,7 @@ AS $fn$
 DECLARE
     v_etype_id smallint;
     v_edge_id  bigint;
+    v_content  jsonb;
 BEGIN
     IF _from_entity_id IS NULL OR _to_entity_id IS NULL THEN
         RAISE EXCEPTION 'edge_upsert requires non-NULL from_entity_id and to_entity_id';
@@ -103,27 +96,17 @@ BEGIN
         RAISE EXCEPTION 'edge_type_lu has no entry for name=%', _etype_name;
     END IF;
 
+    v_content := jsonb_strip_nulls(COALESCE(_content, '{}'::jsonb));
+
     INSERT INTO public.edge (
-        etype_id,
-        label,
-        from_entity_id,
-        to_entity_id,
-        content
+        etype_id, label, from_entity_id, to_entity_id, content
     )
     VALUES (
-        v_etype_id,
-        lower(_label)::citext,
-        _from_entity_id,
-        _to_entity_id,
-        COALESCE(_content, '{}'::jsonb)
+        v_etype_id, lower(_label)::citext, _from_entity_id, _to_entity_id, v_content
     )
     ON CONFLICT (etype_id, from_entity_id, to_entity_id, label) DO UPDATE
     SET
-        content    = CASE
-                       WHEN public.edge.content IS DISTINCT FROM COALESCE(EXCLUDED.content, '{}'::jsonb)
-                         THEN public.edge.content || EXCLUDED.content
-                       ELSE public.edge.content
-                     END,
+        content    = public.edge.content || v_content,
         updated_at = now()
     RETURNING edge_id INTO v_edge_id;
 
@@ -131,7 +114,6 @@ BEGIN
 END
 $fn$;
 -- +migrate StatementEnd
-
 
 -- Get edge_id for a given edge-type-name, label and endpoints (if exists)
 -- +migrate StatementBegin
@@ -155,7 +137,6 @@ AS $fn$
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
-
 
 -- Edges updated since a given timestamp (simple utility)
 -- +migrate StatementBegin
@@ -209,16 +190,10 @@ BEGIN
     END IF;
 
     INSERT INTO public.tag (
-        ttype_id,
-        property_name,
-        property_value,
-        content
+        ttype_id, property_name, property_value, content
     )
     VALUES (
-        v_ttype_id,
-        _property_name,
-        _property_value,
-        COALESCE(_content, '{}'::jsonb)
+        v_ttype_id, _property_name, _property_value, COALESCE(_content, '{}'::jsonb)
     )
     ON CONFLICT (ttype_id, property_name, property_value) DO UPDATE
     SET
@@ -234,7 +209,6 @@ BEGIN
 END
 $fn$;
 -- +migrate StatementEnd
-
 
 -- Get an existing tag_id by tag-type-name and property (NULL if missing)
 -- +migrate StatementBegin
@@ -256,7 +230,6 @@ AS $fn$
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
-
 
 -- Tags updated since a given timestamp
 -- +migrate StatementBegin
@@ -311,12 +284,10 @@ BEGIN
 
     -- 2) Map tag to entity
     INSERT INTO public.entity_tag_map (
-        entity_id,
-        tag_id
+        entity_id, tag_id
     )
     VALUES (
-        _entity_id,
-        v_tag_id
+        _entity_id, v_tag_id
     )
     ON CONFLICT (entity_id, tag_id) DO UPDATE
     SET
@@ -383,12 +354,10 @@ BEGIN
 
     -- 2) Map tag to edge
     INSERT INTO public.edge_tag_map (
-        edge_id,
-        tag_id
+        edge_id, tag_id
     )
     VALUES (
-        _edge_id,
-        v_tag_id
+        _edge_id, v_tag_id
     )
     ON CONFLICT (edge_id, tag_id) DO UPDATE
     SET
@@ -399,7 +368,6 @@ BEGIN
 END
 $fn$;
 -- +migrate StatementEnd
-
 
 -- Simple helper: get tags mapped to an edge
 -- +migrate StatementBegin
@@ -416,7 +384,6 @@ AS $fn$
     ORDER BY t.tag_id;
 $fn$;
 -- +migrate StatementEnd
-
 
 COMMIT;
 

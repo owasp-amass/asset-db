@@ -33,7 +33,7 @@ ON CONFLICT(handle) DO UPDATE SET
     parent_handle 	= COALESCE(excluded.parent_handle, ipnetrecord.parent_handle),
     start_address 	= COALESCE(excluded.start_address, ipnetrecord.start_address),
     end_address   	= COALESCE(excluded.end_address,   ipnetrecord.end_address),
-	attrs           = COALESCE(excluded.attrs,         ipnetrecord.attrs),
+	attrs           = json_patch(ipnetrecord.attrs,    excluded.attrs),
     updated_at    	= CURRENT_TIMESTAMP`
 
 // Param: :handle
@@ -52,13 +52,13 @@ WHERE id = :row_id
 LIMIT 1`
 
 type ipnetRecordAttributes struct {
-	Raw         string   `json:"raw"`
-	Type        string   `json:"type"`
-	Method      string   `json:"method"`
-	Status      []string `json:"status"`
-	CreatedDate string   `json:"created_date"`
-	UpdatedDate string   `json:"updated_date"`
-	Country     string   `json:"country"`
+	Raw         string   `json:"raw,omitempty"`
+	Type        string   `json:"type,omitempty"`
+	Method      string   `json:"method,omitempty"`
+	Status      []string `json:"status,omitempty"`
+	CreatedDate string   `json:"created_date,omitempty"`
+	UpdatedDate string   `json:"updated_date,omitempty"`
+	Country     string   `json:"country,omitempty"`
 }
 
 func (r *SqliteRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IPNetRecord) (int64, error) {

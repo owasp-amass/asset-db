@@ -24,7 +24,7 @@ INSERT INTO service(unique_id, service_type, attrs)
 VALUES (:unique_id, :service_type, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
     service_type = COALESCE(excluded.service_type, service.service_type),
-    attrs        = COALESCE(excluded.attrs,        service.attrs),
+    attrs        = json_patch(service.attrs,       excluded.attrs),
     updated_at   = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -42,9 +42,9 @@ WHERE id = :row_id
 LIMIT 1`
 
 type serviceAttributes struct {
-	Output     string              `json:"output"`
-	OutputLen  int                 `json:"output_length"`
-	Attributes map[string][]string `json:"attributes"`
+	Output     string              `json:"output,omitempty"`
+	OutputLen  int                 `json:"output_length,omitempty"`
+	Attributes map[string][]string `json:"attributes,omitempty"`
 }
 
 func (r *SqliteRepository) upsertService(ctx context.Context, a *oamplat.Service) (int64, error) {

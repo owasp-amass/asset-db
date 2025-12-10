@@ -20,7 +20,7 @@ import (
 const upsertAutonomousSystemText = `
 INSERT INTO autonomoussystem(asn, attrs) VALUES (:asn, :attrs)
 ON CONFLICT(asn) DO UPDATE SET 
-	attrs      = COALESCE(excluded.attrs,         autonomoussystem.attrs),
+	attrs      = json_patch(autonomoussystem.attrs, excluded.attrs),
 	updated_at = CURRENT_TIMESTAMP`
 
 // Param: :asn

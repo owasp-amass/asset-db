@@ -32,7 +32,7 @@ ON CONFLICT(street_address_norm) DO UPDATE SET
     postal_code     = COALESCE(excluded.postal_code,     location.postal_code),
     street_name     = COALESCE(excluded.street_name,     location.street_name),
     building_number = COALESCE(excluded.building_number, location.building_number),
-    attrs           = COALESCE(excluded.attrs,           location.attrs),
+    attrs           = json_patch(location.attrs,         excluded.attrs),
     updated_at      = CURRENT_TIMESTAMP`
 
 // Param: :street_address
@@ -51,8 +51,8 @@ WHERE id = :row_id
 LIMIT 1`
 
 type locationAttributes struct {
-	POBox string `json:"po_box"`
-	GLN   int    `json:"gln"`
+	POBox string `json:"po_box,omitempty"`
+	GLN   int    `json:"gln,omitempty"`
 }
 
 func (r *SqliteRepository) upsertLocation(ctx context.Context, a *contact.Location) (int64, error) {

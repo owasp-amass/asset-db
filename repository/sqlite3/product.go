@@ -25,7 +25,7 @@ VALUES (:unique_id, :product_name, :product_type, :attrs)
 ON CONFLICT(unique_id) DO UPDATE SET
     product_name        = COALESCE(excluded.product_name,        product.product_name),
     product_type        = COALESCE(excluded.product_type,        product.product_type),
-    attrs               = COALESCE(excluded.attrs,               product.attrs),
+    attrs               = json_patch(product.attrs,              excluded.attrs),
     updated_at          = CURRENT_TIMESTAMP`
 
 // Param: :unique_id
@@ -43,9 +43,9 @@ WHERE id = :row_id
 LIMIT 1`
 
 type productAttributes struct {
-	Category        string `json:"category"`
-	Description     string `json:"description"`
-	CountryOfOrigin string `json:"country_of_origin"`
+	Category        string `json:"category,omitempty"`
+	Description     string `json:"description,omitempty"`
+	CountryOfOrigin string `json:"country_of_origin,omitempty"`
 }
 
 func (r *SqliteRepository) upsertProduct(ctx context.Context, a *oamplat.Product) (int64, error) {
