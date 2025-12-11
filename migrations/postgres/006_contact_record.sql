@@ -37,7 +37,7 @@ BEGIN
     RETURN public.entity_upsert(
         _etype_name  := 'contactrecord'::citext,
         _natural_key := v_discovered_at::citext,
-        _table_name  := 'contactrecord'::citext,
+        _table_name  := 'public.contactrecord'::citext,
         _row_id      := v_row
     );
 END
@@ -66,7 +66,7 @@ BEGIN
     )
     ON CONFLICT (discovered_at) DO UPDATE
     SET
-        attrs      = public.contactrecord.attrs || _attrs,
+        attrs      = contactrecord.attrs || COALESCE(EXCLUDED.attrs, '{}'::jsonb),
         updated_at = now()
     RETURNING id INTO v_id;
 

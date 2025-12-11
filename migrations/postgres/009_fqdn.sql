@@ -8,20 +8,47 @@
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.fqdn (
-  id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
   updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  fqdn citext NOT NULL UNIQUE
+  fqdn       citext NOT NULL UNIQUE,
+  attrs      jsonb NOT NULL DEFAULT '{}'::jsonb
 );
-CREATE INDEX IF NOT EXISTS idx_fqdn_created_at
-  ON public.fqdn(created_at);
-CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at
-  ON public.fqdn(updated_at);
+CREATE INDEX IF NOT EXISTS idx_fqdn_created_at ON public.fqdn (created_at);
+CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at ON public.fqdn (updated_at);
+
+-- Upsert an FQDN AND its corresponding Entity.
+-- Returns the entity_id.
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.fqdn_upsert_entity_json(_rec jsonb) 
+RETURNS bigint
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+    v_fqdn text;
+    v_row  bigint;
+BEGIN
+    v_fqdn := (_rec->>'fqdn');
+
+    -- 1) Upsert into fqdn.
+    v_row := public.fqdn_upsert_json(_rec);
+
+    -- 2) Upsert into entity via the generic helper.
+    RETURN public.entity_upsert(
+        _etype_name  := 'fqdn'::citext,
+        _natural_key := v_fqdn::citext,
+        _table_name  := 'public.fqdn'::citext,
+        _row_id      := v_row
+    );
+END
+$fn$;
+-- +migrate StatementEnd
 
 -- Upsert by FQDN (scalar param). Returns the row id.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.fqdn_upsert(
-    _fqdn text
+    _fqdn  text,
+    _attrs jsonb DEFAULT '{}'::jsonb
 ) RETURNS bigint
 LANGUAGE plpgsql
 AS $fn$
@@ -33,12 +60,13 @@ BEGIN
     END IF;
 
     INSERT INTO public.fqdn (
-        fqdn
+        fqdn, attrs
     ) VALUES (
-        lower(_fqdn)
+        lower(_fqdn)::citext, _attrs
     )
     ON CONFLICT (fqdn) DO UPDATE
     SET
+        attrs      = fqdn.attrs || COALESCE(EXCLUDED.attrs, '{}'::jsonb),
         updated_at = now()
     RETURNING id INTO v_id;
 
@@ -56,39 +84,23 @@ AS $fn$
 DECLARE
     v_fqdn text;
 BEGIN
-    v_fqdn := _rec->>'fqdn';
+    v_fqdn := NULLIF(_rec->>'fqdn', '');
 
     RETURN public.fqdn_upsert(v_fqdn);
 END
 $fn$;
 -- +migrate StatementEnd
 
--- Get the id by fqdn (NULL if not found)
+-- Return the full row by id
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fqdn_get_id_by_fqdn(
-    _fqdn text
-) RETURNS bigint
+CREATE OR REPLACE FUNCTION public.fqdn_get_by_id(_row_id bigint)
+RETURNS public.fqdn
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id
+    SELECT id, created_at, updated_at, fqdn, attrs
     FROM public.fqdn
-    WHERE fqdn = lower(_fqdn)::citext
-    LIMIT 1;
-$fn$;
--- +migrate StatementEnd
-
--- Return the full row by fqdn
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fqdn_get_by_fqdn(
-    _fqdn text
-) RETURNS public.fqdn
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT *
-    FROM public.fqdn
-    WHERE fqdn = lower(_fqdn)::citext
+    WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
@@ -101,110 +113,10 @@ CREATE OR REPLACE FUNCTION public.fqdn_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
+    SELECT id, created_at, updated_at, fqdn, attrs
     FROM public.fqdn
     WHERE updated_at >= _ts
     ORDER BY updated_at ASC, id ASC;
-$fn$;
--- +migrate StatementEnd
-
--- Upsert an FQDN AND its corresponding Entity.
--- Returns the entity_id.
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fqdn_upsert_entity(
-    _fqdn        text,
-    _extra_attrs jsonb  DEFAULT '{}'::jsonb,       -- for caller-provided extra attributes
-    _etype_name  citext DEFAULT 'fqdn'::citext
-) RETURNS bigint
-LANGUAGE plpgsql
-AS $fn$
-DECLARE
-    v_row       public.fqdn%ROWTYPE;
-    v_entity_id bigint;
-    v_attrs     jsonb;
-BEGIN
-    IF _fqdn IS NULL THEN
-        RAISE EXCEPTION 'fqdn_upsert_entity requires non-NULL fqdn';
-    END IF;
-
-    -- 1) Upsert into fqdn by fqdn.
-    INSERT INTO public.fqdn (
-        fqdn
-    ) VALUES (
-        lower(_fqdn)
-    )
-    ON CONFLICT (fqdn) DO UPDATE
-    SET
-        updated_at = now()
-    RETURNING * INTO v_row;
-
-    -- 2) Build attrs from the fqdn plus any caller-supplied extras.
-    v_attrs := jsonb_strip_nulls(
-        jsonb_build_object(
-            'fqdn', v_row.fqdn
-        )
-    ) || COALESCE(_extra_attrs, '{}'::jsonb);
-
-    -- 3) Upsert into entity via the generic helper (entity_upsert).
-    v_entity_id := public.entity_upsert(
-        _etype_name  := _etype_name,                 -- e.g. 'fqdn'
-        _natural_key := v_row.fqdn::citext,          -- canonical key
-        _table_name  := 'fqdn'::citext,
-        _row_id      := v_row.id,
-        _attrs       := v_attrs
-    );
-
-    RETURN v_entity_id;
-END
-$fn$;
--- +migrate StatementEnd
-
--- Map fqdn -> entity_id (if present)
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fqdn_get_entity_id_by_fqdn(
-    _fqdn text
-) RETURNS bigint
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT e.entity_id
-    FROM public.fqdn f
-    JOIN public.entity e
-      ON e.table_name = 'fqdn'
-     AND e.row_id     = f.id
-    WHERE f.fqdn = lower(_fqdn)::citext
-    ORDER BY e.entity_id
-    LIMIT 1;
-$fn$;
--- +migrate StatementEnd
-
--- Get Entity+FQDN by fqdn
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fqdn_get_with_entity_by_fqdn(
-    _fqdn text
-) RETURNS TABLE (
-    entity_id    bigint,
-    etype_id     smallint,
-    natural_key  citext,
-    entity_attrs jsonb,
-    fqdn_row     public.fqdn
-)
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT
-        e.entity_id,
-        e.etype_id,
-        e.natural_key,
-        e.attrs,
-        f
-    FROM public.fqdn f
-    JOIN public.entity e
-      ON e.table_name = 'fqdn'
-     AND e.row_id     = f.id
-    WHERE f.fqdn = lower(_fqdn)::citext
-    ORDER BY e.entity_id
-    LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
@@ -212,15 +124,12 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.fqdn_upsert(text);
-DROP FUNCTION IF EXISTS public.fqdn_upsert_json(jsonb);
-DROP FUNCTION IF EXISTS public.fqdn_get_id_by_fqdn(text);
-DROP FUNCTION IF EXISTS public.fqdn_get_by_fqdn(text);
 DROP FUNCTION IF EXISTS public.fqdn_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.fqdn_get_by_id(bigint);
 
-DROP FUNCTION IF EXISTS public.fqdn_upsert_entity(text, jsonb, citext);
-DROP FUNCTION IF EXISTS public.fqdn_get_entity_id_by_fqdn(text);
-DROP FUNCTION IF EXISTS public.fqdn_get_with_entity_by_fqdn(text);
+DROP FUNCTION IF EXISTS public.fqdn_upsert_json(jsonb);
+DROP FUNCTION IF EXISTS public.fqdn_upsert(text, jsonb);
+DROP FUNCTION IF EXISTS public.fqdn_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_fqdn_updated_at;
 DROP INDEX IF EXISTS idx_fqdn_created_at;

@@ -43,7 +43,7 @@ BEGIN
     RETURN public.entity_upsert(
         _etype_name  := 'account'::citext,
         _natural_key := v_unique_id::citext,
-        _table_name  := 'account'::citext,
+        _table_name  := 'public.account'::citext,
         _row_id      := v_row
     );
 END
@@ -78,7 +78,7 @@ BEGIN
         account_type   = COALESCE(EXCLUDED.account_type,   account.account_type),
         username       = COALESCE(EXCLUDED.username,       account.username),
         account_number = COALESCE(EXCLUDED.account_number, account.account_number),
-        attrs          = public.account.attrs || _attrs,
+        attrs          = account.attrs || COALESCE(EXCLUDED.attrs, '{}'::jsonb),
         updated_at     = now()
     RETURNING id INTO v_id;
 

@@ -42,7 +42,7 @@ BEGIN
     RETURN public.entity_upsert(
         _etype_name  := 'autnumrecord'::citext,
         _natural_key := v_handle::citext,
-        _table_name  := 'autnumrecord'::citext,
+        _table_name  := 'public.autnumrecord'::citext,
         _row_id      := v_row
     );
 END
@@ -88,7 +88,7 @@ BEGIN
             asn           = _asn,
             record_name   = COALESCE(_record_name,  record_name),
             whois_server  = COALESCE(_whois_server, whois_server),
-            attrs         = attrs || _attrs,
+            attrs         = attrs || COALESCE(_attrs, '{}'::jsonb),
             updated_at    = now()
         WHERE id = v_id_handle;
 
@@ -107,7 +107,7 @@ BEGIN
             asn           = _asn,
             record_name   = COALESCE(_record_name,  record_name),
             whois_server  = COALESCE(_whois_server, whois_server),
-            attrs         = attrs || _attrs,
+            attrs         = attrs || COALESCE(_attrs, '{}'::jsonb),
             updated_at    = now()
         WHERE id = v_id;
 

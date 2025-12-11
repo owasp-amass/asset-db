@@ -37,7 +37,7 @@ BEGIN
     RETURN public.entity_upsert(
         _etype_name  := 'autonomoussystem'::citext,
         _natural_key := v_asn::text::citext,
-        _table_name  := 'autonomoussystem'::citext,
+        _table_name  := 'public.autonomoussystem'::citext,
         _row_id      := v_row
     );
 END
@@ -66,7 +66,7 @@ BEGIN
     )
     ON CONFLICT (asn) DO UPDATE
     SET
-        attrs      = public.autonomoussystem.attrs || _attrs,
+        attrs      = autonomoussystem.attrs || COALESCE(EXCLUDED.attrs, '{}'::jsonb),
         updated_at = now()
     RETURNING id INTO v_id;
 

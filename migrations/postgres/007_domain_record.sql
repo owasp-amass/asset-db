@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.domainrecord (
   punycode        text,
   extension       text,
   whois_server    citext,
-  object_id       text
+  object_id       text,
   attrs           jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_domainrecord_created_at ON public.domainrecord (created_at);
@@ -47,7 +47,7 @@ BEGIN
     RETURN public.entity_upsert(
         _etype_name  := 'domainrecord'::citext,
         _natural_key := v_domain::citext,
-        _table_name  := 'domainrecord'::citext,
+        _table_name  := 'public.domainrecord'::citext,
         _row_id      := v_row
     );
 END
@@ -86,7 +86,7 @@ BEGIN
         extension       = COALESCE(EXCLUDED.extension,    domainrecord.extension),
         whois_server    = COALESCE(EXCLUDED.whois_server, domainrecord.whois_server),
         object_id       = COALESCE(EXCLUDED.object_id,    domainrecord.object_id),
-        attrs           = domainrecord.attrs || _attrs,
+        attrs           = domainrecord.attrs || COALESCE(EXCLUDED.attrs, '{}'::jsonb),
         updated_at      = now()
     RETURNING id INTO v_id;
 
