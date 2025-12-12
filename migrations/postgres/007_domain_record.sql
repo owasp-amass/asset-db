@@ -145,7 +145,7 @@ BEGIN
             'created_date',    v_created_date,
             'updated_date',    v_updated_date,
             'expiration_date', v_expiration_date,
-            'dnssec',          v_dnssec,
+            'dnssec',          v_dnssec
         )
     ) || '{}'::jsonb;
 
