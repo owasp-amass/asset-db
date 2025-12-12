@@ -44,6 +44,7 @@ LIMIT 1`
 type phoneAttributes struct {
 	Raw           string `json:"raw,omitempty"`
 	Type          string `json:"type,omitempty"`
+	Extension     string `json:"ext,omitempty"`
 	CountryAbbrev string `json:"country_abbrev,omitempty"`
 }
 
@@ -61,6 +62,7 @@ func (r *SqliteRepository) upsertPhone(ctx context.Context, a *contact.Phone) (i
 	attrs := phoneAttributes{
 		Raw:           a.Raw,
 		Type:          a.Type,
+		Extension:     a.Ext,
 		CountryAbbrev: a.CountryAbbrev,
 	}
 	attrsJSON, err := json.Marshal(attrs)
