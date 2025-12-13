@@ -158,9 +158,8 @@ func (r *SqliteRepository) loadEntityCore(ctx context.Context, eid int64) (strin
 }
 
 func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, eid int64, etype string) (*dbt.Entity, error) {
-	table := etype
-	if table == "" {
-		return nil, fmt.Errorf("no table mapping for entity type %q", etype)
+	if etype == "" {
+		return nil, fmt.Errorf("invalid entity type %q", etype)
 	}
 
 	ch := make(chan *rowReadResult, 1)
@@ -182,13 +181,13 @@ func (r *SqliteRepository) fetchCompleteRepoEntity(ctx context.Context, eid int6
 		return nil, err
 	}
 
-	return r.fetchEntityAssetByTableID(ctx, eid, table, rid)
+	return r.fetchEntityAssetByTableID(ctx, eid, etype, rid)
 }
 
 // fetchEntityAssetByTableID selects the concrete asset row and scans into its struct.
 // Statements are prepared lazily and cached per table name.
-func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity_id int64, table string, id int64) (*dbt.Entity, error) {
-	switch table {
+func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity_id int64, etype string, id int64) (*dbt.Entity, error) {
+	switch etype {
 	case "account":
 		return r.fetchAccountByRowID(ctx, entity_id, id)
 	case "autnumrecord":
@@ -233,5 +232,5 @@ func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity
 		return r.fetchURLByRowID(ctx, entity_id, id)
 	}
 
-	return nil, fmt.Errorf("unhandled table %q", table)
+	return nil, fmt.Errorf("unhandled entity type %q", etype)
 }

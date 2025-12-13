@@ -161,8 +161,6 @@ JOIN ` + table + ` a ON a.id = e.row_id`)
 // It honors case-insensitive matching for columns that already use lower() in colMap.
 func buildWhere(table string, reg regEntry, since time.Time, filters dbt.ContentFilters) (string, []any, error) {
 	if len(filters) == 0 {
-		// No filters — allow full scan over that table via entity (but still ordered by updated_at).
-		// Usually caller should set a LIMIT in this case.
 		return "", nil, errors.New("no filters provided")
 	}
 
