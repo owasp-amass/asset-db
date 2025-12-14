@@ -6,6 +6,33 @@
 
 BEGIN;
 
+CREATE OR REPLACE FUNCTION public.null_safe_attrs(p jsonb)
+RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
+  SELECT COALESCE(p, '{}'::jsonb)
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_entity_type_id(p_name text)
+RETURNS smallint LANGUAGE plpgsql AS $$
+DECLARE v_id smallint;
+BEGIN
+  SELECT id INTO v_id FROM public.entity_type_lu WHERE name = p_name;
+  IF v_id IS NULL THEN
+    INSERT INTO public.entity_type_lu(name) VALUES (p_name) RETURNING id INTO v_id;
+  END IF;
+  RETURN v_id;
+END$$;
+
+CREATE OR REPLACE FUNCTION public.get_edge_type_id(p_name text)
+RETURNS smallint LANGUAGE plpgsql AS $$
+DECLARE v_id smallint;
+BEGIN
+  SELECT id INTO v_id FROM public.edge_type_lu WHERE name = p_name;
+  IF v_id IS NULL THEN
+    INSERT INTO public.edge_type_lu(name) VALUES (p_name) RETURNING id INTO v_id;
+  END IF;
+  RETURN v_id;
+END$$;
+
 -- ---------------------------------------------------------------------------
 -- ENTITY UPSERT + HELPERS
 -- ---------------------------------------------------------------------------
@@ -404,3 +431,7 @@ DROP FUNCTION IF EXISTS public.tag_upsert(text, text, text, jsonb);
 DROP FUNCTION IF EXISTS public.edge_updated_since(timestamp without time zone);
 DROP FUNCTION IF EXISTS public.edge_get_id(text, text, bigint, bigint);
 DROP FUNCTION IF EXISTS public.edge_upsert(text, text, bigint, bigint);
+
+DROP FUNCTION IF EXISTS public.get_edge_type_id(text);
+DROP FUNCTION IF EXISTS public.get_entity_type_id(text);
+DROP FUNCTION IF EXISTS public.null_safe_attrs(jsonb);

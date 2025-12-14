@@ -131,24 +131,82 @@ RETURNS public.product
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, unique_id, product_name, product_type, attrs
+    SELECT *
     FROM public.product
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
+-- Rows matching the provided filters and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.product_find_by_content(
+    _filters jsonb, 
+    _since   timestamp without time zone DEFAULT NULL
+) RETURNS SETOF public.product
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_unique_id    text;
+    v_product_name text;
+    v_product_type text;
+    v_count        integer := 0;
+    v_params       text[]  := array[]::text[];
+    v_sql          text    := 'SELECT * FROM public.product WHERE TRUE';
+BEGIN
+    -- 1) Extract filters from JSONB
+    v_unique_id      := NULLIF(_filters->>'unique_id', '');
+    v_product_name   := NULLIF(_filters->>'product_name', '');
+    v_product_type   := NULLIF(_filters->>'product_type', '');
+
+    -- 2) Build the params array from the filters
+    IF v_unique_id IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_unique_id);
+        v_sql    := v_sql || format(' AND %I = $%s', 'unique_id', v_count);
+    END IF;
+
+    IF v_product_name IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_product_name);
+        v_sql    := v_sql || format(' AND %I = $%s', 'product_name', v_count);
+    END IF;
+
+    IF v_product_type IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_product_type);
+        v_sql    := v_sql || format(' AND %I = $%s', 'product_type', v_count);
+    END IF;
+
+    IF v_count = 0 THEN
+        RAISE EXCEPTION 'product_find_by_content requires at least one filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since::text);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+
+    -- 4) Execute dynamic SQL and return results
+    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.product_updated_since(
-    _ts timestamp without time zone
-) RETURNS SETOF public.product
+CREATE OR REPLACE FUNCTION public.product_updated_since(_since timestamp without time zone) 
+RETURNS SETOF public.product
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, unique_id, product_name, product_type, attrs
+    SELECT *
     FROM public.product
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd
@@ -158,6 +216,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.product_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.product_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.product_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.product_upsert_json(jsonb);

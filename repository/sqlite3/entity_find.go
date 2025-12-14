@@ -351,10 +351,11 @@ var contentRegistry = map[string]regEntry{
 		},
 	},
 	"identifier": {
-		keys: []string{"id", "id_type"},
+		keys: []string{"unique_id", "id", "id_type"},
 		colMap: map[string]string{
-			"id":      "a.unique_id",
-			"id_type": "a.id_type",
+			"unique_id": "a.unique_id",
+			"id":        "a.id_value",
+			"id_type":   "a.id_type",
 		},
 	},
 	"ipaddress": {

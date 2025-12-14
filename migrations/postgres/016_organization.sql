@@ -171,24 +171,98 @@ RETURNS public.organization
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, unique_id, org_name, legal_name, jurisdiction, registration_id, attrs
+    SELECT *
     FROM public.organization
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
+-- Rows matching the provided filters and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.organization_find_by_content(
+    _filters jsonb, 
+    _since   timestamp without time zone DEFAULT NULL
+) RETURNS SETOF public.organization
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_unique_id       text;
+    v_legal_name      text;
+    v_org_name        text;
+    v_jurisdiction    text;
+    v_registration_id text;
+    v_count           integer := 0;
+    v_params          text[]  := array[]::text[];
+    v_sql             text    := 'SELECT * FROM public.organization WHERE TRUE';
+BEGIN
+    -- 1) Extract filters from JSONB
+    v_unique_id       := NULLIF(_filters->>'unique_id', '');
+    v_legal_name      := NULLIF(_filters->>'legal_name', '');
+    v_org_name        := NULLIF(_filters->>'name', '');
+    v_jurisdiction    := NULLIF(_filters->>'jurisdiction', '');
+    v_registration_id := NULLIF(_filters->>'registration_id', '');
+
+    -- 2) Build the params array from the filters
+    IF v_unique_id IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_unique_id);
+        v_sql    := v_sql || format(' AND %I = $%s', 'unique_id', v_count);
+    END IF;
+
+    IF v_legal_name IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_legal_name);
+        v_sql    := v_sql || format(' AND %I = $%s', 'legal_name', v_count);
+    END IF;
+
+    IF v_org_name IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_org_name);
+        v_sql    := v_sql || format(' AND %I = $%s', 'org_name', v_count);
+    END IF;
+
+    IF v_jurisdiction IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_jurisdiction);
+        v_sql    := v_sql || format(' AND %I = $%s', 'jurisdiction', v_count);
+    END IF;
+
+    IF v_registration_id IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_registration_id);
+        v_sql    := v_sql || format(' AND %I = $%s', 'registration_id', v_count);
+    END IF;
+
+    IF v_count = 0 THEN
+        RAISE EXCEPTION 'organization_find_by_content requires at least one filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since::text);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+
+    -- 4) Execute dynamic SQL and return results
+    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.organization_updated_since(
-    _ts timestamp without time zone
-) RETURNS SETOF public.organization
+CREATE OR REPLACE FUNCTION public.organization_updated_since(_since timestamp without time zone) 
+RETURNS SETOF public.organization
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, unique_id, org_name, legal_name, jurisdiction, registration_id, attrs
+    SELECT *
     FROM public.organization
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd
@@ -198,6 +272,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.organization_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.organization_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.organization_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.organization_upsert_json(jsonb);

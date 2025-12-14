@@ -180,28 +180,138 @@ RETURNS public.location
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, city, unit, 
-    start_address, country, building, province, locality, 
-    postal_code, street_name, building_number, attrs
+    SELECT *
     FROM public.location
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
+-- Rows matching the provided filters and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.alocation_find_by_content(
+    _filters jsonb, 
+    _since   timestamp without time zone DEFAULT NULL
+) RETURNS SETOF public.location
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_street_address  text;
+    v_city            text;
+    v_country         text;
+    v_unit            text;
+    v_building        text;
+    v_province        text;
+    v_locality        text;
+    v_postal_code     text;
+    v_street_name     text;
+    v_building_number text;
+    v_count           integer := 0;
+    v_params          text[]  := array[]::text[];
+    v_sql             text    := 'SELECT * FROM public.location WHERE TRUE';
+BEGIN
+    -- 1) Extract filters from JSONB
+    v_street_address  := NULLIF(_filters->>'address', '');
+    v_city            := NULLIF(_filters->>'city', '');
+    v_country         := NULLIF(_filters->>'country', '');
+    v_unit            := NULLIF(_filters->>'unit', '');
+    v_building        := NULLIF(_filters->>'building', '');
+    v_province        := NULLIF(_filters->>'province', '');
+    v_locality        := NULLIF(_filters->>'locality', '');
+    v_postal_code     := NULLIF(_filters->>'postal_code', '');
+    v_street_name     := NULLIF(_filters->>'street_name', '');
+    v_building_number := NULLIF(_filters->>'building_number', '');
+
+    -- 2) Build the params array from the filters
+    IF v_street_address IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_street_address);
+        v_sql    := v_sql || format(' AND %I = $%s', 'street_address', v_count);
+    END IF;
+
+    IF v_city IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_city);
+        v_sql    := v_sql || format(' AND %I = $%s', 'city', v_count);
+    END IF;
+
+    IF v_country IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_country);
+        v_sql    := v_sql || format(' AND %I = $%s', 'country', v_count);
+    END IF;
+
+    IF v_unit IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_unit);
+        v_sql    := v_sql || format(' AND %I = $%s', 'unit', v_count);
+    END IF;
+
+    IF v_building IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_building);
+        v_sql    := v_sql || format(' AND %I = $%s', 'building', v_count);
+    END IF;
+
+    IF v_province IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_province);
+        v_sql    := v_sql || format(' AND %I = $%s', 'province', v_count);
+    END IF;
+
+    IF v_locality IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_locality);
+        v_sql    := v_sql || format(' AND %I = $%s', 'locality', v_count);
+    END IF;
+
+    IF v_postal_code IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_postal_code);
+        v_sql    := v_sql || format(' AND %I = $%s', 'postal_code', v_count);
+    END IF;
+
+    IF v_street_name IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_street_name);
+        v_sql    := v_sql || format(' AND %I = $%s', 'street_name', v_count);
+    END IF;
+
+    IF v_building_number IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_building_number);
+        v_sql    := v_sql || format(' AND %I = $%s', 'building_number', v_count);
+    END IF;
+
+    IF v_count = 0 THEN
+        RAISE EXCEPTION 'location_find_by_content requires at least one filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since::text);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+
+    -- 4) Execute dynamic SQL and return results
+    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.location_updated_since(
-    _ts timestamp without time zone
-) RETURNS SETOF public.location
+CREATE OR REPLACE FUNCTION public.location_updated_since(_since timestamp without time zone) 
+RETURNS SETOF public.location
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, city, unit, 
-    start_address, country, building, province, locality, 
-    postal_code, street_name, building_number, attrs
+    SELECT *
     FROM public.location
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd
@@ -211,6 +321,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.location_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.location_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.location_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.location_upsert_json(jsonb);

@@ -444,11 +444,14 @@ CREATE TABLE IF NOT EXISTS identifier (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   unique_id  TEXT NOT NULL UNIQUE,
+  id_value   TEXT NOT NULL,
   id_type    TEXT NOT NULL,
-  attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs))
+  attrs      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(attrs)),
+  UNIQUE(id_value, id_type)
 );
 CREATE INDEX IF NOT EXISTS idx_identifier_created_at ON identifier (created_at);
 CREATE INDEX IF NOT EXISTS idx_identifier_updated_at ON identifier (updated_at);
+CREATE INDEX IF NOT EXISTS idx_identifier_id_value ON identifier (id_value);
 CREATE INDEX IF NOT EXISTS idx_identifier_id_type ON identifier (id_type);
 
 -- +migrate StatementBegin
@@ -1016,6 +1019,7 @@ DROP TABLE IF EXISTS ipaddress;
 DROP TRIGGER IF EXISTS trg_identifier_au;
 DROP TRIGGER IF EXISTS trg_identifier_ai;
 DROP INDEX IF EXISTS idx_identifier_id_type;
+DROP INDEX IF EXISTS idx_identifier_id_value;
 DROP INDEX IF EXISTS idx_identifier_updated_at;
 DROP INDEX IF EXISTS idx_identifier_created_at;
 DROP TABLE IF EXISTS identifier;

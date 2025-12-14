@@ -144,24 +144,74 @@ RETURNS public.url
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, raw_url, scheme, attrs
+    SELECT *
     FROM public.url
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
+-- Rows matching the provided filters and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.url_find_by_content(
+    _filters jsonb, 
+    _since   timestamp without time zone DEFAULT NULL
+) RETURNS SETOF public.url
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_url    text;
+    v_scheme text;
+    v_count  integer := 0;
+    v_params text[]  := array[]::text[];
+    v_sql    text    := 'SELECT * FROM public.url WHERE TRUE';
+BEGIN
+    -- 1) Extract filters from JSONB
+    v_url    := NULLIF(_filters->>'url', '');
+    v_scheme := NULLIF(_filters->>'scheme', '');
+
+    -- 2) Build the params array from the filters
+    IF v_url IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_url);
+        v_sql    := v_sql || format(' AND %I = $%s', 'raw_url', v_count);
+    END IF;
+
+    IF v_scheme IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_scheme);
+        v_sql    := v_sql || format(' AND %I = $%s', 'scheme', v_count);
+    END IF;
+
+    IF v_count = 0 THEN
+        RAISE EXCEPTION 'url_find_by_content requires at least one filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since::text);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+
+    -- 4) Execute dynamic SQL and return results
+    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.url_updated_since(
-    _ts timestamp without time zone
-) RETURNS SETOF public.url
+CREATE OR REPLACE FUNCTION public.url_updated_since(_since timestamp without time zone) 
+RETURNS SETOF public.url
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, raw_url, scheme, attrs
+    SELECT *
     FROM public.url
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd
@@ -171,6 +221,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.url_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.url_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.url_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.url_upsert_json(jsonb);

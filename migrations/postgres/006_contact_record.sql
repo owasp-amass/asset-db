@@ -150,15 +150,14 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.contactrecord_updated_since(
-    _ts timestamp without time zone
-) RETURNS SETOF public.contactrecord
+CREATE OR REPLACE FUNCTION public.contactrecord_updated_since(_since timestamp without time zone) 
+RETURNS SETOF public.contactrecord
 LANGUAGE sql
 STABLE
 AS $fn$
     SELECT *
     FROM public.contactrecord
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd

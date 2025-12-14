@@ -150,9 +150,8 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(
-    _since timestamp without time zone
-) RETURNS SETOF public.autonomoussystem
+CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(_since timestamp without time zone) 
+RETURNS SETOF public.autonomoussystem
 LANGUAGE sql
 STABLE
 AS $fn$

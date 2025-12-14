@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS public.domainrecord (
   id              bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
   updated_at      timestamp without time zone NOT NULL DEFAULT now(),
-  record_name     text NOT NULL,
   domain          citext NOT NULL UNIQUE,
+  record_name     text NOT NULL,
   punycode        text,
   extension       text,
   whois_server    citext,
@@ -126,7 +126,7 @@ BEGIN
     v_updated_date    := NULLIF(_rec->>'updated_date', '')::timestamp;
     v_expiration_date := NULLIF(_rec->>'expiration_date', '')::timestamp;
     v_whois_server    := (_rec->>'whois_server');
-    v_object_id       := (_rec->>'object_id');
+    v_object_id       := (_rec->>'id');
     v_dnssec          := (_rec->>'dnssec')::boolean;
 
     -- record_status as JSON array of text, if present
@@ -169,24 +169,106 @@ RETURNS public.domainrecord
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, domain, record_name, punycode, extension, whois_server, object_id, attrs
+    SELECT *
     FROM public.domainrecord
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
+-- Rows matching the provided filters and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.domainrecord_find_by_content(
+    _filters jsonb, 
+    _since   timestamp without time zone DEFAULT NULL
+) RETURNS SETOF public.domainrecord
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_domain       text;
+    v_record_name  text;
+    v_punycode     text;
+    v_extension    text;
+    v_whois_server citext;
+    v_object_id    text;
+    v_count        integer := 0;
+    v_params       text[]  := array[]::text[];
+    v_sql          text    := 'SELECT * FROM public.domainrecord WHERE TRUE';
+BEGIN
+    -- 1) Extract filters from JSONB
+    v_domain       := NULLIF(_filters->>'domain', '');
+    v_record_name  := NULLIF(_filters->>'name', '');
+    v_punycode     := NULLIF(_filters->>'punycode', '');
+    v_extension    := NULLIF(_filters->>'extension', '');
+    v_object_id    := NULLIF(_filters->>'id', '');
+    v_whois_server := NULLIF(_filters->>'whois_server', '')::citext;
+
+    -- 2) Build the params array from the filters
+    IF v_domain IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_domain);
+        v_sql    := v_sql || format(' AND %I = $%s', 'domain', v_count);
+    END IF;
+
+    IF v_record_name IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_record_name);
+        v_sql    := v_sql || format(' AND %I = $%s', 'record_name', v_count);
+    END IF;
+
+    IF v_punycode IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_punycode);
+        v_sql    := v_sql || format(' AND %I = $%s', 'punycode', v_count);
+    END IF;
+
+    IF v_extension IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_extension);
+        v_sql    := v_sql || format(' AND %I = $%s', 'extension', v_count);
+    END IF;
+
+    IF v_object_id IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_object_id);
+        v_sql    := v_sql || format(' AND %I = $%s', 'object_id', v_count);
+    END IF;
+
+    IF v_whois_server IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_whois_server::text);
+        v_sql    := v_sql || format(' AND %I = $%s', 'whois_server', v_count);
+    END IF;
+
+    IF v_count = 0 THEN
+        RAISE EXCEPTION 'domainrecord_find_by_content requires at least one filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since::text);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+
+    -- 4) Execute dynamic SQL and return results
+    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.domainrecord_updated_since(
-    _ts timestamp without time zone
-) RETURNS SETOF public.domainrecord
+CREATE OR REPLACE FUNCTION public.domainrecord_updated_since(_since timestamp without time zone) 
+RETURNS SETOF public.domainrecord
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, domain, record_name, punycode, extension, whois_server, object_id, attrs
+    SELECT *
     FROM public.domainrecord
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd
@@ -196,6 +278,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.domainrecord_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.domainrecord_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.domainrecord_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.domainrecord_upsert_json(jsonb);
