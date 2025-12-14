@@ -136,23 +136,79 @@ RETURNS public.account
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, attrs
+    SELECT *
     FROM public.account
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
+-- Rows matching the provided filters and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.account_find_by_content(
+    _filters jsonb, 
+    _since timestamp without time zone DEFAULT NULL
+) RETURNS SETOF public.account
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_sql TEXT;
+    v_where_clause TEXT := ' WHERE TRUE'; -- Start with TRUE to easily append conditions with AND
+    v_unique_id text;
+    v_account_type text;
+    v_username text;
+    v_account_number text;
+BEGIN
+    -- 1) Extract filters from JSONB
+    v_unique_id      := NULLIF(_filters->>'unique_id', '');
+    v_account_type   := NULLIF(_filters->>'account_type', '');
+    v_username       := NULLIF(_filters->>'username', '');
+    v_account_number := NULLIF(_filters->>'account_number', '');
+
+    -- 2) Build WHERE clause from filters
+    IF v_unique_id IS NOT NULL THEN
+        v_where_clause := v_where_clause || ' AND unique_id = ' || quote_literal(v_unique_id);
+    END IF;
+
+    IF v_account_type IS NOT NULL THEN
+        v_where_clause := v_where_clause || ' AND account_type = ' || quote_literal(v_account_type);
+    END IF;
+
+    IF v_username IS NOT NULL THEN
+        v_where_clause := v_where_clause || ' AND username = ' || quote_literal(v_username);
+    END IF;
+
+    IF v_account_number IS NOT NULL THEN
+        v_where_clause := v_where_clause || ' AND account_number = ' || quote_literal(v_account_number);
+    END IF;
+
+    IF v_where_clause = ' WHERE TRUE' THEN
+        RAISE EXCEPTION 'account_find_by_content requires at least one filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_where_clause := v_where_clause || ' AND updated_at >= ' || quote_literal(_since);
+    END IF;
+
+    -- 3) Final SQL statement
+    v_sql := 'SELECT * FROM public.account' || v_where_clause || ' ORDER BY updated_at ASC, id ASC';
+
+    -- 4) Execute dynamic SQL and return results
+    RETURN QUERY EXECUTE v_sql;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.account_updated_since(_ts timestamp without time zone)
+CREATE OR REPLACE FUNCTION public.account_updated_since(_since timestamp without time zone)
 RETURNS SETOF public.account
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, attrs
+    SELECT *
     FROM public.account
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd
