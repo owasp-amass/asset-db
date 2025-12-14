@@ -11,9 +11,9 @@ CREATE TABLE IF NOT EXISTS public.autnumrecord (
   id           bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at   timestamp without time zone NOT NULL DEFAULT now(),
   updated_at   timestamp without time zone NOT NULL DEFAULT now(),
-  record_name  text,
   handle       text NOT NULL UNIQUE,
   asn          integer NOT NULL UNIQUE,
+  record_name  text,
   whois_server citext,
   attrs        jsonb NOT NULL DEFAULT '{}'::jsonb
 );
@@ -61,9 +61,9 @@ CREATE OR REPLACE FUNCTION public.autnumrecord_upsert(
 LANGUAGE plpgsql
 AS $fn$
 DECLARE
-    v_id_handle   bigint;
-    v_id_asn      bigint;
-    v_id          bigint;
+    v_id_handle bigint;
+    v_id_asn    bigint;
+    v_id        bigint;
 BEGIN
     IF _handle IS NULL OR _asn IS NULL THEN
         RAISE EXCEPTION 'autnumrecord_upsert requires non-NULL handle and asn';
@@ -151,7 +151,7 @@ BEGIN
     v_record_status := NULLIF(_rec->>'status', '');
     v_created_date  := NULLIF(_rec->>'created_date', '')::timestamp;
     v_updated_date  := NULLIF(_rec->>'updated_date', '')::timestamp;
-    v_whois_server  := (_rec->>'whois_server');
+    v_whois_server  := (_rec->>'whois_server')::citext;
 
     -- Build attrs from the appropriate fields.
     v_attrs := jsonb_strip_nulls(
@@ -181,22 +181,89 @@ RETURNS public.autnumrecord
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, record_name, handle, asn, whois_server, attrs
+    SELECT *
     FROM public.autnumrecord
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
+-- Rows matching the provided filters and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.autnumrecord_find_by_content(
+    _filters jsonb, 
+    _since   timestamp without time zone DEFAULT NULL
+) RETURNS SETOF public.autnumrecord
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_handle       text;
+    v_asn          integer;
+    v_record_name  text;
+    v_whois_server citext;
+    v_count        integer := 0;
+    v_params       text[]  := array[]::text[];
+    v_sql          text    := 'SELECT * FROM public.autnumrecord WHERE TRUE';
+BEGIN
+    -- 1) Extract filters from JSONB
+    v_handle       := NULLIF(_filters->>'handle', '');
+    v_asn          := NULLIF(_filters->>'number', '')::integer;
+    v_record_name  := NULLIF(_filters->>'name', '');
+    v_whois_server := NULLIF(_filters->>'whois_server', '')::citext;
+
+    -- 2) Build the params array from the filters
+    IF v_handle IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_handle);
+        v_sql    := v_sql || format(' AND %I = $%s', 'handle', v_count);
+    END IF;
+
+    IF v_asn IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_asn::text);
+        v_sql    := v_sql || format(' AND %I = $%s', 'asn', v_count);
+    END IF;
+
+    IF v_record_name IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_record_name);
+        v_sql    := v_sql || format(' AND %I = $%s', 'record_name', v_count);
+    END IF;
+
+    IF v_whois_server IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_whois_server::text);
+        v_sql    := v_sql || format(' AND %I = $%s', 'whois_server', v_count);
+    END IF;
+
+    IF v_count = 0 THEN
+        RAISE EXCEPTION 'autnumrecord_find_by_content requires at least one filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since::text);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+
+    -- 4) Execute dynamic SQL and return results
+    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows updated since a given timestamp
-CREATE OR REPLACE FUNCTION public.autnumrecord_updated_since(_ts timestamp without time zone)
+CREATE OR REPLACE FUNCTION public.autnumrecord_updated_since(_since timestamp without time zone)
 RETURNS SETOF public.autnumrecord
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT id, created_at, updated_at, record_name, handle, asn, whois_server, attrs
+    SELECT *
     FROM public.autnumrecord
-    WHERE updated_at >= _ts
+    WHERE updated_at >= _since
     ORDER BY updated_at ASC, id ASC;
 $fn$;
 -- +migrate StatementEnd
@@ -206,6 +273,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.autnumrecord_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.autnumrecord_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.autnumrecord_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.autnumrecord_upsert_json(jsonb);

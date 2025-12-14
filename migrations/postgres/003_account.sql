@@ -147,18 +147,19 @@ $fn$;
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.account_find_by_content(
     _filters jsonb, 
-    _since timestamp without time zone DEFAULT NULL
+    _since   timestamp without time zone DEFAULT NULL
 ) RETURNS SETOF public.account
 LANGUAGE plpgsql
 STABLE
 AS $fn$
 DECLARE
-    v_sql TEXT;
-    v_where_clause TEXT := ' WHERE TRUE'; -- Start with TRUE to easily append conditions with AND
-    v_unique_id text;
-    v_account_type text;
-    v_username text;
+    v_unique_id      text;
+    v_account_type   text;
+    v_username       text;
     v_account_number text;
+    v_count          integer := 0;
+    v_params         text[]  := array[]::text[];
+    v_sql            text    := 'SELECT * FROM public.account WHERE TRUE';
 BEGIN
     -- 1) Extract filters from JSONB
     v_unique_id      := NULLIF(_filters->>'unique_id', '');
@@ -166,36 +167,46 @@ BEGIN
     v_username       := NULLIF(_filters->>'username', '');
     v_account_number := NULLIF(_filters->>'account_number', '');
 
-    -- 2) Build WHERE clause from filters
+    -- 2) Build the params array from the filters
     IF v_unique_id IS NOT NULL THEN
-        v_where_clause := v_where_clause || ' AND unique_id = ' || quote_literal(v_unique_id);
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_unique_id);
+        v_sql    := v_sql || format(' AND %I = $%s', 'unique_id', v_count);
     END IF;
 
     IF v_account_type IS NOT NULL THEN
-        v_where_clause := v_where_clause || ' AND account_type = ' || quote_literal(v_account_type);
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_account_type);
+        v_sql    := v_sql || format(' AND %I = $%s', 'account_type', v_count);
     END IF;
 
     IF v_username IS NOT NULL THEN
-        v_where_clause := v_where_clause || ' AND username = ' || quote_literal(v_username);
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_username);
+        v_sql    := v_sql || format(' AND %I = $%s', 'username', v_count);
     END IF;
 
     IF v_account_number IS NOT NULL THEN
-        v_where_clause := v_where_clause || ' AND account_number = ' || quote_literal(v_account_number);
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, v_account_number);
+        v_sql    := v_sql || format(' AND %I = $%s', 'account_number', v_count);
     END IF;
 
-    IF v_where_clause = ' WHERE TRUE' THEN
+    IF v_count = 0 THEN
         RAISE EXCEPTION 'account_find_by_content requires at least one filter';
     END IF;
 
     IF _since IS NOT NULL THEN
-        v_where_clause := v_where_clause || ' AND updated_at >= ' || quote_literal(_since);
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since::text);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
     END IF;
 
-    -- 3) Final SQL statement
-    v_sql := 'SELECT * FROM public.account' || v_where_clause || ' ORDER BY updated_at ASC, id ASC';
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
 
     -- 4) Execute dynamic SQL and return results
-    RETURN QUERY EXECUTE v_sql;
+    RETURN QUERY EXECUTE v_sql USING ALL v_params;
 $fn$;
 -- +migrate StatementEnd
 
@@ -218,6 +229,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.account_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.account_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.account_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.account_upsert_json(jsonb);
