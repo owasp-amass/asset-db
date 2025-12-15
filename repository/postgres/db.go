@@ -24,9 +24,7 @@ const (
 // PostgresRepository is a repository implementation.
 type PostgresRepository struct {
 	DB     *sql.DB
-	rodb   *sql.DB
-	ww     *writeWorker
-	rpool  *readerWorkerPool
+	wpool  *workerPool
 	dbtype string
 }
 
@@ -67,27 +65,19 @@ func postgresDatabase(dsn string) (*PostgresRepository, error) {
 }
 
 func (sql *PostgresRepository) Prepare(ctx context.Context) error {
-	wworker, err := newWriteWorker(sql.DB, 20, 500*time.Microsecond)
+	wpool, err := newWorkerPool(sql.DB, numberOfWorkers, 100, time.Millisecond)
 	if err != nil {
 		return err
 	}
-	sql.ww = wworker
 
-	rpool, err := newReaderWorkerPool(sql.rodb, numberOfWorkers)
-	if err != nil {
-		return err
-	}
-	sql.rpool = rpool
+	sql.wpool = wpool
 	return nil
 }
 
 // Close implements the Repository interface.
 func (sql *PostgresRepository) Close() error {
-	if sql.rpool != nil {
-		sql.rpool.Close()
-	}
-	if sql.ww != nil {
-		sql.ww.Close()
+	if sql.wpool != nil {
+		sql.wpool.Close()
 	}
 	if sql.DB != nil {
 		return sql.DB.Close()
