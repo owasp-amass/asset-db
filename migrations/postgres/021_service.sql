@@ -205,15 +205,34 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.service_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.service
+CREATE OR REPLACE FUNCTION public.service_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id    bigint,
+    id           bigint,
+    created_at   timestamp without time zone,
+    updated_at   timestamp without time zone,
+    unique_id    text,
+    service_type text,
+    attrs        jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.service
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.service_type,
+        a.attrs
+    FROM public.service a
+    JOIN public.entity e ON e.table_name = 'public.service'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -221,7 +240,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.service_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.service_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.service_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.service_get_by_id(bigint);
 

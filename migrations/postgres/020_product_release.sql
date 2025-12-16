@@ -173,15 +173,32 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.productrelease_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.productrelease
+CREATE OR REPLACE FUNCTION public.productrelease_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id    bigint,
+    id           bigint,
+    created_at   timestamp without time zone,
+    updated_at   timestamp without time zone,
+    release_name text,
+    attrs        jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.productrelease
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.release_name,
+        a.attrs
+    FROM public.productrelease a
+    JOIN public.entity e ON e.table_name = 'public.productrelease'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -189,7 +206,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.productrelease_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.productrelease_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.productrelease_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.productrelease_get_by_id(bigint);
 

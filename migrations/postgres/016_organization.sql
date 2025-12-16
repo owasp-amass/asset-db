@@ -269,15 +269,40 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.organization_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.organization
+CREATE OR REPLACE FUNCTION public.organization_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id       bigint,
+    id              bigint,
+    created_at      timestamp without time zone,
+    updated_at      timestamp without time zone,
+    unique_id       text,
+    org_name        text,
+    legal_name      text,
+    jurisdiction    text,
+    registration_id text,
+    attrs           jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.organization
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.org_name,
+        a.legal_name,
+        a.jurisdiction,
+        a.registration_id,
+        a.attrs
+    FROM public.organization a
+    JOIN public.entity e ON e.table_name = 'public.organization'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -285,7 +310,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.organization_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.organization_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.organization_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.organization_get_by_id(bigint);
 

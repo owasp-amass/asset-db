@@ -243,15 +243,34 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.tlscertificate_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.tlscertificate
+CREATE OR REPLACE FUNCTION public.tlscertificate_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id           bigint,
+    id                  bigint,
+    created_at          timestamp without time zone,
+    updated_at          timestamp without time zone,
+    serial_number       text,
+    subject_common_name text,
+    attrs               jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.tlscertificate
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.serial_number,
+        a.subject_common_name,
+        a.attrs
+    FROM public.tlscertificate a
+    JOIN public.entity e ON e.table_name = 'public.tlscertificate'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -259,7 +278,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.tlscertificate_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.tlscertificate_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.tlscertificate_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.tlscertificate_get_by_id(bigint);
 

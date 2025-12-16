@@ -208,15 +208,34 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.phone_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.phone
+CREATE OR REPLACE FUNCTION public.phone_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id    bigint,
+    id           bigint,
+    created_at   timestamp without time zone,
+    updated_at   timestamp without time zone,
+    e164         text,
+    country_code integer,
+    attrs        jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.phone
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.e164,
+        a.country_code,
+        a.attrs
+    FROM public.phone a
+    JOIN public.entity e ON e.table_name = 'public.phone'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -224,7 +243,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.phone_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.phone_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.phone_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.phone_get_by_id(bigint);
 
