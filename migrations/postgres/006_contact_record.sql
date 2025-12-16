@@ -109,7 +109,8 @@ $fn$;
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.contactrecord_find_by_content(
     _filters jsonb, 
-    _since   timestamp without time zone DEFAULT NULL
+    _since   timestamp without time zone DEFAULT NULL,
+    _limit   integer DEFAULT 0
 ) RETURNS SETOF public.contactrecord
 LANGUAGE plpgsql
 STABLE
@@ -141,10 +142,19 @@ BEGIN
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
+
+    IF _limit > 0 THEN
+        v_sql := v_sql || format(' LIMIT %s', _limit);
+    END IF;
 
     -- 4) Execute dynamic SQL and return results
-    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+    CASE v_count
+        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
+        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
+    END CASE;
+
+    RETURN;
 $fn$;
 -- +migrate StatementEnd
 

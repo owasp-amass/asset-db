@@ -191,7 +191,8 @@ $fn$;
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.alocation_find_by_content(
     _filters jsonb, 
-    _since   timestamp without time zone DEFAULT NULL
+    _since   timestamp without time zone DEFAULT NULL,
+    _limit   integer DEFAULT 0
 ) RETURNS SETOF public.location
 LANGUAGE plpgsql
 STABLE
@@ -295,10 +296,28 @@ BEGIN
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at ASC, id ASC';
+    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
+
+    IF _limit > 0 THEN
+        v_sql := v_sql || format(' LIMIT %s', _limit);
+    END IF;
 
     -- 4) Execute dynamic SQL and return results
-    RETURN QUERY EXECUTE v_sql USING ALL v_params;
+    CASE v_count
+        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
+        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
+        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
+        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
+        WHEN 5 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5];
+        WHEN 6 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6];
+        WHEN 7 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7];
+        WHEN 8 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8];
+        WHEN 9 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8], v_params[9];
+        WHEN 10 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8], v_params[9], v_params[10];
+        WHEN 11 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8], v_params[9], v_params[10], v_params[11];
+    END CASE;
+
+    RETURN;
 $fn$;
 -- +migrate StatementEnd
 
