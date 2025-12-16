@@ -214,15 +214,36 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.identifier_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.identifier
+CREATE OR REPLACE FUNCTION public.identifier_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    unique_id  text,
+    id_value   text,
+    id_type    text,
+    attrs      jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.identifier
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.id_value,
+        a.id_type,
+        a.attrs
+    FROM public.identifier a
+    JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -230,12 +251,12 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.identifier_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.identifier_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.identifier_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.identifier_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.identifier_upsert_json(jsonb);
-DROP FUNCTION IF EXISTS public.identifier_upsert(text, text, jsonb);
+DROP FUNCTION IF EXISTS public.identifier_upsert(text, text, text, jsonb);
 DROP FUNCTION IF EXISTS public.identifier_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_identifier_id_type;

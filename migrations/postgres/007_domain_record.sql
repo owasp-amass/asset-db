@@ -276,15 +276,42 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.domainrecord_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.domainrecord
+CREATE OR REPLACE FUNCTION public.domainrecord_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id    bigint,
+    id           bigint,
+    created_at   timestamp without time zone,
+    updated_at   timestamp without time zone,
+    domain       citext,
+    record_name  text,
+    punycode     text,
+    extension    text,
+    whois_server citext,
+    object_id    text,
+    attrs        jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.domainrecord
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.domain,
+        a.record_name,
+        a.punycode,
+        a.extension,
+        a.whois_server,
+        a.object_id,
+        a.attrs
+    FROM public.domainrecord a
+    JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -292,7 +319,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.domainrecord_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.domainrecord_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.domainrecord_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.domainrecord_get_by_id(bigint);
 

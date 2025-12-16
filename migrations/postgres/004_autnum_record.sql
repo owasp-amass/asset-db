@@ -135,6 +135,7 @@ RETURNS bigint
 LANGUAGE plpgsql
 AS $fn$
 DECLARE
+    v_raw           text;
     v_handle        text;
     v_asn           integer;
     v_record_name   text;
@@ -269,15 +270,39 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
-CREATE OR REPLACE FUNCTION public.autnumrecord_updated_since(_since timestamp without time zone)
-RETURNS SETOF public.autnumrecord
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.autnumrecord_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id    bigint,
+    id           bigint,
+    created_at   timestamp without time zone,
+    updated_at   timestamp without time zone,
+    handle       text,
+    asn          integer,
+    record_name  text,
+    whois_server citext,
+    attrs        jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.autnumrecord
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.handle,
+        a.asn,
+        a.record_name,
+        a.whois_server,
+        a.attrs
+    FROM public.autnumrecord a
+    JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -285,7 +310,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.autnumrecord_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.autnumrecord_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.autnumrecord_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.autnumrecord_get_by_id(bigint);
 

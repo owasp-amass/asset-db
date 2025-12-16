@@ -336,15 +336,44 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.ipnetrecord_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.ipnetrecord
+CREATE OR REPLACE FUNCTION public.ipnetrecord_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id     bigint,
+    id            bigint,
+    created_at    timestamp without time zone,
+    updated_at    timestamp without time zone,
+    record_cidr   cidr,
+    record_name   text,
+    handle        text,
+    whois_server  citext,
+    parent_handle text,
+    start_address inet,
+    end_address   inet,
+    attrs         jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.ipnetrecord
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.record_cidr,
+        a.record_name,
+        a.handle,
+        a.whois_server,
+        a.parent_handle,
+        a.start_address,
+        a.end_address,
+        a.attrs
+    FROM public.ipnetrecord a
+    JOIN public.entity e ON e.table_name = 'public.ipnetrecord'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -352,7 +381,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.ipnetrecord_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.ipnetrecord_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.ipnetrecord_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.ipnetrecord_get_by_id(bigint);
 

@@ -59,9 +59,7 @@ CREATE TABLE IF NOT EXISTS public.entity (
   row_id        bigint    NOT NULL,       -- source table row id
   UNIQUE (etype_id, row_id),
   UNIQUE (etype_id, natural_key),
-  UNIQUE (table_name, row_id),
-  UNIQUE (entity_id, etype_id, row_id),
-  UNIQUE (entity_id, table_name, row_id)
+  UNIQUE (table_name, row_id)
 );
 CREATE INDEX IF NOT EXISTS idx_entity_created_at ON public.entity (created_at);
 CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON public.entity (updated_at);
@@ -170,7 +168,7 @@ DROP INDEX IF EXISTS idx_edge_from;
 DROP INDEX IF EXISTS idx_edge_to;
 DROP INDEX IF EXISTS idx_edge_from_id;
 DROP INDEX IF EXISTS idx_edge_to_id;
-DROP INDEX IF EXISTS gin_edge_content
+DROP INDEX IF EXISTS gin_edge_content;
 DROP INDEX IF EXISTS idx_edge_label;
 DROP INDEX IF EXISTS idx_edge_etype;
 DROP INDEX IF EXISTS idx_edge_updated_at;

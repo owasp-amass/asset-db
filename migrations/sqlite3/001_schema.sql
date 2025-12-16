@@ -54,9 +54,7 @@ CREATE TABLE IF NOT EXISTS entity (
   row_id      INTEGER NOT NULL,
   UNIQUE (etype_id, row_id),
   UNIQUE (etype_id, natural_key),
-  UNIQUE (table_name, row_id),
-  UNIQUE (entity_id, etype_id, row_id),
-  UNIQUE (entity_id, table_name, row_id)
+  UNIQUE (table_name, row_id)
 );
 CREATE INDEX IF NOT EXISTS idx_entity_created_at ON entity (created_at);
 CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON entity (updated_at);

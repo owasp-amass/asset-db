@@ -127,13 +127,13 @@ $fn$;
 
 -- Return the full row by id
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.person_get_by_id(_row_id bigint)
-RETURNS public.person
+CREATE OR REPLACE FUNCTION public.phone_get_by_id(_row_id bigint)
+RETURNS public.phone
 LANGUAGE sql
 STABLE
 AS $fn$
     SELECT *
-    FROM public.person
+    FROM public.phone
     WHERE id = _row_id
     LIMIT 1;
 $fn$;
@@ -226,10 +226,10 @@ COMMIT;
 
 DROP FUNCTION IF EXISTS public.phone_updated_since(timestamp without time zone);
 DROP FUNCTION IF EXISTS public.phone_find_by_content(jsonb, timestamp without time zone);
-DROP FUNCTION IF EXISTS public.person_get_by_id(bigint);
+DROP FUNCTION IF EXISTS public.phone_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.phone_upsert_json(jsonb);
-DROP FUNCTION IF EXISTS public.phone_upsert(text, text, jsonb);
+DROP FUNCTION IF EXISTS public.phone_upsert(text, integer, jsonb);
 DROP FUNCTION IF EXISTS public.phone_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_phone_country_code;

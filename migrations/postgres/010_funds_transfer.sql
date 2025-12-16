@@ -98,6 +98,7 @@ DECLARE
     v_transfer_method  text;
     v_exchange_date    timestamp without time zone;
     v_exchange_rate    numeric;
+    v_attrs            jsonb;
 BEGIN
     v_unique_id        := NULLIF(_rec->>'unique_id', '');
     v_amount           := CASE
@@ -126,7 +127,7 @@ BEGIN
             'currency',        v_currency,
             'transfer_method', v_transfer_method,
             'exchange_date',   v_exchange_date,
-            'exchange_rate',   v_exchange_rate,
+            'exchange_rate',   v_exchange_rate
         )
     ) || '{}'::jsonb;
 
@@ -234,15 +235,36 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fundstransfer_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.fundstransfer
+CREATE OR REPLACE FUNCTION public.fundstransfer_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id        bigint,
+    id               bigint,
+    created_at       timestamp without time zone,
+    updated_at       timestamp without time zone,
+    unique_id        text,
+    amount           numeric,
+    reference_number text,
+    attrs            jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.fundstransfer
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.amount,
+        a.reference_number,
+        a.attrs
+    FROM public.fundstransfer a
+    JOIN public.entity e ON e.table_name = 'public.fundstransfer'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -250,7 +272,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.fundstransfer_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.fundstransfer_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.fundstransfer_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.fundstransfer_get_by_id(bigint);
 

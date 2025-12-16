@@ -225,15 +225,38 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.account_updated_since(_since timestamp without time zone)
-RETURNS SETOF public.account
+CREATE OR REPLACE FUNCTION public.account_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id      bigint,
+    id             bigint,
+    created_at     timestamp without time zone,
+    updated_at     timestamp without time zone,
+    unique_id      text,
+    account_type   text,
+    username       text,
+    account_number text,
+    attrs          jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.account
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.account_type,
+        a.username,
+        a.account_number,
+        a.attrs
+    FROM public.account a
+    JOIN public.entity e ON e.table_name = 'public.account'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -241,7 +264,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.account_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.account_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.account_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.account_get_by_id(bigint);
 

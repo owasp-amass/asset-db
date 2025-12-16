@@ -54,7 +54,7 @@ BEGIN
     -- 2) Upsert into entity via the generic helper.
     RETURN public.entity_upsert(
         _etype_name  := 'location'::citext,
-        _natural_key := v_domain::citext,
+        _natural_key := v_addr::citext,
         _table_name  := 'public.location'::citext,
         _row_id      := v_row
     );
@@ -152,7 +152,7 @@ BEGIN
     v_attrs := jsonb_strip_nulls(
         jsonb_build_object(
             'po_box', v_po_box,
-            'gln',    v_gln,
+            'gln',    v_gln
         )
     ) || '{}'::jsonb;
 
@@ -189,7 +189,7 @@ $fn$;
 
 -- Rows matching the provided filters and since timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.alocation_find_by_content(
+CREATE OR REPLACE FUNCTION public.location_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
@@ -323,15 +323,50 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.location_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.location
+CREATE OR REPLACE FUNCTION public.location_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id       bigint,
+    id              bigint,
+    created_at      timestamp without time zone,
+    updated_at      timestamp without time zone,
+    street_address  text,
+    city            text,
+    country         text,
+    unit            text,
+    building        text,
+    province        text,
+    locality        text,
+    postal_code     text,
+    street_name     text,
+    building_number text,
+    attrs           jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.location
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.street_address,
+        a.city,
+        a.country,
+        a.unit,
+        a.building,
+        a.province,
+        a.locality,
+        a.postal_code,
+        a.street_name,
+        a.building_number,
+        a.attrs
+    FROM public.location a
+    JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -339,7 +374,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.location_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.location_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.location_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.location_get_by_id(bigint);
 

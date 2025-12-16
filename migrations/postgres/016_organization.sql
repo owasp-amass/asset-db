@@ -108,7 +108,7 @@ DECLARE
     v_industry        text;
     v_markets         text[];
     v_non_profit      boolean;
-    v_headcount       numeric;
+    v_headcount       integer;
     v_attrs           jsonb;
 BEGIN
     v_unique_id       := NULLIF(_rec->>'unique_id', '');
@@ -118,7 +118,7 @@ BEGIN
     v_registration_id := NULLIF(_rec->>'registration_id', '');
     v_founding_date   := NULLIF(_rec->>'founding_date', '')::timestamp;
     v_industry        := NULLIF(_rec->>'industry', '');
-    v_headcount       := NULLIF(_rec->>'headcount', '0');
+    v_headcount       := NULLIF(_rec->>'headcount', '0')::integer;
 
     IF _rec ? 'active' THEN
         v_active := (_rec->>'active')::boolean;
@@ -127,9 +127,9 @@ BEGIN
     END IF;
 
     IF _rec ? 'non_profit' THEN
-        v_active := (_rec->>'non_profit')::boolean;
+        v_non_profit := (_rec->>'non_profit')::boolean;
     ELSE
-        v_active := NULL;
+        v_non_profit := NULL;
     END IF;
 
     -- target markets as JSON array of text, if present
@@ -148,7 +148,7 @@ BEGIN
             'target_markets', v_markets,
             'active',         v_active,
             'non_profit',     v_non_profit,
-            'headcount',      v_headcount,
+            'headcount',      v_headcount
         )
     ) || '{}'::jsonb;
 

@@ -96,7 +96,7 @@ BEGIN
     -- Build attrs from the appropriate fields.
     v_attrs := jsonb_strip_nulls(
         jsonb_build_object(
-            'type', v_type,
+            'type', v_type
         )
     ) || '{}'::jsonb;
 
@@ -177,15 +177,32 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.ipaddress_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.ipaddress
+CREATE OR REPLACE FUNCTION public.ipaddress_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    ip_address inet,
+    attrs      jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.ipaddress
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.ip_address,
+        a.attrs
+    FROM public.ipaddress a
+    JOIN public.entity e ON e.table_name = 'public.ipaddress'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -193,7 +210,7 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.ipaddress_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.ipaddress_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.ipaddress_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.ipaddress_get_by_id(bigint);
 

@@ -60,9 +60,9 @@ BEGIN
     END IF;
 
     INSERT INTO public.contactrecord (
-        discovered_at
+        discovered_at, attrs
     ) VALUES (
-        _discovered_at
+        _discovered_at, _attrs
     )
     ON CONFLICT (discovered_at) DO UPDATE
     SET
@@ -122,7 +122,7 @@ DECLARE
     v_sql           text    := 'SELECT * FROM public.contactrecord WHERE TRUE';
 BEGIN
     -- 1) Extract filters from JSONB
-    v_discovered_at := NULLIF(_rec->>'discovered_at', '');
+    v_discovered_at := NULLIF(_filters->>'discovered_at', '');
 
     -- 2) Build the params array from the filters
     IF v_discovered_at IS NOT NULL THEN
@@ -160,15 +160,32 @@ $fn$;
 
 -- Rows updated since a given timestamp
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.contactrecord_updated_since(_since timestamp without time zone) 
-RETURNS SETOF public.contactrecord
+CREATE OR REPLACE FUNCTION public.contactrecord_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT NULL
+) RETURNS TABLE (
+    entity_id     bigint,
+    id            bigint,
+    created_at    timestamp without time zone,
+    updated_at    timestamp without time zone,
+    discovered_at text,
+    attrs         jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT *
-    FROM public.contactrecord
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.discovered_at,
+        a.attrs
+    FROM public.contactrecord a
+    JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
     WHERE updated_at >= _since
-    ORDER BY updated_at ASC, id ASC;
+    ORDER BY updated_at DESC, id ASC
+    LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
 
@@ -176,13 +193,13 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.contactrecord_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.contactrecord_updated_since(timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.contactrecord_find_by_content(jsonb, timestamp without time zone);
 DROP FUNCTION IF EXISTS public.contactrecord_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.contactrecord_upsert_json(jsonb);
 DROP FUNCTION IF EXISTS public.contactrecord_upsert(text, jsonb);
-DROP FUNCTION IF EXISTS public.contactrecord_upsert_entity_json(jsonb)
+DROP FUNCTION IF EXISTS public.contactrecord_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_contactrecord_updated_at;
 DROP INDEX IF EXISTS idx_contactrecord_created_at;

@@ -7,31 +7,27 @@
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.null_safe_attrs(p jsonb)
-RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
-  SELECT COALESCE(p, '{}'::jsonb)
-$$;
+RETURNS jsonb LANGUAGE sql 
+IMMUTABLE 
+AS $fn$
+  SELECT COALESCE(p, '{}'::jsonb);
+$fn$;
 
 CREATE OR REPLACE FUNCTION public.get_entity_type_id(p_name text)
-RETURNS smallint LANGUAGE plpgsql AS $$
-DECLARE v_id smallint;
-BEGIN
-  SELECT id INTO v_id FROM public.entity_type_lu WHERE name = p_name;
-  IF v_id IS NULL THEN
-    INSERT INTO public.entity_type_lu(name) VALUES (p_name) RETURNING id INTO v_id;
-  END IF;
-  RETURN v_id;
-END$$;
+RETURNS smallint 
+LANGUAGE sql 
+IMMUTABLE 
+AS $fn$
+  SELECT id FROM public.entity_type_lu WHERE name = p_name;
+$fn$;
 
 CREATE OR REPLACE FUNCTION public.get_edge_type_id(p_name text)
-RETURNS smallint LANGUAGE plpgsql AS $$
-DECLARE v_id smallint;
-BEGIN
-  SELECT id INTO v_id FROM public.edge_type_lu WHERE name = p_name;
-  IF v_id IS NULL THEN
-    INSERT INTO public.edge_type_lu(name) VALUES (p_name) RETURNING id INTO v_id;
-  END IF;
-  RETURN v_id;
-END$$;
+RETURNS smallint 
+LANGUAGE sql 
+IMMUTABLE 
+AS $fn$
+  SELECT id FROM public.edge_type_lu WHERE name = p_name;
+$fn$;
 
 -- ---------------------------------------------------------------------------
 -- ENTITY UPSERT + HELPERS
@@ -416,8 +412,6 @@ COMMIT;
 
 -- +migrate Down
 
-DROP FUNCTION IF EXISTS public.entity_upsert(citext, citext, citext, bigint, jsonb);
-
 DROP FUNCTION IF EXISTS public.edge_get_tags(bigint);
 DROP FUNCTION IF EXISTS public.edge_tag_map_upsert(bigint, text, text, text, jsonb);
 
@@ -430,7 +424,9 @@ DROP FUNCTION IF EXISTS public.tag_upsert(text, text, text, jsonb);
 
 DROP FUNCTION IF EXISTS public.edge_updated_since(timestamp without time zone);
 DROP FUNCTION IF EXISTS public.edge_get_id(text, text, bigint, bigint);
-DROP FUNCTION IF EXISTS public.edge_upsert(text, text, bigint, bigint);
+DROP FUNCTION IF EXISTS public.edge_upsert(text, text, bigint, bigint, jsonb);
+
+DROP FUNCTION IF EXISTS public.entity_upsert(citext, citext, citext, bigint);
 
 DROP FUNCTION IF EXISTS public.get_edge_type_id(text);
 DROP FUNCTION IF EXISTS public.get_entity_type_id(text);
