@@ -172,6 +172,7 @@ BEGIN
     END CASE;
 
     RETURN;
+END
 $fn$;
 -- +migrate StatementEnd
 
