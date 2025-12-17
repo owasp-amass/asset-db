@@ -2,24 +2,24 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package sqlite3
+package postgres
 
 import (
 	"context"
 	"embed"
 	"time"
 
-	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
+	postgresmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	migrate "github.com/rubenv/sql-migrate"
 )
 
-func setupTestDB(dbtype, dsn string) (*SqliteRepository, error) {
+func setupTestDB(dbtype, dsn string) (*PostgresRepository, error) {
 	db, err := New(dbtype, dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := sqliteMigrate(db, sqlitemigrations.Migrations()); err != nil {
+	if err := postgresMigrate(db, postgresmigrations.Migrations()); err != nil {
 		return nil, err
 	}
 
@@ -32,12 +32,12 @@ func setupTestDB(dbtype, dsn string) (*SqliteRepository, error) {
 	return db, nil
 }
 
-func sqliteMigrate(repo *SqliteRepository, fs embed.FS) error {
+func postgresMigrate(repo *PostgresRepository, fs embed.FS) error {
 	migsrc := migrate.EmbedFileSystemMigrationSource{
 		FileSystem: fs,
 		Root:       "/",
 	}
 
-	_, err := migrate.Exec(repo.DB, "sqlite3", migsrc, migrate.Up)
+	_, err := migrate.Exec(repo.DB, "postgres", migsrc, migrate.Up)
 	return err
 }

@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package sqlite3
+package postgres
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/owasp-amass/asset-db/types"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
