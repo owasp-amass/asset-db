@@ -52,9 +52,9 @@ $fn$;
 -- Upsert by handle/asn (scalar params). Returns the row id.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.autnumrecord_upsert(
-    _record_name  text DEFAULT NULL,
     _handle       text,
     _asn          integer,
+    _record_name  text DEFAULT NULL,
     _whois_server citext DEFAULT NULL,
     _attrs        jsonb DEFAULT '{}'::jsonb
 ) RETURNS bigint

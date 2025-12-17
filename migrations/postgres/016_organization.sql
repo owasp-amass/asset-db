@@ -56,8 +56,8 @@ $fn$;
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.organization_upsert(
     _unique_id       text,
-    _org_name        text DEFAULT NULL,
     _legal_name      text,
+    _org_name        text DEFAULT NULL,
     _jurisdiction    text DEFAULT NULL,
     _registration_id text DEFAULT NULL,
     _attrs           jsonb DEFAULT '{}'::jsonb
