@@ -301,8 +301,8 @@ AS $fn$
         a.attrs
     FROM public.organization a
     JOIN public.entity e ON e.table_name = 'public.organization'::citext AND e.row_id = a.id
-    WHERE updated_at >= _since
-    ORDER BY updated_at DESC, id ASC
+    WHERE a.updated_at >= _since
+    ORDER BY a.updated_at DESC, a.id ASC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
