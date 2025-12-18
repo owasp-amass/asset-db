@@ -151,10 +151,10 @@ STABLE
 AS $fn$
     SELECT e.edge_id
     FROM public.edge e
-    JOIN public.edge_type_lu et
-      ON e.etype_id = et.id
-    WHERE et.name         = _etype_name
-      AND e.label         = lower(_label)::citext
+    JOIN public.edge_type_lu et 
+        ON e.etype_id = et.id
+    WHERE et.name          = _etype_name
+      AND e.label          = lower(_label)::citext
       AND e.from_entity_id = _from_entity_id
       AND e.to_entity_id   = _to_entity_id
     LIMIT 1;
@@ -164,15 +164,15 @@ $fn$;
 -- Edges updated since a given timestamp (simple utility)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.edge_updated_since(
-    _ts timestamp without time zone
+    _since timestamp without time zone
 ) RETURNS SETOF public.edge
 LANGUAGE sql
 STABLE
 AS $fn$
     SELECT *
     FROM public.edge
-    WHERE updated_at >= _ts
-    ORDER BY updated_at ASC, edge_id ASC;
+    WHERE updated_at >= _since
+    ORDER BY updated_at DESC, edge_id ASC;
 $fn$;
 -- +migrate StatementEnd
 
@@ -246,8 +246,8 @@ AS $fn$
     SELECT t.tag_id
     FROM public.tag t
     JOIN public.tag_type_lu tt
-      ON t.ttype_id = tt.id
-    WHERE tt.name        = _ttype_name
+        ON t.ttype_id = tt.id
+    WHERE tt.name          = _ttype_name
       AND t.property_name  = _property_name
       AND t.property_value = _property_value
     LIMIT 1;
@@ -257,15 +257,15 @@ $fn$;
 -- Tags updated since a given timestamp
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.tag_updated_since(
-    _ts timestamp without time zone
+    _since timestamp without time zone
 ) RETURNS SETOF public.tag
 LANGUAGE sql
 STABLE
 AS $fn$
     SELECT *
     FROM public.tag
-    WHERE updated_at >= _ts
-    ORDER BY updated_at ASC, tag_id ASC;
+    WHERE updated_at >= _since
+    ORDER BY updated_at DESC, tag_id ASC;
 $fn$;
 -- +migrate StatementEnd
 
@@ -315,8 +315,12 @@ BEGIN
     ON CONFLICT (entity_id, tag_id) DO UPDATE
     SET
         updated_at = now()
-    RETURNING tag_id, map_id INTO tag_id, map_id;
+    RETURNING entity_tag_map.tag_id, entity_tag_map.map_id
+    INTO v_tag_id, v_map_id;
 
+    -- 3) Assign to output parameters
+    tag_id := v_tag_id;
+    map_id := v_map_id;
     RETURN;
 END
 $fn$;
@@ -333,7 +337,7 @@ AS $fn$
     SELECT t.*
     FROM public.entity_tag_map m
     JOIN public.tag t
-      ON t.tag_id = m.tag_id
+        ON t.tag_id = m.tag_id
     WHERE m.entity_id = _entity_id
     ORDER BY t.tag_id;
 $fn$;
@@ -385,8 +389,12 @@ BEGIN
     ON CONFLICT (edge_id, tag_id) DO UPDATE
     SET
         updated_at = now()
-    RETURNING tag_id, map_id INTO tag_id, map_id;
+    RETURNING edge_tag_map.tag_id, edge_tag_map.map_id
+    INTO v_tag_id, v_map_id;
 
+    -- 3) Assign to output parameters
+    tag_id := v_tag_id;
+    map_id := v_map_id;
     RETURN;
 END
 $fn$;
@@ -402,7 +410,7 @@ AS $fn$
     SELECT t.*
     FROM public.edge_tag_map m
     JOIN public.tag t
-      ON t.tag_id = m.tag_id
+        ON t.tag_id = m.tag_id
     WHERE m.edge_id = _edge_id
     ORDER BY t.tag_id;
 $fn$;
