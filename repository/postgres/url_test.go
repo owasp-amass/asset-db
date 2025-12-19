@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,13 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForURL(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForURL() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -39,7 +33,7 @@ func TestCreateAssetForURL(t *testing.T) {
 	options := "query=param"
 	fragment := "fragment"
 
-	url, err := db.CreateAsset(ctx, &oamurl.URL{
+	url, err := suite.db.CreateAsset(ctx, &oamurl.URL{
 		Raw:      raw,
 		Scheme:   scheme,
 		Username: username,
@@ -62,7 +56,7 @@ func TestCreateAssetForURL(t *testing.T) {
 	assert.NoError(t, err, "URL entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "URL entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, url.ID)
+	found, err := suite.db.FindEntityById(ctx, url.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the URL")
 	assert.NotNil(t, found, "Entity found by ID for the URL should not be nil")
 	assert.Equal(t, url.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the URL does not match")
@@ -81,20 +75,15 @@ func TestCreateAssetForURL(t *testing.T) {
 	assert.Equal(t, url2.Options, options, "URL found by content does not have matching options")
 	assert.Equal(t, url2.Fragment, fragment, "URL found by content does not have matching fragment")
 
-	err = db.DeleteEntity(ctx, url.ID)
+	err = suite.db.DeleteEntity(ctx, url.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the URL")
 
-	_, err = db.FindEntityById(ctx, url.ID)
+	_, err = suite.db.FindEntityById(ctx, url.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the URL")
 }
 
-func TestFindEntitiesByContentForURL(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForURL() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -111,7 +100,7 @@ func TestFindEntitiesByContentForURL(t *testing.T) {
 	options := "query=param"
 	fragment := "fragment"
 
-	url, err := db.CreateAsset(ctx, &oamurl.URL{
+	url, err := suite.db.CreateAsset(ctx, &oamurl.URL{
 		Raw:      raw,
 		Scheme:   scheme,
 		Username: username,
@@ -127,12 +116,12 @@ func TestFindEntitiesByContentForURL(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.URL, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.URL, after, dbt.ContentFilters{
 		"url": raw,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.URL, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.URL, before, dbt.ContentFilters{
 		"url": raw,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the URL")
@@ -155,7 +144,7 @@ func TestFindEntitiesByContentForURL(t *testing.T) {
 		"url":    raw,
 		"scheme": scheme,
 	} {
-		ents, err := db.FindEntitiesByContent(ctx, oam.URL, before, dbt.ContentFilters{k: v})
+		ents, err := suite.db.FindEntitiesByContent(ctx, oam.URL, before, dbt.ContentFilters{k: v})
 		assert.NoError(t, err, "Failed to find entities by content for the URL")
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the URL")
 	}

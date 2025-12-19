@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,13 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForPerson(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForPerson() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -36,7 +30,7 @@ func TestCreateAssetForPerson(t *testing.T) {
 	birthdate := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	gender := "Unknown"
 
-	person, err := db.CreateAsset(ctx, &people.Person{
+	person, err := suite.db.CreateAsset(ctx, &people.Person{
 		ID:         uniqueID,
 		FullName:   fullName,
 		FirstName:  firstName,
@@ -57,7 +51,7 @@ func TestCreateAssetForPerson(t *testing.T) {
 	assert.NoError(t, err, "Person entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "Person entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, person.ID)
+	found, err := suite.db.FindEntityById(ctx, person.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the Person")
 	assert.NotNil(t, found, "Entity found by ID for the Person should not be nil")
 	assert.Equal(t, person.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the Person does not match")
@@ -74,20 +68,15 @@ func TestCreateAssetForPerson(t *testing.T) {
 	assert.Equal(t, person2.BirthDate, birthdate, "Person found by ID does not have matching BirthDate")
 	assert.Equal(t, person2.Gender, gender, "Person found by ID does not have matching Gender")
 
-	err = db.DeleteEntity(ctx, person.ID)
+	err = suite.db.DeleteEntity(ctx, person.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the Person")
 
-	_, err = db.FindEntityById(ctx, person.ID)
+	_, err = suite.db.FindEntityById(ctx, person.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Person")
 }
 
-func TestFindEntitiesByContentForPerson(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForPerson() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -101,7 +90,7 @@ func TestFindEntitiesByContentForPerson(t *testing.T) {
 	birthdate := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 	gender := "Unknown"
 
-	person, err := db.CreateAsset(ctx, &people.Person{
+	person, err := suite.db.CreateAsset(ctx, &people.Person{
 		ID:         uniqueID,
 		FullName:   fullName,
 		FirstName:  firstName,
@@ -115,12 +104,12 @@ func TestFindEntitiesByContentForPerson(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.Person, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.Person, after, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.Person, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.Person, before, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Person")
@@ -143,7 +132,7 @@ func TestFindEntitiesByContentForPerson(t *testing.T) {
 		"first_name":  firstName,
 		"family_name": familyName,
 	} {
-		ents, err := db.FindEntitiesByContent(ctx, oam.Person, before, dbt.ContentFilters{k: v})
+		ents, err := suite.db.FindEntitiesByContent(ctx, oam.Person, before, dbt.ContentFilters{k: v})
 		assert.NoError(t, err, "Failed to find entities by content for the Person")
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Person")
 	}

@@ -8,7 +8,6 @@ import (
 	"context"
 	"net/netip"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -17,13 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForIPNetRecord(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForIPNetRecord() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -44,7 +38,7 @@ func TestCreateAssetForIPNetRecord(t *testing.T) {
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	status := []string{"active"}
 
-	ipnet, err := db.CreateAsset(ctx, &oamreg.IPNetRecord{
+	ipnet, err := suite.db.CreateAsset(ctx, &oamreg.IPNetRecord{
 		Raw:          raw,
 		CIDR:         cidr,
 		Handle:       handle,
@@ -72,7 +66,7 @@ func TestCreateAssetForIPNetRecord(t *testing.T) {
 	assert.NoError(t, err, "IPNetRecord entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "IPNetRecord entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, ipnet.ID)
+	found, err := suite.db.FindEntityById(ctx, ipnet.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the IPNetRecord")
 	assert.NotNil(t, found, "Entity found by ID for the IPNetRecord should not be nil")
 	assert.Equal(t, ipnet.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the IPNetRecord does not match")
@@ -96,20 +90,15 @@ func TestCreateAssetForIPNetRecord(t *testing.T) {
 	assert.Equal(t, ipnet2.UpdatedDate, updated, "IPNetRecord found by ID does not have matching updated")
 	assert.Equal(t, ipnet2.Status, status, "IPNetRecord found by ID does not have matching status")
 
-	err = db.DeleteEntity(ctx, ipnet.ID)
+	err = suite.db.DeleteEntity(ctx, ipnet.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the IPNetRecord")
 
-	_, err = db.FindEntityById(ctx, ipnet.ID)
+	_, err = suite.db.FindEntityById(ctx, ipnet.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the IPNetRecord")
 }
 
-func TestFindEntitiesByContentForIPNetRecord(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForIPNetRecord() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -130,7 +119,7 @@ func TestFindEntitiesByContentForIPNetRecord(t *testing.T) {
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	status := []string{"active"}
 
-	ipnet, err := db.CreateAsset(ctx, &oamreg.IPNetRecord{
+	ipnet, err := suite.db.CreateAsset(ctx, &oamreg.IPNetRecord{
 		Raw:          raw,
 		CIDR:         cidr,
 		Handle:       handle,
@@ -151,12 +140,12 @@ func TestFindEntitiesByContentForIPNetRecord(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.IPNetRecord, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.IPNetRecord, after, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the IPNetRecord")
@@ -180,43 +169,43 @@ func TestFindEntitiesByContentForIPNetRecord(t *testing.T) {
 	assert.Equal(t, ipnet2.UpdatedDate, updated, "IPNetRecord UpdatedDate found by content does not match")
 	assert.Equal(t, ipnet2.Status, status, "IPNetRecord Status found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
 		"cidr": cidr.String(),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
 		"name": recname,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
 		"start_address": start.String(),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
 		"end_address": end.String(),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
 		"parent_handle": phandle,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")

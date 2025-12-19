@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,12 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForOrganization(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+func (suite *PostgresRepoTestSuite) TestCreateAssetForOrganization() {
+	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -40,7 +35,7 @@ func TestCreateAssetForOrganization(t *testing.T) {
 	nonProfit := false
 	headcount := 250
 
-	org, err := db.CreateAsset(ctx, &oamorg.Organization{
+	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
 		ID:             uniqueID,
 		Name:           name,
 		LegalName:      legalName,
@@ -65,7 +60,7 @@ func TestCreateAssetForOrganization(t *testing.T) {
 	assert.NoError(t, err, "Organization entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "Organization entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, org.ID)
+	found, err := suite.db.FindEntityById(ctx, org.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the Organization")
 	assert.NotNil(t, found, "Entity found by ID for the Organization should not be nil")
 	assert.Equal(t, org.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the Organization does not match")
@@ -86,19 +81,15 @@ func TestCreateAssetForOrganization(t *testing.T) {
 	assert.Equal(t, org2.NonProfit, nonProfit, "Organization found by ID does not have matching NonProfit status")
 	assert.Equal(t, org2.Headcount, headcount, "Organization found by ID does not have matching Headcount")
 
-	err = db.DeleteEntity(ctx, org.ID)
+	err = suite.db.DeleteEntity(ctx, org.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the Organization")
 
-	_, err = db.FindEntityById(ctx, org.ID)
+	_, err = suite.db.FindEntityById(ctx, org.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Organization")
 }
 
-func TestFindEntitiesByContentForOrganization(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForOrganization() {
+	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -117,7 +108,7 @@ func TestFindEntitiesByContentForOrganization(t *testing.T) {
 	nonProfit := false
 	headcount := 250
 
-	org, err := db.CreateAsset(ctx, &oamorg.Organization{
+	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
 		ID:             uniqueID,
 		Name:           name,
 		LegalName:      legalName,
@@ -135,12 +126,12 @@ func TestFindEntitiesByContentForOrganization(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.Organization, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.Organization, after, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.Organization, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.Organization, before, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Organization")
@@ -168,7 +159,7 @@ func TestFindEntitiesByContentForOrganization(t *testing.T) {
 		"jurisdiction":    jurisdiction,
 		"registration_id": registrationID,
 	} {
-		ents, err := db.FindEntitiesByContent(ctx, oam.Organization, before, dbt.ContentFilters{k: v})
+		ents, err := suite.db.FindEntitiesByContent(ctx, oam.Organization, before, dbt.ContentFilters{k: v})
 		assert.NoError(t, err, "Failed to find entities by content for the Organization")
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Organization")
 	}

@@ -8,7 +8,6 @@ import (
 	"context"
 	"net/netip"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -17,13 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForIPAddress(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForIPAddress() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -31,7 +25,7 @@ func TestCreateAssetForIPAddress(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	ip := netip.MustParseAddr("192.0.2.1")
 	iptype := "IPv4"
-	ipasset, err := db.CreateAsset(ctx, &oamnet.IPAddress{
+	ipasset, err := suite.db.CreateAsset(ctx, &oamnet.IPAddress{
 		Address: ip,
 		Type:    iptype,
 	})
@@ -47,7 +41,7 @@ func TestCreateAssetForIPAddress(t *testing.T) {
 	assert.NoError(t, err, "IPAddress entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "IPAddress entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, ipasset.ID)
+	found, err := suite.db.FindEntityById(ctx, ipasset.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the IPAddress")
 	assert.NotNil(t, found, "Entity found by ID for the IPAddress should not be nil")
 	assert.Equal(t, ipasset.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the IPAddress does not match")
@@ -59,20 +53,15 @@ func TestCreateAssetForIPAddress(t *testing.T) {
 	assert.Equal(t, ip2.Address, ip, "IPAddress found by ID does not have a matching Address")
 	assert.Equal(t, ip2.Type, iptype, "IPAddress found by ID does not have a matching Type")
 
-	err = db.DeleteEntity(ctx, ipasset.ID)
+	err = suite.db.DeleteEntity(ctx, ipasset.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the IPAddress")
 
-	_, err = db.FindEntityById(ctx, ipasset.ID)
+	_, err = suite.db.FindEntityById(ctx, ipasset.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the IPAddress")
 }
 
-func TestFindEntitiesByContentForIPAddress(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForIPAddress() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -80,7 +69,7 @@ func TestFindEntitiesByContentForIPAddress(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	ip := netip.MustParseAddr("192.0.2.1")
 	iptype := "IPv4"
-	ipasset, err := db.CreateAsset(ctx, &oamnet.IPAddress{
+	ipasset, err := suite.db.CreateAsset(ctx, &oamnet.IPAddress{
 		Address: ip,
 		Type:    iptype,
 	})
@@ -90,12 +79,12 @@ func TestFindEntitiesByContentForIPAddress(t *testing.T) {
 	after := time.Now()
 
 	ipstr := ip.String()
-	_, err = db.FindOneEntityByContent(ctx, oam.IPAddress, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.IPAddress, after, dbt.ContentFilters{
 		"address": ipstr,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.IPAddress, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.IPAddress, before, dbt.ContentFilters{
 		"address": ipstr,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the IPAddress")
@@ -107,7 +96,7 @@ func TestFindEntitiesByContentForIPAddress(t *testing.T) {
 	assert.Equal(t, ip2.Address, ip, "IPAddress found by ID does not have a matching Address")
 	assert.Equal(t, ip2.Type, iptype, "IPAddress found by ID does not have a matching Type")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.IPAddress, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.IPAddress, before, dbt.ContentFilters{
 		"address": ipstr,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPAddress")

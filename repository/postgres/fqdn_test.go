@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,20 +15,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForFQDN(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForFQDN() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	name := "example.com"
-	fasset, err := db.CreateAsset(ctx, &oamdns.FQDN{
+	fasset, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{
 		Name: name,
 	})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
@@ -44,7 +38,7 @@ func TestCreateAssetForFQDN(t *testing.T) {
 	assert.NoError(t, err, "FQDN entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "FQDN entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, fasset.ID)
+	found, err := suite.db.FindEntityById(ctx, fasset.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the FQDN")
 	assert.NotNil(t, found, "Entity found by ID for the FQDN should not be nil")
 	assert.Equal(t, fasset.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the FQDN does not match")
@@ -55,27 +49,22 @@ func TestCreateAssetForFQDN(t *testing.T) {
 	assert.Equal(t, found.ID, fasset.ID, "FQDN found by Entity ID does not have matching IDs")
 	assert.Equal(t, fasset2.Name, name, "FQDN found by ID does not have a matching Name")
 
-	err = db.DeleteEntity(ctx, fasset.ID)
+	err = suite.db.DeleteEntity(ctx, fasset.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the FQDN")
 
-	_, err = db.FindEntityById(ctx, fasset.ID)
+	_, err = suite.db.FindEntityById(ctx, fasset.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the FQDN")
 }
 
-func TestFindEntitiesByContentForFQDN(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForFQDN() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	name := "example.com"
-	fasset, err := db.CreateAsset(ctx, &oamdns.FQDN{
+	fasset, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{
 		Name: name,
 	})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
@@ -83,12 +72,12 @@ func TestFindEntitiesByContentForFQDN(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.FQDN, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.FQDN, after, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.FQDN, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.FQDN, before, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the FQDN")
@@ -99,7 +88,7 @@ func TestFindEntitiesByContentForFQDN(t *testing.T) {
 	assert.Equal(t, found.ID, fasset.ID, "FQDN found by content does not have matching IDs")
 	assert.Equal(t, fasset2.Name, name, "FQDN found by ID does not have a matching Name")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.FQDN, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.FQDN, before, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the FQDN")

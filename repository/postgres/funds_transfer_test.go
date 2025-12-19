@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,13 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForFundsTransfer(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForFundsTransfer() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -36,7 +30,7 @@ func TestCreateAssetForFundsTransfer(t *testing.T) {
 	date := time.Now().Add(-72 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	rate := 1.0
 
-	ft, err := db.CreateAsset(ctx, &oamfin.FundsTransfer{
+	ft, err := suite.db.CreateAsset(ctx, &oamfin.FundsTransfer{
 		ID:              unique_id,
 		Amount:          amount,
 		ReferenceNumber: refID,
@@ -57,7 +51,7 @@ func TestCreateAssetForFundsTransfer(t *testing.T) {
 	assert.NoError(t, err, "FundsTransfer entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "FundsTransfer entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, ft.ID)
+	found, err := suite.db.FindEntityById(ctx, ft.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the FundsTransfer")
 	assert.NotNil(t, found, "Entity found by ID for the FundsTransfer should not be nil")
 	assert.Equal(t, ft.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the FundsTransfer does not match")
@@ -74,20 +68,15 @@ func TestCreateAssetForFundsTransfer(t *testing.T) {
 	assert.Equal(t, ft2.ExchangeDate, date, "FundsTransfer found by ID does not have a matching Date")
 	assert.Equal(t, ft2.ExchangeRate, rate, "FundsTransfer found by ID does not have a matching ExchangeRate")
 
-	err = db.DeleteEntity(ctx, ft.ID)
+	err = suite.db.DeleteEntity(ctx, ft.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the FundsTransfer")
 
-	_, err = db.FindEntityById(ctx, ft.ID)
+	_, err = suite.db.FindEntityById(ctx, ft.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the FundsTransfer")
 }
 
-func TestFindEntitiesByContentForFundsTransfer(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForFundsTransfer() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -101,7 +90,7 @@ func TestFindEntitiesByContentForFundsTransfer(t *testing.T) {
 	date := time.Now().Add(-72 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	rate := 1.0
 
-	ft, err := db.CreateAsset(ctx, &oamfin.FundsTransfer{
+	ft, err := suite.db.CreateAsset(ctx, &oamfin.FundsTransfer{
 		ID:              unique_id,
 		Amount:          amount,
 		ReferenceNumber: refID,
@@ -115,12 +104,12 @@ func TestFindEntitiesByContentForFundsTransfer(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.FundsTransfer, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.FundsTransfer, after, dbt.ContentFilters{
 		"unique_id": unique_id,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
 		"unique_id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the FundsTransfer")
@@ -136,19 +125,19 @@ func TestFindEntitiesByContentForFundsTransfer(t *testing.T) {
 	assert.Equal(t, ft2.ExchangeDate, date, "FundsTransfer found by ID does not have a matching ExchangeDate")
 	assert.Equal(t, ft2.ExchangeRate, rate, "FundsTransfer found by ID does not have a matching ExchangeRate")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
 		"unique_id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the FundsTransfer")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the FundsTransfer")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
 		"amount": amount,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the FundsTransfer")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the FundsTransfer")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.FundsTransfer, before, dbt.ContentFilters{
 		"reference_number": refID,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the FundsTransfer")

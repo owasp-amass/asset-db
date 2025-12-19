@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,12 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForLocation(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+func (suite *PostgresRepoTestSuite) TestCreateAssetForLocation() {
+	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -41,7 +36,7 @@ func TestCreateAssetForLocation(t *testing.T) {
 	postalCode := "91911"
 	gln := 00012345600012
 
-	loc, err := db.CreateAsset(ctx, &oamcon.Location{
+	loc, err := suite.db.CreateAsset(ctx, &oamcon.Location{
 		Address:        address,
 		Building:       building,
 		BuildingNumber: buildingNum,
@@ -67,7 +62,7 @@ func TestCreateAssetForLocation(t *testing.T) {
 	assert.NoError(t, err, "Location entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "Location entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, loc.ID)
+	found, err := suite.db.FindEntityById(ctx, loc.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the Location")
 	assert.NotNil(t, found, "Entity found by ID for the Location should not be nil")
 	assert.Equal(t, loc.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the Location does not match")
@@ -89,19 +84,15 @@ func TestCreateAssetForLocation(t *testing.T) {
 	assert.Equal(t, loc2.PostalCode, postalCode, "Location found by ID does not have matching postal code")
 	assert.Equal(t, loc2.GLN, gln, "Location found by ID does not have matching GLN")
 
-	err = db.DeleteEntity(ctx, loc.ID)
+	err = suite.db.DeleteEntity(ctx, loc.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the Location")
 
-	_, err = db.FindEntityById(ctx, loc.ID)
+	_, err = suite.db.FindEntityById(ctx, loc.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Location")
 }
 
-func TestFindEntitiesByContentForLocation(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForLocation() {
+	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -121,7 +112,7 @@ func TestFindEntitiesByContentForLocation(t *testing.T) {
 	postalCode := "91911"
 	gln := 00012345600012
 
-	loc, err := db.CreateAsset(ctx, &oamcon.Location{
+	loc, err := suite.db.CreateAsset(ctx, &oamcon.Location{
 		Address:        address,
 		Building:       building,
 		BuildingNumber: buildingNum,
@@ -140,12 +131,12 @@ func TestFindEntitiesByContentForLocation(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.Location, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.Location, after, dbt.ContentFilters{
 		"address": address,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.Location, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.Location, before, dbt.ContentFilters{
 		"address": address,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Location")
@@ -179,7 +170,7 @@ func TestFindEntitiesByContentForLocation(t *testing.T) {
 		"country":         country,
 		"postal_code":     postalCode,
 	} {
-		ents, err := db.FindEntitiesByContent(ctx, oam.Location, before, dbt.ContentFilters{k: v})
+		ents, err := suite.db.FindEntitiesByContent(ctx, oam.Location, before, dbt.ContentFilters{k: v})
 		assert.NoError(t, err, "Failed to find entities by content for the Location")
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Location")
 	}

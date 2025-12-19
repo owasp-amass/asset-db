@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,13 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForIdentifier(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForIdentifier() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -34,7 +28,7 @@ func TestCreateAssetForIdentifier(t *testing.T) {
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	status := "active"
-	idasset, err := db.CreateAsset(ctx, &oamgen.Identifier{
+	idasset, err := suite.db.CreateAsset(ctx, &oamgen.Identifier{
 		UniqueID:       unique_id,
 		Type:           idtype,
 		CreationDate:   created,
@@ -54,7 +48,7 @@ func TestCreateAssetForIdentifier(t *testing.T) {
 	assert.NoError(t, err, "Identifier entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "Identifier entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, idasset.ID)
+	found, err := suite.db.FindEntityById(ctx, idasset.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the Identifier")
 	assert.NotNil(t, found, "Entity found by ID for the Identifier should not be nil")
 	assert.Equal(t, idasset.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the Identifier does not match")
@@ -70,20 +64,15 @@ func TestCreateAssetForIdentifier(t *testing.T) {
 	assert.Equal(t, idasset2.ExpirationDate, expiration, "Identifier found by ID does not have a matching ExpirationDate")
 	assert.Equal(t, idasset2.Status, status, "Identifier found by ID does not have a matching Status")
 
-	err = db.DeleteEntity(ctx, idasset.ID)
+	err = suite.db.DeleteEntity(ctx, idasset.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the Identifier")
 
-	_, err = db.FindEntityById(ctx, idasset.ID)
+	_, err = suite.db.FindEntityById(ctx, idasset.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Identifier")
 }
 
-func TestFindEntitiesByContentForIdentifier(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForIdentifier() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -95,7 +84,7 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	status := "active"
-	idasset, err := db.CreateAsset(ctx, &oamgen.Identifier{
+	idasset, err := suite.db.CreateAsset(ctx, &oamgen.Identifier{
 		UniqueID:       unique_id,
 		Type:           idtype,
 		CreationDate:   created,
@@ -108,12 +97,12 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.Identifier, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.Identifier, after, dbt.ContentFilters{
 		"id": unique_id,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
 		"id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Identifier")
@@ -129,13 +118,13 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 	assert.Equal(t, idasset2.ExpirationDate, expiration, "Identifier found by ID does not have a matching ExpirationDate")
 	assert.Equal(t, idasset2.Status, status, "Identifier found by ID does not have a matching Status")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
 		"id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the Identifier")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Identifier")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
 		"id_type": idtype,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the Identifier")
