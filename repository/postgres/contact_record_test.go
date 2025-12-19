@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,20 +15,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForContactRecord(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForContactRecord() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	discovered := "Probably some URL"
-	cr, err := db.CreateAsset(ctx, &oamcon.ContactRecord{DiscoveredAt: discovered})
+	cr, err := suite.db.CreateAsset(ctx, &oamcon.ContactRecord{DiscoveredAt: discovered})
 	assert.NoError(t, err, "Failed to create asset for the ContactRecord")
 	assert.NotNil(t, cr, "Entity for the ContactRecord should not be nil")
 	time.Sleep(100 * time.Millisecond)
@@ -41,7 +35,7 @@ func TestCreateAssetForContactRecord(t *testing.T) {
 	assert.NoError(t, err, "ContactRecord entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "ContactRecord entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, cr.ID)
+	found, err := suite.db.FindEntityById(ctx, cr.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the ContactRecord")
 	assert.NotNil(t, found, "Entity found by ID for the ContactRecord should not be nil")
 	assert.Equal(t, cr.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the ContactRecord does not match")
@@ -52,38 +46,33 @@ func TestCreateAssetForContactRecord(t *testing.T) {
 	assert.Equal(t, found.ID, cr.ID, "ContactRecord found by Entity ID does not have matching IDs")
 	assert.Equal(t, cr2.DiscoveredAt, discovered, "ContactRecord found by ID does not have matching DiscoveredAt")
 
-	err = db.DeleteEntity(ctx, cr.ID)
+	err = suite.db.DeleteEntity(ctx, cr.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the ContactRecord")
 
-	_, err = db.FindEntityById(ctx, cr.ID)
+	_, err = suite.db.FindEntityById(ctx, cr.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the ContactRecord")
 }
 
-func TestFindEntitiesByContentForContactRecord(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForContactRecord() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	discovered := "Probably some URL"
-	cr, err := db.CreateAsset(ctx, &oamcon.ContactRecord{DiscoveredAt: discovered})
+	cr, err := suite.db.CreateAsset(ctx, &oamcon.ContactRecord{DiscoveredAt: discovered})
 	assert.NoError(t, err, "Failed to create asset for the ContactRecord")
 	assert.NotNil(t, cr, "Entity for the ContactRecord should not be nil")
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.ContactRecord, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.ContactRecord, after, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the ContactRecord")
@@ -94,7 +83,7 @@ func TestFindEntitiesByContentForContactRecord(t *testing.T) {
 	assert.Equal(t, found.ID, cr.ID, "ContactRecord found by content does not have matching IDs")
 	assert.Equal(t, cr2.DiscoveredAt, discovered, "ContactRecord DiscoveredAt found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the ContactRecord")

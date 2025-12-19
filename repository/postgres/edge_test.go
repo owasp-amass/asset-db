@@ -6,36 +6,27 @@ package postgres
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
 	"net/netip"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateEdge(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateEdge() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	fqdn, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	fqdn, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn, "Entity for the FQDN should not be nil")
 
-	ip, err := db.CreateAsset(ctx, &oamnet.IPAddress{
+	ip, err := suite.db.CreateAsset(ctx, &oamnet.IPAddress{
 		Address: netip.MustParseAddr("104.20.44.163"),
 		Type:    "IPv4",
 	})
@@ -52,7 +43,7 @@ func TestCreateEdge(t *testing.T) {
 			TTL:    3200,
 		},
 	}
-	edge, err := db.CreateEdge(ctx, &dbt.Edge{
+	edge, err := suite.db.CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel,
 		FromEntity: fqdn,
 		ToEntity:   ip,
@@ -73,7 +64,7 @@ func TestCreateEdge(t *testing.T) {
 		assert.Greater(t, id, int64(0), k+" ID is not greater than zero")
 	}
 
-	found, err := db.FindEdgeById(ctx, edge.ID)
+	found, err := suite.db.FindEdgeById(ctx, edge.ID)
 	assert.NoError(t, err, "Failed to find edge by ID")
 	assert.NotNil(t, found, "Edge found by ID should not be nil")
 
@@ -104,30 +95,25 @@ func TestCreateEdge(t *testing.T) {
 	assert.Equal(t, rel.Header.Class, rel2.Header.Class, "Edge/Relation found by ID does not have a matching Header.Class")
 	assert.Equal(t, rel.Header.TTL, rel2.Header.TTL, "Edge/Relation found by ID does not have a matching Header.TTL")
 
-	err = db.DeleteEntity(ctx, fqdn.ID)
+	err = suite.db.DeleteEntity(ctx, fqdn.ID)
 	assert.NoError(t, err, "Failed to delete FQDN by ID")
 
-	_, err = db.FindEdgeById(ctx, edge.ID)
+	_, err = suite.db.FindEdgeById(ctx, edge.ID)
 	assert.Error(t, err, "Expected error when finding edge removed by cascading deletion")
 }
 
-func TestIncomingEdges(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestIncomingEdges() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	before1 := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	fqdn1, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	fqdn1, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn1, "Entity for the FQDN should not be nil")
 
-	fqdn2, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
+	fqdn2, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn2, "Entity for the FQDN should not be nil")
 
@@ -139,7 +125,7 @@ func TestIncomingEdges(t *testing.T) {
 			TTL:    3200,
 		},
 	}
-	edge1, err := db.CreateEdge(ctx, &dbt.Edge{
+	edge1, err := suite.db.CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel1,
 		FromEntity: fqdn1,
 		ToEntity:   fqdn2,
@@ -154,7 +140,7 @@ func TestIncomingEdges(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	rel2 := &oamgen.SimpleRelation{Name: "node"}
-	edge2, err := db.CreateEdge(ctx, &dbt.Edge{
+	edge2, err := suite.db.CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel2,
 		FromEntity: fqdn1,
 		ToEntity:   fqdn2,
@@ -221,7 +207,7 @@ func TestIncomingEdges(t *testing.T) {
 	}
 
 	for tname, test := range tests {
-		edges, err := db.IncomingEdges(ctx, test.entity, test.since, test.labels...)
+		edges, err := suite.db.IncomingEdges(ctx, test.entity, test.since, test.labels...)
 		if test.count == 0 {
 			assert.Error(t, err, "Expected error for "+tname)
 			continue
@@ -257,31 +243,26 @@ func TestIncomingEdges(t *testing.T) {
 		"edge1": edge1,
 		"edge2": edge2,
 	} {
-		err = db.DeleteEdge(ctx, e.ID)
+		err = suite.db.DeleteEdge(ctx, e.ID)
 		assert.NoError(t, err, "Failed to delete "+name+" by ID")
 
-		_, err = db.FindEdgeById(ctx, e.ID)
+		_, err = suite.db.FindEdgeById(ctx, e.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
 	}
 }
 
-func TestOutgoingEdges(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestOutgoingEdges() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	before1 := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	fqdn1, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	fqdn1, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn1, "Entity for the FQDN should not be nil")
 
-	fqdn2, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
+	fqdn2, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn2, "Entity for the FQDN should not be nil")
 
@@ -293,7 +274,7 @@ func TestOutgoingEdges(t *testing.T) {
 			TTL:    3200,
 		},
 	}
-	edge1, err := db.CreateEdge(ctx, &dbt.Edge{
+	edge1, err := suite.db.CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel1,
 		FromEntity: fqdn1,
 		ToEntity:   fqdn2,
@@ -308,7 +289,7 @@ func TestOutgoingEdges(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	rel2 := &oamgen.SimpleRelation{Name: "node"}
-	edge2, err := db.CreateEdge(ctx, &dbt.Edge{
+	edge2, err := suite.db.CreateEdge(ctx, &dbt.Edge{
 		Relation:   rel2,
 		FromEntity: fqdn1,
 		ToEntity:   fqdn2,
@@ -375,7 +356,7 @@ func TestOutgoingEdges(t *testing.T) {
 	}
 
 	for tname, test := range tests {
-		edges, err := db.OutgoingEdges(ctx, test.entity, test.since, test.labels...)
+		edges, err := suite.db.OutgoingEdges(ctx, test.entity, test.since, test.labels...)
 		if test.count == 0 {
 			assert.Error(t, err, "Expected error for "+tname)
 			continue
@@ -411,207 +392,10 @@ func TestOutgoingEdges(t *testing.T) {
 		"edge1": edge1,
 		"edge2": edge2,
 	} {
-		err = db.DeleteEdge(ctx, e.ID)
+		err = suite.db.DeleteEdge(ctx, e.ID)
 		assert.NoError(t, err, "Failed to delete "+name+" by ID")
 
-		_, err = db.FindEdgeById(ctx, e.ID)
+		_, err = suite.db.FindEdgeById(ctx, e.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
-	}
-}
-
-func BenchmarkFindEdgeByID(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
-		ID:   "fake unique service id",
-		Type: "fake service type",
-	})
-	assert.NoError(b, err, "Failed to create the Service asset")
-
-	var ids []string
-	for i := range int64(1000) {
-		edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
-			Relation: &oamgen.PortRelation{
-				Name:       fmt.Sprintf("tcp_port_%d", i),
-				PortNumber: int(i),
-				Protocol:   "TCP",
-			},
-			FromEntity: fqdn,
-			ToEntity:   serv,
-		})
-		assert.NoError(b, err, "Failed to create the edge")
-		assert.NotNil(b, edge, "Edge should not be nil")
-		ids = append(ids, edge.ID)
-	}
-
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.FindEdgeById(context.Background(), ids[idx])
-		idx = (idx + 1) % 1000
-	}
-}
-
-func BenchmarkIncomingEdges(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
-		ID:   "fake unique service id",
-		Type: "fake service type",
-	})
-	assert.NoError(b, err, "Failed to create the Service asset")
-
-	var labels []string
-	for i := range int64(1000) {
-		label := fmt.Sprintf("tcp_port_%d", i)
-		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
-			Relation: &oamgen.PortRelation{
-				Name:       label,
-				PortNumber: int(i),
-				Protocol:   "TCP",
-			},
-			FromEntity: fqdn,
-			ToEntity:   serv,
-		})
-		assert.NoError(b, err, "Failed to create the edge")
-		labels = append(labels, label)
-	}
-
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.IncomingEdges(context.Background(), serv, time.Time{}, labels[idx])
-		idx = (idx + 1) % 1000
-	}
-}
-
-func BenchmarkIncomingEdgesWithSince(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
-		ID:   "fake unique service id",
-		Type: "fake service type",
-	})
-	assert.NoError(b, err, "Failed to create the Service asset")
-
-	var since time.Time
-	for i := range int64(1000) {
-		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
-			Relation: &oamgen.PortRelation{
-				Name:       fmt.Sprintf("tcp_port_%d", i),
-				PortNumber: int(i),
-				Protocol:   "TCP",
-			},
-			FromEntity: fqdn,
-			ToEntity:   serv,
-		})
-		assert.NoError(b, err, "Failed to create the edge")
-
-		if i == 950 {
-			since = time.Now()
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	for b.Loop() {
-		_, _ = db.IncomingEdges(context.Background(), serv, since)
-	}
-}
-
-func BenchmarkOutgoingEdges(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
-		ID:   "fake unique service id",
-		Type: "fake service type",
-	})
-	assert.NoError(b, err, "Failed to create the Service asset")
-
-	var labels []string
-	for i := range int64(1000) {
-		label := fmt.Sprintf("tcp_port_%d", i)
-		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
-			Relation: &oamgen.PortRelation{
-				Name:       label,
-				PortNumber: int(i),
-				Protocol:   "TCP",
-			},
-			FromEntity: fqdn,
-			ToEntity:   serv,
-		})
-		assert.NoError(b, err, "Failed to create the edge")
-		labels = append(labels, label)
-	}
-
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.OutgoingEdges(context.Background(), fqdn, time.Time{}, labels[idx])
-		idx = (idx + 1) % 1000
-	}
-}
-
-func BenchmarkOutgoingEdgesWithSince(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
-		ID:   "fake unique service id",
-		Type: "fake service type",
-	})
-	assert.NoError(b, err, "Failed to create the Service asset")
-
-	var since time.Time
-	for i := range int64(1000) {
-		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
-			Relation: &oamgen.PortRelation{
-				Name:       fmt.Sprintf("tcp_port_%d", i),
-				PortNumber: int(i),
-				Protocol:   "TCP",
-			},
-			FromEntity: fqdn,
-			ToEntity:   serv,
-		})
-		assert.NoError(b, err, "Failed to create the edge")
-
-		if i == 950 {
-			since = time.Now()
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	for b.Loop() {
-		_, _ = db.OutgoingEdges(context.Background(), fqdn, since)
 	}
 }

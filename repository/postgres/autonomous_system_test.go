@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,20 +15,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForAutonomousSystem(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForAutonomousSystem() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	number := 26808
-	asn, err := db.CreateAsset(ctx, &oamnet.AutonomousSystem{Number: number})
+	asn, err := suite.db.CreateAsset(ctx, &oamnet.AutonomousSystem{Number: number})
 	assert.NoError(t, err, "Failed to create asset for the AutonomousSystem")
 	assert.NotNil(t, asn, "Entity for the AutonomousSystem should not be nil")
 	time.Sleep(100 * time.Millisecond)
@@ -42,7 +36,7 @@ func TestCreateAssetForAutonomousSystem(t *testing.T) {
 	assert.NoError(t, err, "AutonomousSystem entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "AutonomousSystem entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, asn.ID)
+	found, err := suite.db.FindEntityById(ctx, asn.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the AutonomousSystem")
 	assert.NotNil(t, found, "Entity found by ID for the AutonomousSystem should not be nil")
 	assert.Equal(t, asn.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the AutonomousSystem does not match")
@@ -53,38 +47,33 @@ func TestCreateAssetForAutonomousSystem(t *testing.T) {
 	assert.Equal(t, found.ID, asn.ID, "AutonomousSystem found by Entity ID does not have matching IDs")
 	assert.Equal(t, asn2.Number, number, "AutonomousSystem found by ID does not have matching number")
 
-	err = db.DeleteEntity(ctx, asn.ID)
+	err = suite.db.DeleteEntity(ctx, asn.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the AutonomousSystem")
 
-	_, err = db.FindEntityById(ctx, asn.ID)
+	_, err = suite.db.FindEntityById(ctx, asn.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the AutonomousSystem")
 }
 
-func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForAutonomousSystem() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	number := 26808
-	asn, err := db.CreateAsset(ctx, &oamnet.AutonomousSystem{Number: number})
+	asn, err := suite.db.CreateAsset(ctx, &oamnet.AutonomousSystem{Number: number})
 	assert.NoError(t, err, "Failed to create asset for the AutonomousSystem")
 	assert.NotNil(t, asn, "Entity for the AutonomousSystem should not be nil")
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.AutonomousSystem, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.AutonomousSystem, after, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the AutonomousSystem")
@@ -95,7 +84,7 @@ func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
 	assert.Equal(t, found.ID, asn.ID, "AutonomousSystem found by content does not have matching IDs")
 	assert.Equal(t, asn2.Number, number, "AutonomousSystem Number found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutonomousSystem")

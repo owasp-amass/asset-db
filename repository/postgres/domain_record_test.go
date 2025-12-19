@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,13 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForDomainRecord(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForDomainRecord() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -39,7 +33,7 @@ func TestCreateAssetForDomainRecord(t *testing.T) {
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	server := "whois.test.com"
-	dr, err := db.CreateAsset(ctx, &oamreg.DomainRecord{
+	dr, err := suite.db.CreateAsset(ctx, &oamreg.DomainRecord{
 		Raw:            raw_record,
 		ID:             object_id,
 		Domain:         domain,
@@ -64,7 +58,7 @@ func TestCreateAssetForDomainRecord(t *testing.T) {
 	assert.NoError(t, err, "DomainRecord entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "DomainRecord entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, dr.ID)
+	found, err := suite.db.FindEntityById(ctx, dr.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the DomainRecord")
 	assert.NotNil(t, found, "Entity found by ID for the DomainRecord should not be nil")
 	assert.Equal(t, dr.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the DomainRecord does not match")
@@ -85,20 +79,15 @@ func TestCreateAssetForDomainRecord(t *testing.T) {
 	assert.Equal(t, dr2.ExpirationDate, expiration, "DomainRecord found by ID does not have a matching ExpirationDate")
 	assert.Equal(t, dr2.Status, status, "DomainRecord found by ID does not have a matching Status")
 
-	err = db.DeleteEntity(ctx, dr.ID)
+	err = suite.db.DeleteEntity(ctx, dr.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the DomainRecord")
 
-	_, err = db.FindEntityById(ctx, dr.ID)
+	_, err = suite.db.FindEntityById(ctx, dr.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the DomainRecord")
 }
 
-func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForDomainRecord() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -115,7 +104,7 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	server := "whois.test.com"
-	dr, err := db.CreateAsset(ctx, &oamreg.DomainRecord{
+	dr, err := suite.db.CreateAsset(ctx, &oamreg.DomainRecord{
 		Raw:            raw_record,
 		ID:             object_id,
 		Domain:         domain,
@@ -133,12 +122,12 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.DomainRecord, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.DomainRecord, after, dbt.ContentFilters{
 		"domain": domain,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"domain": domain,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the DomainRecord")
@@ -159,31 +148,31 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	assert.Equal(t, dr2.ExpirationDate, expiration, "DomainRecord found by ID does not have a matching ExpirationDate")
 	assert.Equal(t, dr2.Status, status, "DomainRecord found by ID does not have a matching Status")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"name": record_name,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"extension": extension,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"punycode": punycode,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.DomainRecord, time.Time{}, dbt.ContentFilters{
 		"id": object_id,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")

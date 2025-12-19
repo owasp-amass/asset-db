@@ -6,28 +6,19 @@ package postgres
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
 	"net/netip"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/caffix/stringset"
-	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFindEntitiesByType(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByType() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -35,11 +26,11 @@ func TestFindEntitiesByType(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	set1 := stringset.New("example.com", "test.com", "sample.org")
 	for _, name := range set1.Slice() {
-		fqdn, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: name})
+		fqdn, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: name})
 		assert.NoError(t, err, "Failed to create FQDN '%s'", name)
 		assert.NotNil(t, fqdn, "Entity for the FQDN '%s' should not be nil", name)
 	}
-	ip1, err := db.CreateAsset(ctx, &oamnet.IPAddress{
+	ip1, err := suite.db.CreateAsset(ctx, &oamnet.IPAddress{
 		Address: netip.MustParseAddr("104.20.44.163"),
 		Type:    "IPv4",
 	})
@@ -55,11 +46,11 @@ func TestFindEntitiesByType(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	set2 := stringset.New("example.net", "demo.com", "website.org")
 	for _, name := range set2.Slice() {
-		fqdn, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: name})
+		fqdn, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: name})
 		assert.NoError(t, err, "Failed to create FQDN '%s'", name)
 		assert.NotNil(t, fqdn, "Entity for the FQDN '%s' should not be nil", name)
 	}
-	ip2, err := db.CreateAsset(ctx, &oamnet.IPAddress{
+	ip2, err := suite.db.CreateAsset(ctx, &oamnet.IPAddress{
 		Address: netip.MustParseAddr("172.66.157.115"),
 		Type:    "IPv4",
 	})
@@ -128,7 +119,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	}
 
 	for tname, test := range tests {
-		entities, err := db.FindEntitiesByType(ctx, test.atype, test.since)
+		entities, err := suite.db.FindEntitiesByType(ctx, test.atype, test.since)
 		if test.count == 0 {
 			assert.Error(t, err, "Expected error for "+tname)
 			continue
@@ -171,104 +162,5 @@ func TestFindEntitiesByType(t *testing.T) {
 				t.Errorf("Entity Asset has an unexpected type for %s", tname)
 			}
 		}
-	}
-}
-
-func BenchmarkFindEntityByID(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	var ids []string
-	for i := range int64(1000) {
-		a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: fmt.Sprintf("www%d.example.com", i)})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-		ids = append(ids, a.ID)
-	}
-
-	var i int64
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.FindEntityById(context.Background(), ids[idx])
-		i = (i + 1) % 1000
-	}
-}
-
-func BenchmarkFindEntitiesByContent(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	var names []string
-	for i := range int64(1000) {
-		n := fmt.Sprintf("www%d.example.com", i)
-		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-		names = append(names, n)
-	}
-
-	var i int64
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, time.Time{}, dbt.ContentFilters{
-			"name": names[idx],
-		})
-		i = (i + 1) % 1000
-	}
-}
-
-func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	var names []string
-	since := time.Now()
-	time.Sleep(100 * time.Millisecond)
-	for i := range int64(1000) {
-		n := fmt.Sprintf("www%d.example.com", i)
-		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-		names = append(names, n)
-	}
-
-	var i int64
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, since, dbt.ContentFilters{
-			"name": names[idx],
-		})
-		i = (i + 1) % 1000
-	}
-}
-
-func BenchmarkFindEntitiesByType(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	var since time.Time
-	for i := range int64(1000) {
-		n := fmt.Sprintf("www%d.example.com", i)
-
-		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
-		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-
-		if i == 950 {
-			since = time.Now()
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	for b.Loop() {
-		_, _ = db.FindEntitiesByType(context.Background(), oam.FQDN, since)
 	}
 }

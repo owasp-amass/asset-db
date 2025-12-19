@@ -6,10 +6,7 @@ package postgres
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -18,17 +15,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateEntityProperty(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateEntityProperty() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	fqdn, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	fqdn, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn, "Entity for the FQDN should not be nil")
 
@@ -41,7 +33,7 @@ func TestCreateEntityProperty(t *testing.T) {
 		},
 		Data: "fake txt record",
 	}
-	tag, err := db.CreateEntityProperty(ctx, fqdn, prop)
+	tag, err := suite.db.CreateEntityProperty(ctx, fqdn, prop)
 	assert.NoError(t, err, "Failed to create tag for the FQDN")
 	assert.NotNil(t, tag, "Tag for the FQDN should not be nil")
 
@@ -49,7 +41,7 @@ func TestCreateEntityProperty(t *testing.T) {
 	assert.NoError(t, err, "Entity tag ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "Entity tag ID is not greater than zero")
 
-	found, err := db.FindEntityTagById(ctx, tag.ID)
+	found, err := suite.db.FindEntityTagById(ctx, tag.ID)
 	assert.NoError(t, err, "Failed to find entity tag by ID for the FQDN")
 	assert.NotNil(t, found, "Entity tag found by ID for the FQDB should not be nil")
 	assert.Equal(t, tag.ID, tag.ID, "Entity tag found by ID does not have matching IDs")
@@ -64,24 +56,19 @@ func TestCreateEntityProperty(t *testing.T) {
 	assert.Equal(t, prop.Header.TTL, p.Header.TTL, "DNSRecordProperty found by ID does not have a matching Header.TTL")
 	assert.Equal(t, prop.Value(), p.Value(), "DNSRecordProperty found by ID does not have a matching Value")
 
-	err = db.DeleteEntity(ctx, fqdn.ID)
+	err = suite.db.DeleteEntity(ctx, fqdn.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the FQDN")
 
-	_, err = db.FindEntityTagById(ctx, tag.ID)
+	_, err = suite.db.FindEntityTagById(ctx, tag.ID)
 	assert.Error(t, err, "Expected error when finding entity tag removed by cascading deletion")
 }
 
-func TestFindEntityTags(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntityTags() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	fqdn, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	fqdn, err := suite.db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err, "Failed to create asset for the FQDN")
 	assert.NotNil(t, fqdn, "Entity for the FQDN should not be nil")
 
@@ -97,7 +84,7 @@ func TestFindEntityTags(t *testing.T) {
 
 	before1 := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	tag1, err := db.CreateEntityProperty(ctx, fqdn, prop1)
+	tag1, err := suite.db.CreateEntityProperty(ctx, fqdn, prop1)
 	assert.NoError(t, err, "Failed to create tag for the FQDN")
 	assert.NotNil(t, tag1, "Tag for the FQDN should not be nil")
 	time.Sleep(100 * time.Millisecond)
@@ -112,7 +99,7 @@ func TestFindEntityTags(t *testing.T) {
 
 	before2 := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	tag2, err := db.CreateEntityProperty(ctx, fqdn, prop2)
+	tag2, err := suite.db.CreateEntityProperty(ctx, fqdn, prop2)
 	assert.NoError(t, err, "Failed to create tag for the FQDN")
 	assert.NotNil(t, tag2, "Tag for the FQDN should not be nil")
 	time.Sleep(100 * time.Millisecond)
@@ -175,7 +162,7 @@ func TestFindEntityTags(t *testing.T) {
 	}
 
 	for tname, test := range tests {
-		tags, err := db.FindEntityTags(ctx, test.entity, test.since, test.names...)
+		tags, err := suite.db.FindEntityTags(ctx, test.entity, test.since, test.names...)
 		if test.count == 0 {
 			assert.Error(t, err, "Expected error for "+tname)
 			continue
@@ -211,93 +198,10 @@ func TestFindEntityTags(t *testing.T) {
 		"tag1": tag1,
 		"tag2": tag2,
 	} {
-		err = db.DeleteEntityTag(ctx, tag.ID)
+		err = suite.db.DeleteEntityTag(ctx, tag.ID)
 		assert.NoError(t, err, "Failed to delete "+name+" by ID")
 
-		_, err = db.FindEntityTagById(ctx, tag.ID)
+		_, err = suite.db.FindEntityTagById(ctx, tag.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
-	}
-}
-
-func BenchmarkFindEntityTagByID(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	var ids []string
-	for i := range int64(1000) {
-		prop, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
-			PropertyName:  "prop",
-			PropertyValue: fmt.Sprintf("value%d", i),
-		})
-		assert.NoError(b, err, "Failed to create the entity property")
-		ids = append(ids, prop.ID)
-	}
-
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.FindEntityTagById(context.Background(), ids[idx])
-		idx = (idx + 1) % 1000
-	}
-}
-
-func BenchmarkFindEntityTags(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	var names []string
-	for i := range int64(1000) {
-		tag, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
-			PropertyName:  fmt.Sprintf("prop%d", i),
-			PropertyValue: "blahblah",
-		})
-		assert.NoError(b, err, "Failed to create the entity property")
-		names = append(names, tag.Property.Name())
-	}
-
-	idx := int64(rand.Intn(1000))
-	for b.Loop() {
-		_, _ = db.FindEntityTags(context.Background(), a, time.Time{}, names[idx])
-		idx = (idx + 1) % 1000
-	}
-}
-
-func BenchmarkFindEntityTagsWithSince(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
-	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
-	assert.NoError(b, err, "Failed to create the FQDN asset")
-
-	var since time.Time
-	for i := range int64(1000) {
-		_, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
-			PropertyName:  fmt.Sprintf("prop%d", i),
-			PropertyValue: "blahblah",
-		})
-		assert.NoError(b, err, "Failed to create the entity property")
-
-		if i == 950 {
-			since = time.Now()
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	for b.Loop() {
-		_, _ = db.FindEntityTags(context.Background(), a, since)
 	}
 }

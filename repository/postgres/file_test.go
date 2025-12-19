@@ -7,7 +7,6 @@ package postgres
 import (
 	"context"
 	"strconv"
-	"testing"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -16,13 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAssetForFile(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestCreateAssetForFile() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -31,7 +25,7 @@ func TestCreateAssetForFile(t *testing.T) {
 	url := "https://www.owasp.org/contact.html"
 	name := "contact.html"
 	fileType := "text/html"
-	fasset, err := db.CreateAsset(ctx, &oamfile.File{
+	fasset, err := suite.db.CreateAsset(ctx, &oamfile.File{
 		URL:  url,
 		Name: name,
 		Type: fileType,
@@ -48,7 +42,7 @@ func TestCreateAssetForFile(t *testing.T) {
 	assert.NoError(t, err, "File entity ID is not a valid integer")
 	assert.Greater(t, id, int64(0), "File entity ID is not greater than zero")
 
-	found, err := db.FindEntityById(ctx, fasset.ID)
+	found, err := suite.db.FindEntityById(ctx, fasset.ID)
 	assert.NoError(t, err, "Failed to find entity by ID for the File")
 	assert.NotNil(t, found, "Entity found by ID for the File should not be nil")
 	assert.Equal(t, fasset.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the File does not match")
@@ -61,20 +55,15 @@ func TestCreateAssetForFile(t *testing.T) {
 	assert.Equal(t, fasset2.Name, name, "File found by ID does not have a matching Name")
 	assert.Equal(t, fasset2.Type, fileType, "File found by ID does not have a matching Type")
 
-	err = db.DeleteEntity(ctx, fasset.ID)
+	err = suite.db.DeleteEntity(ctx, fasset.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the File")
 
-	_, err = db.FindEntityById(ctx, fasset.ID)
+	_, err = suite.db.FindEntityById(ctx, fasset.ID)
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the File")
 }
 
-func TestFindEntitiesByContentForFile(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
-	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
-
+func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForFile() {
+	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -83,7 +72,7 @@ func TestFindEntitiesByContentForFile(t *testing.T) {
 	url := "https://www.owasp.org/contact.html"
 	name := "contact.html"
 	fileType := "text/html"
-	fasset, err := db.CreateAsset(ctx, &oamfile.File{
+	fasset, err := suite.db.CreateAsset(ctx, &oamfile.File{
 		URL:  url,
 		Name: name,
 		Type: fileType,
@@ -93,12 +82,12 @@ func TestFindEntitiesByContentForFile(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.File, after, dbt.ContentFilters{
+	_, err = suite.db.FindOneEntityByContent(ctx, oam.File, after, dbt.ContentFilters{
 		"url": url,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.File, before, dbt.ContentFilters{
+	found, err := suite.db.FindOneEntityByContent(ctx, oam.File, before, dbt.ContentFilters{
 		"url": url,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the File")
@@ -111,13 +100,13 @@ func TestFindEntitiesByContentForFile(t *testing.T) {
 	assert.Equal(t, fasset2.Name, name, "File found by ID does not have a matching Name")
 	assert.Equal(t, fasset2.Type, fileType, "File found by ID does not have a matching Type")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.File, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.File, before, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the File")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the File")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.File, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.File, before, dbt.ContentFilters{
 		"type": fileType,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the File")
