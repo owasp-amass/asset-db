@@ -109,7 +109,6 @@ func (r *rowsJob) GetArgs() pgx.NamedArgs {
 type worker struct {
 	db            *sql.DB
 	conn          *sql.Conn
-	stmts         map[string]*sql.Stmt
 	jobs          queue.Queue
 	batchSize     int
 	batchDuration time.Duration
@@ -163,7 +162,6 @@ func (pool *workerPool) Close() {
 func newWorker(db *sql.DB, batchSize int, batchDuration time.Duration) (*worker, error) {
 	w := &worker{
 		db:            db,
-		stmts:         make(map[string]*sql.Stmt),
 		jobs:          queue.NewQueue(),
 		batchSize:     batchSize,
 		batchDuration: batchDuration,
@@ -186,37 +184,7 @@ func (w *worker) Submit(job any) {
 func (w *worker) Close() {
 	close(w.quit)
 	w.wg.Wait()
-	w.closeStmts()
 	_ = w.conn.Close()
-}
-
-func (w *worker) closeStmts() {
-	for _, st := range w.stmts {
-		_ = st.Close()
-	}
-	w.stmts = make(map[string]*sql.Stmt)
-}
-
-func (w *worker) getOrPrepare(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
-	st, found := w.stmts[key]
-	if found && st != nil {
-		return st, nil
-	}
-
-	ps, err := w.conn.PrepareContext(ctx, sqlText)
-	if err != nil && errors.Is(err, driver.ErrBadConn) {
-		_ = w.conn.Close()
-		if err := w.acquireConn(); err != nil {
-			return nil, err
-		}
-		ps, err = w.conn.PrepareContext(ctx, sqlText)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	w.stmts[key] = ps
-	return ps, nil
 }
 
 func (w *worker) acquireConn() error {
@@ -229,7 +197,6 @@ func (w *worker) acquireConn() error {
 	}
 
 	w.conn = conn
-	w.closeStmts()
 	return nil
 }
 
@@ -353,17 +320,9 @@ func (w *worker) flushJobs(jobs []job) ([]job, error) {
 			continue
 		}
 
-		stmt, err := w.getOrPrepare(job.GetCtx(), job.GetName(), job.GetSQLText())
-		if err != nil {
-			errToJob(job, err)
-			goodjobs = append(goodjobs, jobs[i+1:]...)
-			failed = true
-			break
-		}
-
 		switch v := job.(type) {
 		case *execJob:
-			_, err := tx.StmtContext(v.Ctx, stmt).ExecContext(v.Ctx, v.Args)
+			_, err := tx.ExecContext(v.Ctx, v.SQLText, v.Args)
 			if err != nil {
 				errToJob(job, err)
 				goodjobs = append(goodjobs, jobs[i+1:]...)
@@ -372,10 +331,10 @@ func (w *worker) flushJobs(jobs []job) ([]job, error) {
 			}
 			jobResults = append(jobResults, nil)
 		case *rowJob:
-			row := tx.StmtContext(v.Ctx, stmt).QueryRowContext(v.Ctx, v.Args)
+			row := tx.QueryRowContext(v.Ctx, v.SQLText, v.Args)
 			jobResults = append(jobResults, &rowResult{Row: row, Err: nil})
 		case *rowsJob:
-			rows, err := tx.StmtContext(v.Ctx, stmt).QueryContext(v.Ctx, v.Args)
+			rows, err := tx.QueryContext(v.Ctx, v.SQLText, v.Args)
 			if err != nil {
 				errToJob(job, err)
 				goodjobs = append(goodjobs, jobs[i+1:]...)
