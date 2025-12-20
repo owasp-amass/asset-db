@@ -6,49 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/contact"
 )
 
-// Params: :city, :street_address, :country, :unit, :building,
-// :province, :locality, :postal_code, :street_name, :building_number, :attrs
-const upsertLocationText = `
-INSERT INTO location(city, street_address, country, unit, building, province, locality, postal_code, street_name, building_number, attrs)
-VALUES (:city, :street_address, :country, :unit, :building, :province, :locality, :postal_code, :street_name, :building_number, :attrs)
-ON CONFLICT(street_address_norm) DO UPDATE SET
-    city            = COALESCE(excluded.city,            location.city),
-    country         = COALESCE(excluded.country,         location.country),
-    unit            = COALESCE(excluded.unit,            location.unit),
-    building        = COALESCE(excluded.building,        location.building),
-    province        = COALESCE(excluded.province,        location.province),
-    locality        = COALESCE(excluded.locality,        location.locality),
-    postal_code     = COALESCE(excluded.postal_code,     location.postal_code),
-    street_name     = COALESCE(excluded.street_name,     location.street_name),
-    building_number = COALESCE(excluded.building_number, location.building_number),
-    attrs           = json_patch(location.attrs,         excluded.attrs),
-    updated_at      = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertLocationText = `SELECT public.location_upsert_entity_json(@record::jsonb);`
 
-// Param: :street_address
-const selectEntityIDByLocationText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'location' LIMIT 1)
-  AND natural_key = lower(:street_address)
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectLocationByID = `
-SELECT id, created_at, updated_at, city, unit, street_address, country, 
-	   building, province, locality, postal_code, street_name, building_number, attrs
-FROM location 
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.city, a.unit, a.street_address, a.country, 
+	   a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
+FROM public.location_get_by_id(@row_id::bigint) AS a;`
 
 type locationAttributes struct {
 	POBox string `json:"po_box,omitempty"`
@@ -66,46 +41,17 @@ func (r *PostgresRepository) upsertLocation(ctx context.Context, a *contact.Loca
 		return 0, errors.New("location city cannot be empty")
 	}
 
-	attrs := locationAttributes{
-		POBox: a.POBox,
-		GLN:   a.GLN,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.location.upsert",
 		SQLText: upsertLocationText,
-		Args: []any{
-			sql.Named("city", a.City),
-			sql.Named("unit", a.Unit),
-			sql.Named("street_address", a.Address),
-			sql.Named("country", a.Country),
-			sql.Named("building", a.Building),
-			sql.Named("province", a.Province),
-			sql.Named("locality", a.Locality),
-			sql.Named("postal_code", a.PostalCode),
-			sql.Named("street_name", a.StreetName),
-			sql.Named("building_number", a.BuildingNumber),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.location.entity_id_by_location",
-		SQLText: selectEntityIDByLocationText,
-		Args:    []any{sql.Named("street_address", a.Address)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -122,12 +68,12 @@ func (r *PostgresRepository) upsertLocation(ctx context.Context, a *contact.Loca
 }
 
 func (r *PostgresRepository) fetchLocationByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.location.by_id",
 		SQLText: selectLocationByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

@@ -6,37 +6,22 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
-// Params: :fqdn_text, :attrs
-const upsertFQDNText = `
-INSERT INTO fqdn (fqdn, attrs)
-VALUES (:fqdn_text, :attrs)
-ON CONFLICT(fqdn_norm) DO UPDATE SET 
-	attrs      = json_patch(fqdn.attrs, excluded.attrs),
-	updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertFQDNText = `SELECT public.fqdn_upsert_entity_json(@record::jsonb);`
 
-// Param: :fqdn_text
-const selectEntityIDByFQDNText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'fqdn' LIMIT 1)
-  AND natural_key = lower(:fqdn_text)
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectFQDNByIDText = `
-SELECT id, created_at, updated_at, fqdn, attrs
-FROM fqdn
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.fqdn, a.attrs
+FROM public.fqdn_get_by_id(@row_id::bigint) AS a;`
 
 func (r *PostgresRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (int64, error) {
 	if a == nil {
@@ -46,28 +31,17 @@ func (r *PostgresRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (in
 		return 0, errors.New("FQDN name cannot be empty")
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
-		Ctx:     ctx,
-		Name:    "asset.fqdn.upsert",
-		SQLText: upsertFQDNText,
-		Args: []any{
-			sql.Named("fqdn_text", a.Name),
-			sql.Named("attrs", "{}"),
-		},
-		Result: done,
-	})
-	err := <-done
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
-		Name:    "asset.fqdn.entity_id_by_fqdn",
-		SQLText: selectEntityIDByFQDNText,
-		Args:    []any{sql.Named("fqdn_text", a.Name)},
+		Name:    "asset.fqdn.upsert",
+		SQLText: upsertFQDNText,
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -84,12 +58,12 @@ func (r *PostgresRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (in
 }
 
 func (r *PostgresRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.fqdn.by_id",
 		SQLText: selectFQDNByIDText,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

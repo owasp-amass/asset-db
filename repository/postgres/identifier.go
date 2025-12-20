@@ -6,40 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
-// Params: :unique_id, :id_type, :attrs
-const upsertIdentifierText = `
-INSERT INTO identifier(unique_id, id_type, attrs) 
-VALUES (:unique_id, :id_type, :attrs) 
-ON CONFLICT(unique_id) DO UPDATE SET
-    id_type    = COALESCE(excluded.id_type,   identifier.id_type),
-	attrs      = json_patch(identifier.attrs, excluded.attrs),
-    updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertIdentifierText = `SELECT public.identifier_upsert_entity_json(@record::jsonb);`
 
-// Param: :unique_id
-const selectEntityIDByIdentifierText = `
-SELECT entity_id FROM entity 
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'identifier' LIMIT 1) 
-  AND natural_key = :unique_id 
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectIdentifierByID = `
-SELECT id, created_at, updated_at, unique_id, id_type, attrs
-FROM identifier 
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.id_type, a.attrs
+FROM public.identifier_get_by_id(@row_id::bigint) AS a;`
 
 type identifierAttributes struct {
 	Status         string `json:"status,omitempty"`
@@ -59,40 +43,17 @@ func (r *PostgresRepository) upsertIdentifier(ctx context.Context, a *oamgen.Ide
 		return 0, fmt.Errorf("identifier type cannot be empty")
 	}
 
-	attrs := identifierAttributes{
-		Status:         a.Status,
-		CreatedDate:    a.CreationDate,
-		UpdatedDate:    a.UpdatedDate,
-		ExpirationDate: a.ExpirationDate,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.identifier.upsert",
 		SQLText: upsertIdentifierText,
-		Args: []any{
-			sql.Named("unique_id", a.UniqueID),
-			sql.Named("id_type", a.Type),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.identifier.entity_id_by_identifier",
-		SQLText: selectEntityIDByIdentifierText,
-		Args:    []any{sql.Named("unique_id", a.UniqueID)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -109,12 +70,12 @@ func (r *PostgresRepository) upsertIdentifier(ctx context.Context, a *oamgen.Ide
 }
 
 func (r *PostgresRepository) fetchIdentifierByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.identifier.by_id",
 		SQLText: selectIdentifierByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

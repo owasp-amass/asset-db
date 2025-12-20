@@ -6,43 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
-// Params: :unique_id, :legal_name, :org_name, :jurisdiction, :registration_id, :attrs
-const upsertOrganizationText = `
-INSERT INTO organization(unique_id, legal_name, org_name, jurisdiction, registration_id, attrs)
-VALUES (:unique_id, :legal_name, :org_name, :jurisdiction, :registration_id, :attrs)
-ON CONFLICT(unique_id) DO UPDATE SET
-    legal_name      = COALESCE(excluded.legal_name,      organization.legal_name),
-    org_name        = COALESCE(excluded.org_name,        organization.org_name),
-    jurisdiction    = COALESCE(excluded.jurisdiction,    organization.jurisdiction),
-    registration_id = COALESCE(excluded.registration_id, organization.registration_id),
-    attrs           = json_patch(organization.attrs,     excluded.attrs),
-    updated_at      = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertOrganizationText = `SELECT public.organization_upsert_entity_json(@record::jsonb);`
 
-// Param: :unique_id
-const selectEntityIDByOrganizationText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'organization' LIMIT 1)
-  AND natural_key = :unique_id
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectOrganizationByIDText = `
-SELECT id, created_at, updated_at, org_name, unique_id, legal_name, jurisdiction, registration_id, attrs
-FROM organization 
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.org_name, a.unique_id, a.legal_name, a.jurisdiction, a.registration_id, a.attrs
+FROM public.organization_get_by_id(@row_id::bigint) AS a;`
 
 type organizationAttributes struct {
 	FoundingDate  string   `json:"founding_date,omitempty"`
@@ -64,45 +45,17 @@ func (r *PostgresRepository) upsertOrganization(ctx context.Context, a *oamorg.O
 		return 0, fmt.Errorf("the organization name cannot be empty")
 	}
 
-	attrs := organizationAttributes{
-		FoundingDate:  a.FoundingDate,
-		Industry:      a.Industry,
-		TargetMarkets: a.TargetMarkets,
-		Active:        a.Active,
-		NonProfit:     a.NonProfit,
-		Headcount:     a.Headcount,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.organization.upsert",
 		SQLText: upsertOrganizationText,
-		Args: []any{
-			sql.Named("unique_id", a.ID),
-			sql.Named("org_name", a.Name),
-			sql.Named("legal_name", a.LegalName),
-			sql.Named("jurisdiction", a.Jurisdiction),
-			sql.Named("registration_id", a.RegistrationID),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.organization.entity_id_by_organization",
-		SQLText: selectEntityIDByOrganizationText,
-		Args:    []any{sql.Named("unique_id", a.ID)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -119,12 +72,12 @@ func (r *PostgresRepository) upsertOrganization(ctx context.Context, a *oamorg.O
 }
 
 func (r *PostgresRepository) fetchOrganizationByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.organization.by_id",
 		SQLText: selectOrganizationByIDText,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

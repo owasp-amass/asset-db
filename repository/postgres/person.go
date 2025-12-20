@@ -6,42 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/people"
 )
 
-// Params: :unique_id, :full_name, :first_name, :family_name, :middle_name, :attrs
-const upsertPersonText = `
-INSERT INTO person(unique_id, full_name, first_name, family_name, attrs)
-VALUES (:unique_id, :full_name, :first_name, :family_name, :attrs)
-ON CONFLICT(unique_id) DO UPDATE SET
-    full_name   = COALESCE(excluded.full_name,   person.full_name),
-    first_name  = COALESCE(excluded.first_name,  person.first_name),
-    family_name = COALESCE(excluded.family_name, person.family_name),
-    attrs       = json_patch(person.attrs,       excluded.attrs),
-    updated_at  = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertPersonText = `SELECT public.person_upsert_entity_json(@record::jsonb);`
 
-// Param: :unique_id
-const selectEntityIDByPersonText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'person' LIMIT 1)
-  AND natural_key = :unique_id
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectPersonByIDText = `
-SELECT id, created_at, updated_at, full_name, unique_id, first_name, family_name, attrs
-FROM person
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.full_name, a.unique_id, a.first_name, a.family_name, a.attrs
+FROM public.person_get_by_id(@row_id::bigint) AS a;`
 
 type personAttributes struct {
 	MiddleName string `json:"middle_name,omitempty"`
@@ -60,41 +42,17 @@ func (r *PostgresRepository) upsertPerson(ctx context.Context, a *people.Person)
 		return 0, fmt.Errorf("the person %s does not have a first or family name", a.FullName)
 	}
 
-	attrs := personAttributes{
-		MiddleName: a.MiddleName,
-		BirthDate:  a.BirthDate,
-		Gender:     a.Gender,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.person.upsert",
 		SQLText: upsertPersonText,
-		Args: []any{
-			sql.Named("unique_id", a.ID),
-			sql.Named("full_name", a.FullName),
-			sql.Named("first_name", a.FirstName),
-			sql.Named("family_name", a.FamilyName),
-			sql.Named("attrs", string(attrsJSON)),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.person.entity_id_by_person",
-		SQLText: selectEntityIDByPersonText,
-		Args:    []any{sql.Named("unique_id", a.ID)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -111,12 +69,12 @@ func (r *PostgresRepository) upsertPerson(ctx context.Context, a *people.Person)
 }
 
 func (r *PostgresRepository) fetchPersonByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.person.by_id",
 		SQLText: selectPersonByIDText,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

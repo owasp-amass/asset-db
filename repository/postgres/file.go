@@ -6,39 +6,22 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamfile "github.com/owasp-amass/open-asset-model/file"
 )
 
-// Params: :file_url, :basename, :file_type, :attrs
-const upsertFileText = `
-INSERT INTO file(file_url, basename, file_type, attrs)
-VALUES (lower(:file_url), :basename, :file_type, :attrs)
-ON CONFLICT(file_url) DO UPDATE SET
-    basename   = COALESCE(excluded.basename,  file.basename),
-    file_type  = COALESCE(excluded.file_type, file.file_type),
-    attrs      = json_patch(file.attrs,       excluded.attrs),
-    updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertFileText = `SELECT public.file_upsert_entity_json(@record::jsonb);`
 
-// Param: :file_url
-const selectEntityIDByFileText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'file' LIMIT 1)
-  AND natural_key = lower(:file_url)
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectFileByID = `
-SELECT id, created_at, updated_at, file_url, basename, file_type, attrs
-FROM file
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.file_url, a.basename, a.file_type, a.attrs
+FROM public.file_get_by_id(@row_id::bigint) AS a;`
 
 func (r *PostgresRepository) upsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
 	if a == nil {
@@ -48,30 +31,17 @@ func (r *PostgresRepository) upsertFile(ctx context.Context, a *oamfile.File) (i
 		return 0, errors.New("file URL cannot be empty")
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
-		Ctx:     ctx,
-		Name:    "asset.file.upsert",
-		SQLText: upsertFileText,
-		Args: []any{
-			sql.Named("file_url", a.URL),
-			sql.Named("basename", a.Name),
-			sql.Named("file_type", a.Type),
-			sql.Named("attrs", "{}"),
-		},
-		Result: done,
-	})
-	err := <-done
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
-		Name:    "asset.file.entity_id_by_file",
-		SQLText: selectEntityIDByFileText,
-		Args:    []any{sql.Named("file_url", a.URL)},
+		Name:    "asset.file.upsert",
+		SQLText: upsertFileText,
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -88,12 +58,12 @@ func (r *PostgresRepository) upsertFile(ctx context.Context, a *oamfile.File) (i
 }
 
 func (r *PostgresRepository) fetchFileByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.file.by_id",
 		SQLText: selectFileByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

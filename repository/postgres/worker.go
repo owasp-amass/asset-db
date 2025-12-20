@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/caffix/queue"
+	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -20,14 +21,14 @@ type job interface {
 	GetCtx() context.Context
 	GetName() string
 	GetSQLText() string
-	GetArgs() []any
+	GetArgs() pgx.NamedArgs
 }
 
 type execJob struct {
 	Ctx     context.Context
 	Name    string
 	SQLText string
-	Args    []any
+	Args    pgx.NamedArgs
 	Result  chan error
 }
 
@@ -43,7 +44,7 @@ func (w *execJob) GetSQLText() string {
 	return w.SQLText
 }
 
-func (w *execJob) GetArgs() []any {
+func (w *execJob) GetArgs() pgx.NamedArgs {
 	return w.Args
 }
 
@@ -56,7 +57,7 @@ type rowJob struct {
 	Ctx     context.Context
 	Name    string
 	SQLText string
-	Args    []any
+	Args    pgx.NamedArgs
 	Result  chan *rowResult
 }
 
@@ -72,7 +73,7 @@ func (r *rowJob) GetSQLText() string {
 	return r.SQLText
 }
 
-func (r *rowJob) GetArgs() []any {
+func (r *rowJob) GetArgs() pgx.NamedArgs {
 	return r.Args
 }
 
@@ -85,7 +86,7 @@ type rowsJob struct {
 	Ctx     context.Context
 	Name    string
 	SQLText string
-	Args    []any
+	Args    pgx.NamedArgs
 	Result  chan *rowsResult
 }
 
@@ -101,7 +102,7 @@ func (r *rowsJob) GetSQLText() string {
 	return r.SQLText
 }
 
-func (r *rowsJob) GetArgs() []any {
+func (r *rowsJob) GetArgs() pgx.NamedArgs {
 	return r.Args
 }
 
@@ -362,7 +363,7 @@ func (w *worker) flushJobs(jobs []job) ([]job, error) {
 
 		switch v := job.(type) {
 		case *execJob:
-			_, err := tx.StmtContext(v.Ctx, stmt).ExecContext(v.Ctx, v.Args...)
+			_, err := tx.StmtContext(v.Ctx, stmt).ExecContext(v.Ctx, v.Args)
 			if err != nil {
 				errToJob(job, err)
 				goodjobs = append(goodjobs, jobs[i+1:]...)
@@ -371,10 +372,10 @@ func (w *worker) flushJobs(jobs []job) ([]job, error) {
 			}
 			jobResults = append(jobResults, nil)
 		case *rowJob:
-			row := tx.StmtContext(v.Ctx, stmt).QueryRowContext(v.Ctx, v.Args...)
+			row := tx.StmtContext(v.Ctx, stmt).QueryRowContext(v.Ctx, v.Args)
 			jobResults = append(jobResults, &rowResult{Row: row, Err: nil})
 		case *rowsJob:
-			rows, err := tx.StmtContext(v.Ctx, stmt).QueryContext(v.Ctx, v.Args...)
+			rows, err := tx.StmtContext(v.Ctx, stmt).QueryContext(v.Ctx, v.Args)
 			if err != nil {
 				errToJob(job, err)
 				goodjobs = append(goodjobs, jobs[i+1:]...)

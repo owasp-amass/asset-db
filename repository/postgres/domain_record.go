@@ -6,44 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
-// Params: :domain_text, :record_name, :punycode, :extension, :whois_server, :object_id, :attrs
-const upsertDomainRecordText = `
-INSERT INTO domainrecord(domain, record_name, punycode, extension, whois_server, object_id, attrs)
-VALUES (:domain_text, :record_name, :punycode, :extension, :whois_server, :object_id, :attrs)
-ON CONFLICT(domain) DO UPDATE SET
-	record_name  = COALESCE(excluded.record_name,  domainrecord.record_name),
-    punycode     = COALESCE(excluded.punycode,     domainrecord.punycode),
-    extension    = COALESCE(excluded.extension,    domainrecord.extension),
-    whois_server = COALESCE(excluded.whois_server, domainrecord.whois_server),
-	object_id    = COALESCE(excluded.object_id,    domainrecord.object_id),
-	attrs        = json_patch(domainrecord.attrs,  excluded.attrs),
-    updated_at   = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertDomainRecordText = `SELECT public.domainrecord_upsert_entity_json(@record::jsonb);`
 
-// Param: :domain_text
-const selectEntityIDByDomainRecordText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'domainrecord' LIMIT 1)
-  AND natural_key = lower(:domain_text)
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectDomainRecordByID = `
-SELECT id, created_at, updated_at, domain, record_name, punycode, extension, whois_server, object_id, attrs
-FROM domainrecord
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.domain, a.record_name, a.punycode, a.extension, a.whois_server, a.object_id, a.attrs
+FROM public.domainrecord_get_by_id(@row_id::bigint) AS a;`
 
 type domainRecordAttributes struct {
 	Raw            string   `json:"raw,omitempty"`
@@ -80,46 +60,17 @@ func (r *PostgresRepository) upsertDomainRecord(ctx context.Context, a *oamreg.D
 		return 0, fmt.Errorf("domain record must have a valid expiration date: %v", err)
 	}
 
-	attrs := domainRecordAttributes{
-		Raw:            a.Raw,
-		Status:         a.Status,
-		CreatedDate:    a.CreatedDate,
-		UpdatedDate:    a.UpdatedDate,
-		ExpirationDate: a.ExpirationDate,
-		DNSSEC:         a.DNSSEC,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.domainrecord.upsert",
 		SQLText: upsertDomainRecordText,
-		Args: []any{
-			sql.Named("domain_text", a.Domain),
-			sql.Named("record_name", a.Name),
-			sql.Named("punycode", a.Punycode),
-			sql.Named("extension", a.Extension),
-			sql.Named("whois_server", a.WhoisServer),
-			sql.Named("object_id", a.ID),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.domainrecord.entity_id_by_domain",
-		SQLText: selectEntityIDByDomainRecordText,
-		Args:    []any{sql.Named("domain_text", a.Domain)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -136,12 +87,12 @@ func (r *PostgresRepository) upsertDomainRecord(ctx context.Context, a *oamreg.D
 }
 
 func (r *PostgresRepository) fetchDomainRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.domainrecord.by_id",
 		SQLText: selectDomainRecordByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

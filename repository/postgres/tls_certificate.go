@@ -6,40 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 )
 
-// Params: :serial_number, :subject_common_name, :attrs
-const upsertTLSCertificateText = `
-INSERT INTO tlscertificate(serial_number, subject_common_name, attrs) 
-VALUES (:serial_number, :subject_common_name, :attrs)
-ON CONFLICT(serial_number) DO UPDATE SET
-    subject_common_name = COALESCE(excluded.subject_common_name, tlscertificate.subject_common_name),
-    attrs               = json_patch(tlscertificate.attrs,       excluded.attrs),
-    updated_at          = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertTLSCertificateText = `SELECT public.tls_certificate_upsert_entity_json(@record::jsonb);`
 
-// Param: :serial_number
-const selectEntityIDByTLSCertificateText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'tlscertificate' LIMIT 1)
-  AND natural_key = :serial_number
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectTLSCertificateByIDText = `
-SELECT id, created_at, updated_at, serial_number, subject_common_name, attrs
-FROM tlscertificate 
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.serial_number, a.subject_common_name, a.attrs
+FROM public.tls_certificate_get_by_id(@row_id::bigint) AS a;`
 
 type tlsCertificateAttributes struct {
 	Version               string   `json:"version,omitempty"`
@@ -81,48 +65,17 @@ func (r *PostgresRepository) upsertTLSCertificate(ctx context.Context, a *oamcer
 		return 0, fmt.Errorf("the TLS certificate must have a valid NotAfter date: %v", err)
 	}
 
-	attrs := tlsCertificateAttributes{
-		Version:               a.Version,
-		IssuerCommonName:      a.IssuerCommonName,
-		NotBefore:             a.NotBefore,
-		NotAfter:              a.NotAfter,
-		KeyUsage:              a.KeyUsage,
-		ExtKeyUsage:           a.ExtKeyUsage,
-		SignatureAlgorithm:    a.SignatureAlgorithm,
-		PublicKeyAlgorithm:    a.PublicKeyAlgorithm,
-		IsCA:                  a.IsCA,
-		CRLDistributionPoints: a.CRLDistributionPoints,
-		SubjectKeyID:          a.SubjectKeyID,
-		AuthorityKeyID:        a.AuthorityKeyID,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.tls_certificate.upsert",
 		SQLText: upsertTLSCertificateText,
-		Args: []any{
-			sql.Named("serial_number", a.SerialNumber),
-			sql.Named("subject_common_name", a.SubjectCommonName),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.tls_certificate.entity_id_by_tls_certificate",
-		SQLText: selectEntityIDByTLSCertificateText,
-		Args:    []any{sql.Named("serial_number", a.SerialNumber)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -139,12 +92,12 @@ func (r *PostgresRepository) upsertTLSCertificate(ctx context.Context, a *oamcer
 }
 
 func (r *PostgresRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.tls_certificate.by_id",
 		SQLText: selectTLSCertificateByIDText,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

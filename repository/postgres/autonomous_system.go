@@ -6,36 +6,22 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// Params: :asn, :attrs
-const upsertAutonomousSystemText = `
-INSERT INTO autonomoussystem(asn, attrs) VALUES (:asn, :attrs)
-ON CONFLICT(asn) DO UPDATE SET 
-	attrs      = json_patch(autonomoussystem.attrs, excluded.attrs),
-	updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertAutonomousSystemText = `SELECT public.autonomoussystem_upsert_entity_json(@record::jsonb);`
 
-// Param: :asn
-const selectEntityIDByAutonomousSystemText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name='autonomoussystem' LIMIT 1)
-  AND natural_key = CAST(:asn AS TEXT) 
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id
 const selectAutonomousSystemByID = `
-SELECT id, created_at, updated_at, asn, attrs
-FROM autonomoussystem
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.asn, a.attrs
+FROM public.autonomoussystem_get_by_id(@row_id) AS a;`
 
 func (r *PostgresRepository) upsertAutonomousSystem(ctx context.Context, a *oamnet.AutonomousSystem) (int64, error) {
 	if a == nil {
@@ -45,28 +31,17 @@ func (r *PostgresRepository) upsertAutonomousSystem(ctx context.Context, a *oamn
 		return 0, errors.New("autonomous system number cannot be zero")
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
-		Ctx:     ctx,
-		Name:    "asset.autonomous_system.upsert",
-		SQLText: upsertAutonomousSystemText,
-		Args: []any{
-			sql.Named("asn", a.Number),
-			sql.Named("attrs", "{}"),
-		},
-		Result: done,
-	})
-	err := <-done
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
-		Name:    "asset.autonomous_system.entity_id_by_asn",
-		SQLText: selectEntityIDByAutonomousSystemText,
-		Args:    []any{sql.Named("asn", a.Number)},
+		Name:    "asset.autonomous_system.upsert",
+		SQLText: upsertAutonomousSystemText,
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -83,12 +58,12 @@ func (r *PostgresRepository) upsertAutonomousSystem(ctx context.Context, a *oamn
 }
 
 func (r *PostgresRepository) fetchAutonomousSystemByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.autonomous_system.by_id",
 		SQLText: selectAutonomousSystemByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

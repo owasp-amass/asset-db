@@ -6,7 +6,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,42 +13,19 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
-// Params: :record_cidr, :record_name, :handle, :whois_server, :parent_handle,
-// :start_address, :end_address, :attrs
-const upsertIPNetRecordText = `
-INSERT INTO ipnetrecord(record_cidr, record_name, handle, whois_server, 
-parent_handle, start_address, end_address, attrs) 
-VALUES (:record_cidr, :record_name, :handle, :whois_server, :parent_handle, 
-:start_address, :end_address, :attrs)
-ON CONFLICT(handle) DO UPDATE SET
-	record_cidr 	= COALESCE(excluded.record_cidr,   ipnetrecord.record_cidr),
-    record_name   	= COALESCE(excluded.record_name,   ipnetrecord.record_name),
-    whois_server  	= COALESCE(excluded.whois_server,  ipnetrecord.whois_server),
-    parent_handle 	= COALESCE(excluded.parent_handle, ipnetrecord.parent_handle),
-    start_address 	= COALESCE(excluded.start_address, ipnetrecord.start_address),
-    end_address   	= COALESCE(excluded.end_address,   ipnetrecord.end_address),
-	attrs           = json_patch(ipnetrecord.attrs,    excluded.attrs),
-    updated_at    	= CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertIPNetRecordText = `SELECT public.ipnetrecord_upsert_entity_json(@record::jsonb);`
 
-// Param: :handle
-const selectEntityIDByIPNetRecordText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'ipnetrecord' LIMIT 1)
-  AND natural_key = :handle
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectIPNetRecordByID = `
-SELECT id, created_at, updated_at, record_cidr, record_name, handle,
-	   whois_server, parent_handle, start_address, end_address, attrs
-FROM ipnetrecord
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.record_cidr, a.record_name, a.handle,
+	   a.whois_server, a.parent_handle, a.start_address, a.end_address, a.attrs
+FROM public.ipnetrecord_get_by_id(@row_id::bigint) AS a;`
 
 type ipnetRecordAttributes struct {
 	Raw         string   `json:"raw,omitempty"`
@@ -102,48 +78,17 @@ func (r *PostgresRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IP
 		return 0, errors.New("CIDR type must be either IPv4 or IPv6")
 	}
 
-	attrs := ipnetRecordAttributes{
-		Raw:         a.Raw,
-		Type:        a.Type,
-		Method:      a.Method,
-		Status:      a.Status,
-		CreatedDate: a.CreatedDate,
-		UpdatedDate: a.UpdatedDate,
-		Country:     a.Country,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.ipnet_record.upsert",
 		SQLText: upsertIPNetRecordText,
-		Args: []any{
-			sql.Named("record_cidr", a.CIDR.String()),
-			sql.Named("record_name", a.Name),
-			sql.Named("handle", a.Handle),
-			sql.Named("whois_server", a.WhoisServer),
-			sql.Named("parent_handle", a.ParentHandle),
-			sql.Named("start_address", a.StartAddress.String()),
-			sql.Named("end_address", a.EndAddress.String()),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.ipnet_record.entity_id_by_ipnet_record",
-		SQLText: selectEntityIDByIPNetRecordText,
-		Args:    []any{sql.Named("handle", a.Handle)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -160,12 +105,12 @@ func (r *PostgresRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IP
 }
 
 func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.ipnet_record.by_id",
 		SQLText: selectIPNetRecordByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

@@ -19,8 +19,7 @@ type PostgresContainer struct {
 }
 
 func CreatePostgresContainer(ctx context.Context) (*PostgresContainer, error) {
-	pgContainer, err := postgres.RunContainer(ctx,
-		testcontainers.WithImage("postgres:17.7-alpine"),
+	pgContainer, err := postgres.Run(ctx, "postgres:17.7-alpine",
 		postgres.WithDatabase("asset-db"),
 		postgres.WithUsername("postgres"),
 		postgres.WithPassword("postgres"),
@@ -31,7 +30,10 @@ func CreatePostgresContainer(ctx context.Context) (*PostgresContainer, error) {
 	if err != nil {
 		return nil, err
 	}
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := pgContainer.ConnectionString(ctx,
+		"sslmode=disable", "statement_cache_capacity=256", "timezone=UTC",
+		"connect_timeout=5", "application_name=asset-db-tests", "statement_timeout=60000",
+		"lock_timeout=5000", "idle_in_transaction_session_timeout=30000")
 	if err != nil {
 		return nil, err
 	}

@@ -6,41 +6,23 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
 )
 
-// Params: :unique_id, :account_type, :username, :account_number, :attrs
-const upsertAccountText = `
-INSERT INTO account(unique_id, account_type, username, account_number, attrs)
-VALUES (:unique_id, :account_type, :username, :account_number, :attrs)
-ON CONFLICT(unique_id) DO UPDATE SET
-	account_type   = COALESCE(excluded.account_type,   account.account_type),
-    username       = COALESCE(excluded.username,       account.username),
-    account_number = COALESCE(excluded.account_number, account.account_number),
-    attrs          = json_patch(account.attrs,         excluded.attrs),
-    updated_at     = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertAccountText = `SELECT public.account_upsert_entity_json(@record::jsonb);`
 
-// Param: :unique_id
-const selectEntityIDByAccountText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'account' LIMIT 1)
-  AND natural_key = :unique_id
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectAccountByID = `
-SELECT id, created_at, updated_at, unique_id, account_type, username, account_number, attrs 
-FROM account
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
+FROM public.account_get_by_id(@row_id::bigint) AS a;`
 
 type accountAttributes struct {
 	Balance float64 `json:"balance"`
@@ -61,40 +43,17 @@ func (r *PostgresRepository) upsertAccount(ctx context.Context, a *oamacct.Accou
 		return 0, errors.New("account must have either a username or account number")
 	}
 
-	attrs := accountAttributes{
-		Balance: a.Balance,
-		Active:  a.Active,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.account.upsert",
 		SQLText: upsertAccountText,
-		Args: []any{
-			sql.Named("unique_id", a.ID),
-			sql.Named("account_type", a.Type),
-			sql.Named("username", a.Username),
-			sql.Named("account_number", a.Number),
-			sql.Named("attrs", string(attrsJSON)),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.account.entity_id_by_account",
-		SQLText: selectEntityIDByAccountText,
-		Args:    []any{sql.Named("unique_id", a.ID)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -111,12 +70,12 @@ func (r *PostgresRepository) upsertAccount(ctx context.Context, a *oamacct.Accou
 }
 
 func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.account.by_id",
 		SQLText: selectAccountByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

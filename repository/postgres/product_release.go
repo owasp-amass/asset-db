@@ -6,39 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
-// Params: :release_name, :attrs
-const upsertProductReleaseText = `
-INSERT INTO productrelease(release_name, attrs)
-VALUES (:release_name, :attrs)
-ON CONFLICT(release_name_norm) DO UPDATE SET
-    attrs      = json_patch(productrelease.attrs, excluded.attrs),
-    updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertProductReleaseText = `SELECT public.product_release_upsert_entity_json(@record::jsonb);`
 
-// Param: :release_name
-const selectEntityIDByProductReleaseText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'productrelease' LIMIT 1)
-  AND natural_key = lower(:release_name)
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectProductReleaseByIDText = `
-SELECT id, created_at, updated_at, release_name, attrs 
-FROM productrelease
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.release_name, a.attrs 
+FROM public.product_release_get_by_id(@row_id::bigint) AS a;`
 
 type productReleaseAttributes struct {
 	ReleaseDate string `json:"release_date,omitempty"`
@@ -52,36 +37,17 @@ func (r *PostgresRepository) upsertProductRelease(ctx context.Context, a *oampla
 		return 0, fmt.Errorf("the product release name cannot be empty")
 	}
 
-	attrs := productReleaseAttributes{
-		ReleaseDate: a.ReleaseDate,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.product_release.upsert",
 		SQLText: upsertProductReleaseText,
-		Args: []any{
-			sql.Named("release_name", a.Name),
-			sql.Named("attrs", string(attrsJSON)),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.product_release.entity_id_by_product_release",
-		SQLText: selectEntityIDByProductReleaseText,
-		Args:    []any{sql.Named("release_name", a.Name)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -98,12 +64,12 @@ func (r *PostgresRepository) upsertProductRelease(ctx context.Context, a *oampla
 }
 
 func (r *PostgresRepository) fetchProductReleaseByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.product_release.by_id",
 		SQLText: selectProductReleaseByIDText,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

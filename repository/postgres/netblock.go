@@ -6,39 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/netip"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// Params: :netblock_cidr, :attrs
-const upsertNetblockText = `
-INSERT INTO netblock (netblock_cidr, attrs)
-VALUES (:netblock_cidr, :attrs)
-ON CONFLICT(netblock_cidr) DO UPDATE SET
-  attrs      = json_patch(netblock.attrs, excluded.attrs),
-  updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertNetblockText = `SELECT public.netblock_upsert_entity_json(@record::jsonb);`
 
-// Param: :netblock_cidr
-const selectEntityIDByNetblockText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'netblock' LIMIT 1)
-  AND natural_key = :netblock_cidr
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectNetblockByID = `
-SELECT id, created_at, updated_at, netblock_cidr, attrs
-FROM netblock
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.netblock_cidr, a.attrs
+FROM public.netblock_get_by_id(@row_id::bigint) AS a;`
 
 type netblockAttributes struct {
 	Type string `json:"type,omitempty"`
@@ -70,36 +55,17 @@ func (r *PostgresRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbl
 		return 0, errors.New("CIDR IP version must be either IPv4 or IPv6")
 	}
 
-	attrs := netblockAttributes{
-		Type: a.Type,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.netblock.upsert",
 		SQLText: upsertNetblockText,
-		Args: []any{
-			sql.Named("netblock_cidr", a.CIDR.String()),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.netblock.entity_id_by_netblock",
-		SQLText: selectEntityIDByNetblockText,
-		Args:    []any{sql.Named("netblock_cidr", a.CIDR.String())},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -116,12 +82,12 @@ func (r *PostgresRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbl
 }
 
 func (r *PostgresRepository) fetchNetblockByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.netblock.by_id",
 		SQLText: selectNetblockByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

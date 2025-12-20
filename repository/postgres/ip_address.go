@@ -6,39 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/netip"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
-// Params: :ip_address_text, :attrs
-const upsertIPAddressText = `
-INSERT INTO ipaddress(ip_address, attrs)
-VALUES (:ip_address_text, :attrs)
-ON CONFLICT(ip_address) DO UPDATE SET
-	attrs      = json_patch(ipaddress.attrs, excluded.attrs),
-    updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertIPAddressText = `SELECT public.ipaddress_upsert_entity_json(@record::jsonb);`
 
-// Param: :ip_address_text
-const selectEntityIDByIPAddressText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'ipaddress' LIMIT 1)
-  AND natural_key = :ip_address_text
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectIPAddressByID = `
-SELECT id, created_at, updated_at, ip_address, attrs
-FROM ipaddress 
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.ip_address, a.attrs
+FROM public.ipaddress_get_by_id(@row_id::bigint) AS a;`
 
 type ipAddressAttributes struct {
 	Type string `json:"type,omitempty"`
@@ -70,36 +55,17 @@ func (r *PostgresRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAd
 		return 0, errors.New("IP address type must be either IPv4 or IPv6")
 	}
 
-	attrs := ipAddressAttributes{
-		Type: a.Type,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.ip_address.upsert",
 		SQLText: upsertIPAddressText,
-		Args: []any{
-			sql.Named("ip_address_text", a.Address.String()),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.ip_address.entity_id_by_ip_address",
-		SQLText: selectEntityIDByIPAddressText,
-		Args:    []any{sql.Named("ip_address_text", a.Address.String())},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -116,12 +82,12 @@ func (r *PostgresRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAd
 }
 
 func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.ip_address.by_id",
 		SQLText: selectIPAddressByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 
@@ -163,7 +129,7 @@ func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, row
 		return nil, errors.New("IP address is invalid")
 	}
 	if a.Address.IsUnspecified() {
-		return nil, errors.New("the IP addresses is unspecified")
+		return nil, errors.New("the IP address is unspecified")
 	}
 
 	var attrs ipAddressAttributes

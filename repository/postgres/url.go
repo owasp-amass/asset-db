@@ -6,40 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
-// Params: :raw_url, :scheme:, :attrs
-const upsertURLText = `
-INSERT INTO url(raw_url, scheme, attrs)
-VALUES (lower(:raw_url), :scheme, :attrs)
-ON CONFLICT(raw_url) DO UPDATE SET
-  scheme     = COALESCE(excluded.scheme, url.scheme),
-  attrs      = json_patch(url.attrs,     excluded.attrs),
-  updated_at = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertURLText = `SELECT public.url_upsert_entity_json(@record::jsonb);`
 
-// Param: :raw_url
-const selectEntityIDByURLText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'url' LIMIT 1)
-  AND natural_key = lower(:raw_url)
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectURLByIDText = `
-SELECT id, created_at, updated_at, raw_url, scheme, attrs
-FROM url
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.raw_url, a.scheme, a.attrs
+FROM public.url_get_by_id(@row_id::bigint) AS a;`
 
 type urlAttributes struct {
 	Username string `json:"username,omitempty"`
@@ -59,43 +43,17 @@ func (r *PostgresRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int6
 		return 0, fmt.Errorf("the URL raw string cannot be empty")
 	}
 
-	attrs := urlAttributes{
-		Username: a.Username,
-		Password: a.Password,
-		Host:     a.Host,
-		Port:     a.Port,
-		Path:     a.Path,
-		Options:  a.Options,
-		Fragment: a.Fragment,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.url.upsert",
 		SQLText: upsertURLText,
-		Args: []any{
-			sql.Named("raw_url", a.Raw),
-			sql.Named("scheme", a.Scheme),
-			sql.Named("attrs", string(attrsJSON)),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.url.entity_id_by_url",
-		SQLText: selectEntityIDByURLText,
-		Args:    []any{sql.Named("raw_url", a.Raw)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -112,12 +70,12 @@ func (r *PostgresRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int6
 }
 
 func (r *PostgresRepository) fetchURLByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.url.by_id",
 		SQLText: selectURLByIDText,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

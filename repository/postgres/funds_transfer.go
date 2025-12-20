@@ -6,41 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamfin "github.com/owasp-amass/open-asset-model/financial"
 )
 
-// Params: :unique_id, :amount, :reference_number, :attrs
-const upsertFundsTransferText = `
-INSERT INTO fundstransfer(unique_id, amount, reference_number, attrs)
-VALUES (:unique_id, :amount, :reference_number, :attrs)
-ON CONFLICT(unique_id) DO UPDATE SET
-    amount           = COALESCE(excluded.amount,           fundstransfer.amount),
-    reference_number = COALESCE(excluded.reference_number, fundstransfer.reference_number),
-    attrs            = json_patch(fundstransfer.attrs,     excluded.attrs),
-    updated_at       = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertFundsTransferText = `SELECT public.fundstransfer_upsert_entity_json(@record::jsonb);`
 
-// Param: :unique_id
-const selectEntityIDByFundsTransferText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'fundstransfer' LIMIT 1)
-  AND natural_key = :unique_id
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectFundsTransferByID = `
-SELECT id, created_at, updated_at, unique_id, amount, reference_number, attrs
-FROM fundstransfer 
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.amount, a.reference_number, a.attrs
+FROM public.fundstransfer_get_by_id(@row_id::bigint) AS a;`
 
 type fundsTransferAttributes struct {
 	Currency       string  `json:"currency,omitempty"`
@@ -66,41 +49,17 @@ func (r *PostgresRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.
 		return 0, fmt.Errorf("funds transfer must have a valid exchange date: %v", err)
 	}
 
-	attrs := fundsTransferAttributes{
-		Currency:       a.Currency,
-		TransferMethod: a.Method,
-		ExchangeDate:   a.ExchangeDate,
-		ExchangeRate:   a.ExchangeRate,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.funds_transfer.upsert",
 		SQLText: upsertFundsTransferText,
-		Args: []any{
-			sql.Named("unique_id", a.ID),
-			sql.Named("amount", a.Amount),
-			sql.Named("reference_number", a.ReferenceNumber),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.funds_transfer.entity_id_by_funds_transfer",
-		SQLText: selectEntityIDByFundsTransferText,
-		Args:    []any{sql.Named("unique_id", a.ID)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -117,12 +76,12 @@ func (r *PostgresRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.
 }
 
 func (r *PostgresRepository) fetchFundsTransferByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.funds_transfer.by_id",
 		SQLText: selectFundsTransferByID,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 

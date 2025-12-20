@@ -306,7 +306,7 @@ BEGIN
     );
 
     -- 2) Map tag to entity
-    INSERT INTO public.entity_tag_map (
+    INSERT INTO public.entity_tag_map AS m (
         entity_id, tag_id
     )
     VALUES (
@@ -315,7 +315,7 @@ BEGIN
     ON CONFLICT (entity_id, tag_id) DO UPDATE
     SET
         updated_at = now()
-    RETURNING entity_tag_map.tag_id, entity_tag_map.map_id
+    RETURNING m.tag_id, m.map_id
     INTO v_tag_id, v_map_id;
 
     -- 3) Assign to output parameters
@@ -380,7 +380,7 @@ BEGIN
     );
 
     -- 2) Map tag to edge
-    INSERT INTO public.edge_tag_map (
+    INSERT INTO public.edge_tag_map AS m (
         edge_id, tag_id
     )
     VALUES (
@@ -389,7 +389,7 @@ BEGIN
     ON CONFLICT (edge_id, tag_id) DO UPDATE
     SET
         updated_at = now()
-    RETURNING edge_tag_map.tag_id, edge_tag_map.map_id
+    RETURNING m.tag_id, m.map_id
     INTO v_tag_id, v_map_id;
 
     -- 3) Assign to output parameters

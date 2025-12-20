@@ -6,41 +6,24 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
 	"github.com/owasp-amass/asset-db/types"
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
-// Params: :unique_id, :product_name, :product_type, :attrs
-const upsertProductText = `
-INSERT INTO product(unique_id, product_name, product_type, attrs)
-VALUES (:unique_id, :product_name, :product_type, :attrs)
-ON CONFLICT(unique_id) DO UPDATE SET
-    product_name        = COALESCE(excluded.product_name,        product.product_name),
-    product_type        = COALESCE(excluded.product_type,        product.product_type),
-    attrs               = json_patch(product.attrs,              excluded.attrs),
-    updated_at          = CURRENT_TIMESTAMP`
+// Params: @record::jsonb
+const upsertProductText = `SELECT public.product_upsert_entity_json(@record::jsonb);`
 
-// Param: :unique_id
-const selectEntityIDByProductText = `
-SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'product' LIMIT 1)
-  AND natural_key = :unique_id
-LIMIT 1`
-
-// Param: :row_id
+// Param: @row_id::bigint
 const selectProductByIDText = `
-SELECT id, created_at, updated_at, unique_id, product_name, product_type, attrs
-FROM product 
-WHERE id = :row_id
-LIMIT 1`
+SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.product_name, a.product_type, a.attrs
+FROM public.product_get_by_id(@row_id::bigint) AS a;`
 
 type productAttributes struct {
 	Category        string `json:"category,omitempty"`
@@ -62,40 +45,17 @@ func (r *PostgresRepository) upsertProduct(ctx context.Context, a *oamplat.Produ
 		return 0, fmt.Errorf("the product type cannot be empty")
 	}
 
-	attrs := productAttributes{
-		Category:        a.Category,
-		Description:     a.Description,
-		CountryOfOrigin: a.CountryOfOrigin,
-	}
-	attrsJSON, err := json.Marshal(attrs)
+	record, err := a.JSON()
 	if err != nil {
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.product.upsert",
 		SQLText: upsertProductText,
-		Args: []any{
-			sql.Named("unique_id", a.ID),
-			sql.Named("product_name", a.Name),
-			sql.Named("product_type", a.Type),
-			sql.Named("attrs", attrsJSON),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return 0, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "asset.product.entity_id_by_product",
-		SQLText: selectEntityIDByProductText,
-		Args:    []any{sql.Named("unique_id", a.ID)},
+		Args:    pgx.NamedArgs{"record": string(record)},
 		Result:  ch,
 	})
 
@@ -112,12 +72,12 @@ func (r *PostgresRepository) upsertProduct(ctx context.Context, a *oamplat.Produ
 }
 
 func (r *PostgresRepository) fetchProductByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.product.by_id",
 		SQLText: selectProductByIDText,
-		Args:    []any{sql.Named("row_id", rowID)},
+		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
 
