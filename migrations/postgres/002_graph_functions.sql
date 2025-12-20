@@ -76,6 +76,32 @@ END
 $fn$;
 -- +migrate StatementEnd
 
+-- Simple helper: get an entity table row by entity_id
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.entity_get_by_id(_entity_id bigint)
+RETURNS TABLE (
+    etype_name  citext,
+    etype_id    smallint,
+    natural_key citext,
+    table_name  citext,
+    row_id      bigint
+)
+LANGUAGE sql
+STABLE
+AS $fn$
+    SELECT et.name       AS etype_name,
+           e.etype_id,
+           e.natural_key,
+           e.table_name,
+           e.row_id
+    FROM public.entity e
+    JOIN public.entity_type_lu et
+        ON e.etype_id = et.id
+    WHERE entity_id = _entity_id
+    LIMIT 1;
+$fn$;
+-- +migrate StatementEnd
+
 
 -- ---------------------------------------------------------------------------
 -- EDGE UPSERT + HELPERS
@@ -326,7 +352,6 @@ END
 $fn$;
 -- +migrate StatementEnd
 
-
 -- Simple helper: get tag_ids mapped to an entity
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.entity_get_tags(_entity_id bigint)
@@ -434,6 +459,7 @@ DROP FUNCTION IF EXISTS public.edge_updated_since(timestamp without time zone);
 DROP FUNCTION IF EXISTS public.edge_get_id(text, text, bigint, bigint);
 DROP FUNCTION IF EXISTS public.edge_upsert(text, text, bigint, bigint, jsonb);
 
+DROP FUNCTION IF EXISTS public.entity_get_by_id(bigint);
 DROP FUNCTION IF EXISTS public.entity_upsert(citext, citext, citext, bigint);
 
 DROP FUNCTION IF EXISTS public.get_edge_type_id(text);

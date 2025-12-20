@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -103,12 +104,7 @@ func (r *PostgresRepository) FindEntityById(ctx context.Context, id string) (*db
 }
 
 func (r *PostgresRepository) idToEntity(ctx context.Context, eid int64) (*dbt.Entity, error) {
-	etype, err := r.loadEntityCore(ctx, eid)
-	if err != nil {
-		return nil, err
-	}
-
-	return r.fetchCompleteRepoEntity(ctx, eid, etype)
+	return r.fetchCompleteRepoEntity(ctx, eid)
 }
 
 func (r *PostgresRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
@@ -303,59 +299,36 @@ func max(a, b int) int {
 
 func normalizeType(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
 
-func (r *PostgresRepository) loadEntityCore(ctx context.Context, eid int64) (string, error) {
-	query := `
-	SELECT t.name
-	FROM entity_type_lu t
-	JOIN entity e ON t.id = e.etype_id
-	WHERE e.entity_id = :entity_id`
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+func (r *PostgresRepository) fetchEntityTypeAndRowID(ctx context.Context, eid int64) (string, int64, error) {
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
-		Name:    "entity.by_id",
-		SQLText: query,
-		Args:    []any{sql.Named("entity_id", eid)},
+		Name:    "entity.type_row_by_id",
+		SQLText: `SELECT e.etype_name, e.row_id FROM public.entity_get_by_id(@entity_id::bigint) AS e;`,
+		Args:    pgx.NamedArgs{"entity_id": eid},
 		Result:  ch,
 	})
 
 	result := <-ch
 	if result.Err != nil {
-		return "", result.Err
+		return "", 0, result.Err
 	}
 
 	var etype string
-	if err := result.Row.Scan(&etype); err != nil {
+	var rowID int64
+	if err := result.Row.Scan(&etype, &rowID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("entity %d not found", eid)
+			return "", 0, fmt.Errorf("entity %d not found", eid)
 		}
-		return "", err
+		return "", 0, err
 	}
 
-	return etype, nil
+	return etype, rowID, nil
 }
 
-func (r *PostgresRepository) fetchCompleteRepoEntity(ctx context.Context, eid int64, etype string) (*dbt.Entity, error) {
-	if etype == "" {
-		return nil, fmt.Errorf("invalid entity type %q", etype)
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "entity.row_by_id",
-		SQLText: `SELECT row_id FROM entity WHERE entity_id = :entity_id LIMIT 1`,
-		Args:    []any{sql.Named("entity_id", eid)},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var rid int64
-	if err := result.Row.Scan(&rid); err != nil {
+func (r *PostgresRepository) fetchCompleteRepoEntity(ctx context.Context, eid int64) (*dbt.Entity, error) {
+	etype, rid, err := r.fetchEntityTypeAndRowID(ctx, eid)
+	if err != nil {
 		return nil, err
 	}
 
@@ -427,13 +400,13 @@ func (r *PostgresRepository) DeleteEntity(ctx context.Context, id string) error 
 func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, alsoDeleteAsset bool) error {
 	// Optionally remove the concrete asset row (requires looking up its table + row_id)
 	if alsoDeleteAsset {
-		const qSel = `SELECT table_name, row_id FROM entity WHERE entity_id = :entity_id LIMIT 1`
-		ch := make(chan *rowReadResult, 1)
-		r.rpool.Submit(&rowReadJob{
+		const qSel = `SELECT table_name, row_id FROM entity WHERE entity_id = @entity_id LIMIT 1`
+		ch := make(chan *rowResult, 1)
+		r.wpool.Submit(&rowJob{
 			Ctx:     ctx,
 			Name:    "entity.delete.table_row_from_id",
 			SQLText: qSel,
-			Args:    []any{sql.Named("entity_id", eid)},
+			Args:    pgx.NamedArgs{"entity_id": eid},
 			Result:  ch,
 		})
 
@@ -442,19 +415,19 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 			return result.Err
 		}
 
-		var t string
 		var id int64
-		if err := result.Row.Scan(&t, &id); err != nil {
+		var table string
+		if err := result.Row.Scan(&table, &id); err != nil {
 			return err
 		}
 
-		if tbl := validateAssetTable(t); tbl != "" {
+		if table != "" {
 			done := make(chan error, 1)
-			r.ww.Submit(&writeJob{
+			r.wpool.Submit(&execJob{
 				Ctx:     ctx,
-				Name:    "asset." + tbl + ".delete_by_id",
-				SQLText: fmt.Sprintf(`DELETE FROM %s WHERE id = :row_id`, tbl),
-				Args:    []any{sql.Named("row_id", id)},
+				Name:    "asset." + table + ".delete_by_id",
+				SQLText: fmt.Sprintf(`DELETE FROM %s WHERE id = @row_id`, table),
+				Args:    pgx.NamedArgs{"row_id": id},
 				Result:  done,
 			})
 			if err := <-done; err != nil {
@@ -465,11 +438,11 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 
 	// Delete the entity (FKs should take care of edges, tag maps if schema has CASCADE)
 	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	r.wpool.Submit(&execJob{
 		Ctx:     ctx,
 		Name:    "entity.delete.by_id",
-		SQLText: `DELETE FROM entity WHERE entity_id = :entity_id`,
-		Args:    []any{sql.Named("entity_id", eid)},
+		SQLText: `DELETE FROM entity WHERE entity_id = @entity_id`,
+		Args:    pgx.NamedArgs{"entity_id": eid},
 		Result:  done,
 	})
 	return <-done
