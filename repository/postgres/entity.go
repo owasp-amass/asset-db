@@ -193,36 +193,6 @@ JOIN ` + table + ` a ON a.id = e.row_id`)
 	q := sb.String()
 	key := "q.findByContent." + table + "." + where + fmt.Sprintf("limit%d", limit)
 
-	ch := make(chan *rowsReadResult, 1)
-	r.rpool.Submit(&rowsReadJob{
-		Ctx:     ctx,
-		Name:    key,
-		SQLText: q,
-		Args:    args,
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-	defer func() { _ = result.Rows.Close() }()
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid int64
-
-		if err := result.Rows.Scan(&eid); err != nil {
-			return nil, err
-		}
-		ent, err := r.idToEntity(ctx, eid)
-		if err != nil {
-			return nil, err
-		}
-
-		out = append(out, ent)
-	}
-
 	return out, result.Rows.Err()
 }
 
