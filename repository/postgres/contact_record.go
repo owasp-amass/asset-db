@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
-	"github.com/owasp-amass/asset-db/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/contact"
 )
@@ -70,7 +69,7 @@ func (r *PostgresRepository) upsertContactRecord(ctx context.Context, a *contact
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchContactRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchContactRecordByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
@@ -158,7 +157,7 @@ func (r *PostgresRepository) findContactRecordsByContent(ctx context.Context, fi
 	return out, nil
 }
 
-func (r *PostgresRepository) getContactRecordsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*types.Entity, error) {
+func (r *PostgresRepository) getContactRecordsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
 	if since.IsZero() {
 		return nil, errors.New("invalid since time provided")
 	}
@@ -208,7 +207,7 @@ func (r *PostgresRepository) getContactRecordsUpdatedSince(ctx context.Context, 
 	return out, nil
 }
 
-func (r *PostgresRepository) buildContactRecordEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *contact.ContactRecord) (*types.Entity, error) {
+func (r *PostgresRepository) buildContactRecordEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *contact.ContactRecord) (*dbt.Entity, error) {
 	if rid == 0 {
 		return nil, errors.New("no contact record found")
 	}
@@ -216,7 +215,7 @@ func (r *PostgresRepository) buildContactRecordEntity(eid, rid int64, createdAt,
 		return nil, errors.New("contact record discovered_at is missing")
 	}
 
-	return &types.Entity{
+	return &dbt.Entity{
 		ID:        strconv.FormatInt(eid, 10),
 		CreatedAt: createdAt.In(time.UTC).Local(),
 		LastSeen:  updatedAt.In(time.UTC).Local(),

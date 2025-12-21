@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/owasp-amass/asset-db/types"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
@@ -21,9 +22,19 @@ import (
 const upsertIPAddressText = `SELECT public.ipaddress_upsert_entity_json(@record::jsonb);`
 
 // Param: @row_id::bigint
-const selectIPAddressByID = `
+const selectIPAddressByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.ip_address, a.attrs
 FROM public.ipaddress_get_by_id(@row_id::bigint) AS a;`
+
+// Params: @filters::jsonb, @since::timestamp, @limit::integer
+const selectIPAddressFindByContentText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.ip_address, a.attrs 
+FROM public.ipaddress_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+
+// Params: @since::timestamp, @limit::integer
+const selectIPAddressSinceText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.ip_address, a.attrs 
+FROM public.ipaddress_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type ipAddressAttributes struct {
 	Type string `json:"type,omitempty"`
@@ -81,12 +92,12 @@ func (r *PostgresRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAd
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.ip_address.by_id",
-		SQLText: selectIPAddressByID,
+		SQLText: selectIPAddressByIDText,
 		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
@@ -96,27 +107,12 @@ func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, row
 		return nil, result.Err
 	}
 
-	var row_id int64
+	var rid int64
+	var c, u time.Time
 	var a oamnet.IPAddress
-	var c, u, addrstr, attrsJSON string
-	if err := result.Row.Scan(&row_id, &c, &u, &addrstr, &attrsJSON); err != nil {
+	var addrstr, attrsJSON string
+	if err := result.Row.Scan(&rid, &c, &u, &addrstr, &attrsJSON); err != nil {
 		return nil, err
-	}
-
-	if row_id == 0 {
-		return nil, errors.New("no IP address found")
-	}
-
-	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
-	if created, err := parseTimestamp(c); err != nil {
-		return nil, err
-	} else {
-		e.CreatedAt = created.In(time.UTC).Local()
-	}
-	if updated, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
 	addr, err := netip.ParseAddr(addrstr)
@@ -125,11 +121,136 @@ func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, row
 	}
 	a.Address = addr
 
-	if !a.Address.IsValid() {
-		return nil, errors.New("IP address is invalid")
+	e, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a)
+	if err != nil {
+		return nil, err
 	}
-	if a.Address.IsUnspecified() {
-		return nil, errors.New("the IP address is unspecified")
+
+	return e, nil
+}
+
+func (r *PostgresRepository) findIPAddressesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ts := zeronull.Timestamp(since)
+
+	if len(filters) == 0 {
+		return nil, errors.New("no filters provided")
+	}
+
+	filtersJSON, err := json.Marshal(filters)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.ip_address.find_by_content",
+		SQLText: selectIPAddressFindByContentText,
+		Args: pgx.NamedArgs{
+			"filters": string(filtersJSON),
+			"since":   ts,
+			"limit":   limit,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var a oamnet.IPAddress
+		var addrstr, attrsJSON string
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
+			continue
+		}
+
+		addr, err := netip.ParseAddr(addrstr)
+		if err != nil {
+			continue
+		}
+		a.Address = addr
+
+		if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) getIPAddressesUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if since.IsZero() {
+		return nil, errors.New("invalid since time provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+	lmt := zeronull.Int4(int32(limit))
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.ip_address.updated_since",
+		SQLText: selectIPAddressSinceText,
+		Args: pgx.NamedArgs{
+			"since": since,
+			"limit": lmt,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var a oamnet.IPAddress
+		var addrstr, attrsJSON string
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
+			continue
+		}
+
+		addr, err := netip.ParseAddr(addrstr)
+		if err != nil {
+			continue
+		}
+		a.Address = addr
+
+		if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) buildIPAddressEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamnet.IPAddress) (*dbt.Entity, error) {
+	if rid == 0 {
+		return nil, errors.New("no IP address found")
+	}
+	if !a.Address.IsValid() || a.Address.IsUnspecified() {
+		return nil, errors.New("IP address is invalid or unspecified")
 	}
 
 	var attrs ipAddressAttributes
@@ -153,5 +274,10 @@ func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, row
 		return nil, errors.New("IP address type must be either IPv4 or IPv6")
 	}
 
-	return e, nil
+	return &dbt.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: createdAt.In(time.UTC).Local(),
+		LastSeen:  updatedAt.In(time.UTC).Local(),
+		Asset:     a,
+	}, nil
 }

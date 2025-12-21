@@ -242,25 +242,25 @@ BEGIN
     IF v_handle IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_handle);
-        v_sql    := v_sql || format(' AND %I = $%s', 'handle', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.handle', v_count);
     END IF;
 
     IF v_asn IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_asn::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'asn', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.asn', v_count);
     END IF;
 
     IF v_record_name IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_record_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'record_name', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.record_name', v_count);
     END IF;
 
     IF v_whois_server IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_whois_server::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'whois_server', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.whois_server', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -270,12 +270,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id DESC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;

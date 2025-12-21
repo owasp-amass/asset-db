@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
-	"github.com/owasp-amass/asset-db/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
 )
@@ -81,7 +80,7 @@ func (r *PostgresRepository) upsertAccount(ctx context.Context, a *oamacct.Accou
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
@@ -169,7 +168,7 @@ func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters 
 	return out, nil
 }
 
-func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*types.Entity, error) {
+func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
 	if since.IsZero() {
 		return nil, errors.New("invalid since time provided")
 	}
@@ -218,7 +217,7 @@ func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since 
 	return out, nil
 }
 
-func (r *PostgresRepository) buildAccountEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamacct.Account) (*types.Entity, error) {
+func (r *PostgresRepository) buildAccountEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamacct.Account) (*dbt.Entity, error) {
 	if rid == 0 {
 		return nil, errors.New("no account record found")
 	}
@@ -239,7 +238,7 @@ func (r *PostgresRepository) buildAccountEntity(eid, rid int64, createdAt, updat
 	a.Balance = attrs.Balance
 	a.Active = attrs.Active
 
-	return &types.Entity{
+	return &dbt.Entity{
 		ID:        strconv.FormatInt(eid, 10),
 		CreatedAt: createdAt.In(time.UTC).Local(),
 		LastSeen:  updatedAt.In(time.UTC).Local(),

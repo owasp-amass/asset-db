@@ -111,7 +111,14 @@ CREATE OR REPLACE FUNCTION public.fqdn_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.fqdn
+) RETURNS SETOF TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    fqdn       citext,
+    attrs      jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -119,8 +126,19 @@ DECLARE
     v_fqdn   text;
     v_count  integer := 0;
     v_params text[]  := array[]::text[];
-    v_sql    text    := 'SELECT * FROM public.fqdn WHERE TRUE';
+    v_sql    text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.fqdn,
+        a.attrs
+    FROM public.fqdn a
+    JOIN public.entity e ON e.table_name = 'public.fqdn'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_fqdn  := NULLIF(_filters->>'name', '');
 
@@ -128,7 +146,7 @@ BEGIN
     IF v_fqdn IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_fqdn);
-        v_sql    := v_sql || format(' AND %I = $%s', 'fqdn', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.fqdn', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -138,12 +156,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;
@@ -185,7 +202,7 @@ AS $fn$
     FROM public.fqdn a
     JOIN public.entity e ON e.table_name = 'public.fqdn'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

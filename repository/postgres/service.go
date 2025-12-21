@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/owasp-amass/asset-db/types"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
@@ -24,6 +25,16 @@ const upsertServiceText = `SELECT public.service_upsert_entity_json(@record::jso
 const selectServiceByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.service_type, a.attrs
 FROM public.service_get_by_id(@row_id::bigint) AS a;`
+
+// Params: @filters::jsonb, @since::timestamp, @limit::integer
+const selectServiceFindByContentText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.service_type, a.attrs 
+FROM public.service_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+
+// Params: @since::timestamp, @limit::integer
+const selectServiceSinceText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.service_type, a.attrs 
+FROM public.service_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type serviceAttributes struct {
 	Output     string              `json:"output,omitempty"`
@@ -68,7 +79,7 @@ func (r *PostgresRepository) upsertService(ctx context.Context, a *oamplat.Servi
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchServiceByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchServiceByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
@@ -84,32 +95,133 @@ func (r *PostgresRepository) fetchServiceByRowID(ctx context.Context, eid, rowID
 	}
 
 	var row_id int64
+	var c, u time.Time
+	var attrsJSON string
 	var a oamplat.Service
-	var c, u, attrsJSON string
 	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Type, &attrsJSON); err != nil {
 		return nil, err
 	}
 
-	if row_id == 0 {
-		return nil, fmt.Errorf("no service found with row ID %d", rowID)
+	e, err := r.buildServiceEntity(eid, row_id, c, u, attrsJSON, &a)
+	if err != nil {
+		return nil, err
 	}
-	if a.ID == "" {
-		return nil, fmt.Errorf("the service at row ID %d does not have a unique identifier", rowID)
-	}
-	if a.Type == "" {
-		return nil, fmt.Errorf("the service at row ID %d does not have a type", rowID)
+	return e, nil
+}
+
+func (r *PostgresRepository) findServicesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ts := zeronull.Timestamp(since)
+
+	if len(filters) == 0 {
+		return nil, errors.New("no filters provided")
 	}
 
-	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
-	if created, err := parseTimestamp(c); err != nil {
+	filtersJSON, err := json.Marshal(filters)
+	if err != nil {
 		return nil, err
-	} else {
-		e.CreatedAt = created.In(time.UTC).Local()
 	}
-	if updated, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		e.LastSeen = updated.In(time.UTC).Local()
+
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.service.find_by_content",
+		SQLText: selectServiceFindByContentText,
+		Args: pgx.NamedArgs{
+			"filters": string(filtersJSON),
+			"since":   ts,
+			"limit":   limit,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var attrsJSON string
+		var a oamplat.Service
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID, &a.Type, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildServiceEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) getServicesUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if since.IsZero() {
+		return nil, errors.New("invalid since time provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+	lmt := zeronull.Int4(int32(limit))
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.service.updated_since",
+		SQLText: selectServiceSinceText,
+		Args: pgx.NamedArgs{
+			"since": since,
+			"limit": lmt,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var attrsJSON string
+		var a oamplat.Service
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID, &a.Type, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildServiceEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) buildServiceEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamplat.Service) (*dbt.Entity, error) {
+	if rid == 0 {
+		return nil, fmt.Errorf("no service found with row ID %d", rid)
+	}
+	if a.ID == "" {
+		return nil, fmt.Errorf("the service at row ID %d does not have a unique identifier", rid)
+	}
+	if a.Type == "" {
+		return nil, fmt.Errorf("the service at row ID %d does not have a type", rid)
 	}
 
 	var attrs serviceAttributes
@@ -120,5 +232,10 @@ func (r *PostgresRepository) fetchServiceByRowID(ctx context.Context, eid, rowID
 	a.OutputLen = attrs.OutputLen
 	a.Attributes = attrs.Attributes
 
-	return e, nil
+	return &dbt.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: createdAt.In(time.UTC).Local(),
+		LastSeen:  updatedAt.In(time.UTC).Local(),
+		Asset:     a,
+	}, nil
 }

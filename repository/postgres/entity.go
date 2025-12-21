@@ -158,42 +158,57 @@ func (r *PostgresRepository) findOneByContent(ctx context.Context, atype string,
 // findByContent finds entities for asset type with given filters (on the asset table).
 // limit <= 0 => no explicit LIMIT.
 func (r *PostgresRepository) findByContent(ctx context.Context, atype string, since time.Time, filters dbt.ContentFilters, limit int) ([]*dbt.Entity, error) {
-	table := normalizeType(atype)
-	if table == "" {
+	etype := normalizeType(atype)
+	if etype == "" {
 		return nil, fmt.Errorf("unknown asset type %q", atype)
 	}
 
-	// Normalize/validate filters against registry for that table.
-	reg, ok := contentRegistry[table]
-	if !ok {
-		return nil, fmt.Errorf("no content registry for table %q", table)
+	switch etype {
+	case "account":
+		return r.findAccountsByContent(ctx, filters, since, limit)
+	case "autnumrecord":
+		return r.findAutnumRecordsByContent(ctx, filters, since, limit)
+	case "autonomoussystem":
+		return r.findAutonomousSystemsByContent(ctx, filters, since, limit)
+	case "contactrecord":
+		return r.findContactRecordsByContent(ctx, filters, since, limit)
+	case "domainrecord":
+		return r.findDomainRecordsByContent(ctx, filters, since, limit)
+	case "file":
+		return r.findFilesByContent(ctx, filters, since, limit)
+	case "fqdn":
+		return r.findFQDNsByContent(ctx, filters, since, limit)
+	case "fundstransfer":
+		return r.findFundsTransfersByContent(ctx, filters, since, limit)
+	case "identifier":
+		return r.findIdentifiersByContent(ctx, filters, since, limit)
+	case "ipaddress":
+		return r.findIPAddressesByContent(ctx, filters, since, limit)
+	case "ipnetrecord":
+		return r.findIPNetRecordsByContent(ctx, filters, since, limit)
+	case "location":
+		return r.findLocationsByContent(ctx, filters, since, limit)
+	case "netblock":
+		return r.findNetblocksByContent(ctx, filters, since, limit)
+	case "organization":
+		return r.findOrganizationsByContent(ctx, filters, since, limit)
+	case "person":
+		return r.findPersonsByContent(ctx, filters, since, limit)
+	case "phone":
+		return r.findPhonesByContent(ctx, filters, since, limit)
+	case "product":
+		return r.findProductsByContent(ctx, filters, since, limit)
+	case "productrelease":
+		return r.findProductReleasesByContent(ctx, filters, since, limit)
+	case "service":
+		return r.findServicesByContent(ctx, filters, since, limit)
+	case "tlscertificate":
+		return r.findTLSCertificatesByContent(ctx, filters, since, limit)
+	case "url":
+		return r.findURLsByContent(ctx, filters, since, limit)
 	}
 
-	where, args, err := buildWhere(table, reg, since, filters)
-	if err != nil {
-		return nil, err
-	}
-
-	// Query entity ids via join to the concrete asset table.
-	sb := strings.Builder{}
-	sb.WriteString(`
-SELECT e.entity_id FROM entity e
-JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ? 
-JOIN ` + table + ` a ON a.id = e.row_id`)
-
-	args = append([]any{table}, args...) // prepend type/table to args
-	if where != "" {
-		sb.WriteString(" WHERE " + where + "\n")
-	}
-	sb.WriteString("ORDER BY e.updated_at DESC")
-	if limit > 0 {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", limit))
-	}
-
-	q := sb.String()
-	key := "q.findByContent." + table + "." + where + fmt.Sprintf("limit%d", limit)
-
-	return out, result.Rows.Err()
+	return nil, fmt.Errorf("content search not implemented for asset type %q", atype)
 }
 
 // findByType returns up to `limit` Entities of the given asset type,
@@ -201,60 +216,57 @@ JOIN ` + table + ` a ON a.id = e.row_id`)
 //
 // If limit <= 0, it returns all (be careful on large datasets).
 func (r *PostgresRepository) findByType(ctx context.Context, atype string, since time.Time, limit int) ([]*dbt.Entity, error) {
-	table := normalizeType(atype)
-	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
-	base := `
-SELECT e.entity_id, e.natural_key
-FROM entity e
-JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ?`
-	key := "entity.by_type.base"
-	q := base
-	args := []any{table}
-
-	if !since.IsZero() {
-		key += ".since"
-		q += " WHERE e.updated_at >= ?"
-		args = append(args, since.UTC())
+	etype := normalizeType(atype)
+	if etype == "" {
+		return nil, fmt.Errorf("unknown asset type %q", atype)
 	}
 
-	q += " ORDER BY e.updated_at DESC, e.entity_id DESC"
-
-	if limit > 0 {
-		key += fmt.Sprintf(".limit%d", limit)
-		q = base + " LIMIT ?"
-		args = append(args, limit)
+	switch etype {
+	case "account":
+		return r.getAccountsUpdatedSince(ctx, since, limit)
+	case "autnumrecord":
+		return r.getAutnumRecordsUpdatedSince(ctx, since, limit)
+	case "autonomoussystem":
+		return r.getAutonomousSystemsUpdatedSince(ctx, since, limit)
+	case "contactrecord":
+		return r.getContactRecordsUpdatedSince(ctx, since, limit)
+	case "domainrecord":
+		return r.getDomainRecordsUpdatedSince(ctx, since, limit)
+	case "file":
+		return r.getFilesUpdatedSince(ctx, since, limit)
+	case "fqdn":
+		return r.getFQDNsUpdatedSince(ctx, since, limit)
+	case "fundstransfer":
+		return r.getFundsTransfersUpdatedSince(ctx, since, limit)
+	case "identifier":
+		return r.getIdentifiersUpdatedSince(ctx, since, limit)
+	case "ipaddress":
+		return r.getIPAddressesUpdatedSince(ctx, since, limit)
+	case "ipnetrecord":
+		return r.getIPNetRecordsUpdatedSince(ctx, since, limit)
+	case "location":
+		return r.getLocationsUpdatedSince(ctx, since, limit)
+	case "netblock":
+		return r.getNetblocksUpdatedSince(ctx, since, limit)
+	case "organization":
+		return r.getOrganizationsUpdatedSince(ctx, since, limit)
+	case "person":
+		return r.getPersonsUpdatedSince(ctx, since, limit)
+	case "phone":
+		return r.getPhonesUpdatedSince(ctx, since, limit)
+	case "product":
+		return r.getProductsUpdatedSince(ctx, since, limit)
+	case "productrelease":
+		return r.getProductReleasesUpdatedSince(ctx, since, limit)
+	case "service":
+		return r.getServicesUpdatedSince(ctx, since, limit)
+	case "tlscertificate":
+		return r.getTLSCertificatesUpdatedSince(ctx, since, limit)
+	case "url":
+		return r.getURLsUpdatedSince(ctx, since, limit)
 	}
 
-	ch := make(chan *rowsReadResult, 1)
-	r.rpool.Submit(&rowsReadJob{
-		Ctx:     ctx,
-		Name:    key,
-		SQLText: q,
-		Args:    args,
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-	defer func() { _ = result.Rows.Close() }()
-
-	out := make([]*dbt.Entity, 0, max(0, limit))
-	for result.Rows.Next() {
-		var eid int64
-		var disp string
-		if err := result.Rows.Scan(&eid, &disp); err != nil {
-			return nil, err
-		}
-		// Hydrate via existing logic (populates Type + Asset)
-		ent, err := r.idToEntity(ctx, eid)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, ent)
-	}
-	return out, result.Rows.Err()
+	return nil, fmt.Errorf("type search not implemented for asset type %q", atype)
 }
 
 // --- tiny helper used above ---

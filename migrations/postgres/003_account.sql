@@ -196,25 +196,25 @@ BEGIN
     IF v_unique_id IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_unique_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'unique_id', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.unique_id', v_count);
     END IF;
 
     IF v_account_type IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_account_type);
-        v_sql    := v_sql || format(' AND %I = $%s', 'account_type', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.account_type', v_count);
     END IF;
 
     IF v_username IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_username);
-        v_sql    := v_sql || format(' AND %I = $%s', 'username', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.username', v_count);
     END IF;
 
     IF v_account_number IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_account_number);
-        v_sql    := v_sql || format(' AND %I = $%s', 'account_number', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.account_number', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -224,12 +224,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id DESC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;

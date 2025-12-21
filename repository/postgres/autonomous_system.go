@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
-	"github.com/owasp-amass/asset-db/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
@@ -70,7 +69,7 @@ func (r *PostgresRepository) upsertAutonomousSystem(ctx context.Context, a *oamn
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchAutonomousSystemByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchAutonomousSystemByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
@@ -158,7 +157,7 @@ func (r *PostgresRepository) findAutonomousSystemsByContent(ctx context.Context,
 	return out, nil
 }
 
-func (r *PostgresRepository) getAutonomousSystemsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*types.Entity, error) {
+func (r *PostgresRepository) getAutonomousSystemsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
 	if since.IsZero() {
 		return nil, errors.New("invalid since time provided")
 	}
@@ -208,7 +207,7 @@ func (r *PostgresRepository) getAutonomousSystemsUpdatedSince(ctx context.Contex
 	return out, nil
 }
 
-func (r *PostgresRepository) buildAutonomousSystemEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamnet.AutonomousSystem) (*types.Entity, error) {
+func (r *PostgresRepository) buildAutonomousSystemEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamnet.AutonomousSystem) (*dbt.Entity, error) {
 	if rid == 0 {
 		return nil, errors.New("no autonomous system record found")
 	}
@@ -216,7 +215,7 @@ func (r *PostgresRepository) buildAutonomousSystemEntity(eid, rid int64, created
 		return nil, errors.New("autonomous system number is missing")
 	}
 
-	return &types.Entity{
+	return &dbt.Entity{
 		ID:        strconv.FormatInt(eid, 10),
 		CreatedAt: createdAt.In(time.UTC).Local(),
 		LastSeen:  updatedAt.In(time.UTC).Local(),

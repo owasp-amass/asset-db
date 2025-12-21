@@ -161,7 +161,16 @@ CREATE OR REPLACE FUNCTION public.fundstransfer_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.fundstransfer
+) RETURNS SETOF TABLE (
+    entity_id        bigint,
+    id               bigint,
+    created_at       timestamp without time zone,
+    updated_at       timestamp without time zone,
+    unique_id        text,
+    amount           numeric,
+    reference_number text,
+    attrs            jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -171,8 +180,21 @@ DECLARE
     v_reference_number text;
     v_count            integer := 0;
     v_params           text[]  := array[]::text[];
-    v_sql              text    := 'SELECT * FROM public.fundstransfer WHERE TRUE';
+    v_sql              text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.amount,
+        a.reference_number,
+        a.attrs
+    FROM public.fundstransfer a
+    JOIN public.entity e ON e.table_name = 'public.fundstransfer'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_unique_id        := NULLIF(_filters->>'unique_id', '');
     v_amount           := CASE
@@ -189,19 +211,19 @@ BEGIN
     IF v_unique_id IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_unique_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'unique_id', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.unique_id', v_count);
     END IF;
 
     IF v_amount IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_amount::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'amount', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.amount', v_count);
     END IF;
 
     IF v_reference_number IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_reference_number);
-        v_sql    := v_sql || format(' AND %I = $%s', 'reference_number', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.reference_number', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -211,12 +233,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;
@@ -264,7 +285,7 @@ AS $fn$
     FROM public.fundstransfer a
     JOIN public.entity e ON e.table_name = 'public.fundstransfer'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

@@ -157,7 +157,15 @@ CREATE OR REPLACE FUNCTION public.url_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.url
+) RETURNS SETOF TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    raw_url    text,
+    scheme     text,
+    attrs      jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -166,8 +174,20 @@ DECLARE
     v_scheme text;
     v_count  integer := 0;
     v_params text[]  := array[]::text[];
-    v_sql    text    := 'SELECT * FROM public.url WHERE TRUE';
+    v_sql    text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.raw_url,
+        a.scheme,
+        a.attrs
+    FROM public.url a
+    JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_url    := NULLIF(_filters->>'url', '');
     v_scheme := NULLIF(_filters->>'scheme', '');
@@ -176,13 +196,13 @@ BEGIN
     IF v_url IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_url);
-        v_sql    := v_sql || format(' AND %I = $%s', 'raw_url', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.raw_url', v_count);
     END IF;
 
     IF v_scheme IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_scheme);
-        v_sql    := v_sql || format(' AND %I = $%s', 'scheme', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.scheme', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -192,11 +212,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
 
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
@@ -242,7 +262,7 @@ AS $fn$
     FROM public.url a
     JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

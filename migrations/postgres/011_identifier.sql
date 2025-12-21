@@ -147,7 +147,16 @@ CREATE OR REPLACE FUNCTION public.identifier_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.identifier
+) RETURNS SETOF TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    unique_id  text,
+    id_value   text,
+    id_type    text,
+    attrs      jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -157,8 +166,21 @@ DECLARE
     v_id_type   text;
     v_count     integer := 0;
     v_params    text[]  := array[]::text[];
-    v_sql       text    := 'SELECT * FROM public.identifier WHERE TRUE';
+    v_sql       text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.id_value,
+        a.id_type,
+        a.attrs
+    FROM public.identifier a
+    JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_unique_id      := NULLIF(_filters->>'unique_id', '');
     v_id_value       := NULLIF(_filters->>'id', '');
@@ -168,19 +190,19 @@ BEGIN
     IF v_unique_id IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_unique_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'unique_id', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.unique_id', v_count);
     END IF;
 
     IF v_id_value IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_id_value);
-        v_sql    := v_sql || format(' AND %I = $%s', 'id_value', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.id_value', v_count);
     END IF;
 
     IF v_id_type IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_id_type);
-        v_sql    := v_sql || format(' AND %I = $%s', 'id_type', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.id_type', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -190,12 +212,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id ASC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;
@@ -243,7 +264,7 @@ AS $fn$
     FROM public.identifier a
     JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

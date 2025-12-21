@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/owasp-amass/asset-db/types"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 )
 
@@ -24,6 +25,16 @@ const upsertProductText = `SELECT public.product_upsert_entity_json(@record::jso
 const selectProductByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.product_name, a.product_type, a.attrs
 FROM public.product_get_by_id(@row_id::bigint) AS a;`
+
+// Params: @filters::jsonb, @since::timestamp, @limit::integer
+const selectProductFindByContentText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.product_name, a.product_type, a.attrs 
+FROM public.product_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+
+// Params: @since::timestamp, @limit::integer
+const selectProductSinceText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.product_name, a.product_type, a.attrs 
+FROM public.product_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type productAttributes struct {
 	Category        string `json:"category,omitempty"`
@@ -71,7 +82,7 @@ func (r *PostgresRepository) upsertProduct(ctx context.Context, a *oamplat.Produ
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchProductByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchProductByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
@@ -86,15 +97,128 @@ func (r *PostgresRepository) fetchProductByRowID(ctx context.Context, eid, rowID
 		return nil, result.Err
 	}
 
-	var row_id int64
+	var rid int64
+	var c, u time.Time
+	var attrsJSON string
 	var a oamplat.Product
-	var c, u, attrsJSON string
-	if err := result.Row.Scan(&row_id, &c, &u, &a.ID, &a.Name, &a.Type, &attrsJSON); err != nil {
+	if err := result.Row.Scan(&rid, &c, &u, &a.ID, &a.Name, &a.Type, &attrsJSON); err != nil {
 		return nil, err
 	}
 
-	if row_id == 0 {
-		return nil, fmt.Errorf("product at row ID %d not found", rowID)
+	e, err := r.buildProductEntity(eid, rid, c, u, attrsJSON, &a)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func (r *PostgresRepository) findProductsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ts := zeronull.Timestamp(since)
+
+	if len(filters) == 0 {
+		return nil, errors.New("no filters provided")
+	}
+
+	filtersJSON, err := json.Marshal(filters)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.product.find_by_content",
+		SQLText: selectProductFindByContentText,
+		Args: pgx.NamedArgs{
+			"filters": string(filtersJSON),
+			"since":   ts,
+			"limit":   limit,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var attrsJSON string
+		var a oamplat.Product
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID, &a.Name, &a.Type, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildProductEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) getProductsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if since.IsZero() {
+		return nil, errors.New("invalid since time provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+	lmt := zeronull.Int4(int32(limit))
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.product.updated_since",
+		SQLText: selectProductSinceText,
+		Args: pgx.NamedArgs{
+			"since": since,
+			"limit": lmt,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var attrsJSON string
+		var a oamplat.Product
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID, &a.Name, &a.Type, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildProductEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) buildProductEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamplat.Product) (*dbt.Entity, error) {
+	if rid == 0 {
+		return nil, fmt.Errorf("product at row ID %d not found", rid)
 	}
 	if a.ID == "" {
 		return nil, fmt.Errorf("product unique ID is missing")
@@ -106,18 +230,6 @@ func (r *PostgresRepository) fetchProductByRowID(ctx context.Context, eid, rowID
 		return nil, fmt.Errorf("product type is missing")
 	}
 
-	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
-	if created, err := parseTimestamp(c); err != nil {
-		return nil, err
-	} else {
-		e.CreatedAt = created.In(time.UTC).Local()
-	}
-	if updated, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		e.LastSeen = updated.In(time.UTC).Local()
-	}
-
 	var attrs productAttributes
 	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
 		return nil, err
@@ -126,5 +238,10 @@ func (r *PostgresRepository) fetchProductByRowID(ctx context.Context, eid, rowID
 	a.Description = attrs.Description
 	a.CountryOfOrigin = attrs.CountryOfOrigin
 
-	return e, nil
+	return &dbt.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: createdAt.In(time.UTC).Local(),
+		LastSeen:  updatedAt.In(time.UTC).Local(),
+		Asset:     a,
+	}, nil
 }

@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/owasp-amass/asset-db/types"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
+	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/contact"
 )
 
@@ -24,6 +25,16 @@ const upsertPhoneText = `SELECT public.phone_upsert_entity_json(@record::jsonb);
 const selectPhoneByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.e164, a.country_code, a.attrs
 FROM public.phone_get_by_id(@row_id::bigint) AS a;`
+
+// Params: @filters::jsonb, @since::timestamp, @limit::integer
+const selectPhoneFindByContentText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.e164, a.country_code, a.attrs 
+FROM public.phone_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+
+// Params: @since::timestamp, @limit::integer
+const selectPhoneSinceText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.e164, a.country_code, a.attrs 
+FROM public.phone_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type phoneAttributes struct {
 	Raw           string `json:"raw,omitempty"`
@@ -69,7 +80,7 @@ func (r *PostgresRepository) upsertPhone(ctx context.Context, a *contact.Phone) 
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
@@ -84,30 +95,131 @@ func (r *PostgresRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID i
 		return nil, result.Err
 	}
 
-	var row_id int64
+	var rid int64
+	var c, u time.Time
 	var a contact.Phone
-	var c, u, attrsJSON string
-	if err := result.Row.Scan(&row_id, &c, &u, &a.E164, &a.CountryCode, &attrsJSON); err != nil {
+	var attrsJSON string
+	if err := result.Row.Scan(&rid, &c, &u, &a.E164, &a.CountryCode, &attrsJSON); err != nil {
 		return nil, err
 	}
 
-	if row_id == 0 {
-		return nil, fmt.Errorf("no phone record found with row ID %d", rowID)
+	e, err := r.buildPhoneEntity(eid, rid, c, u, attrsJSON, &a)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func (r *PostgresRepository) findPhonesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ts := zeronull.Timestamp(since)
+
+	if len(filters) == 0 {
+		return nil, errors.New("no filters provided")
+	}
+
+	filtersJSON, err := json.Marshal(filters)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.phone.find_by_content",
+		SQLText: selectPhoneFindByContentText,
+		Args: pgx.NamedArgs{
+			"filters": string(filtersJSON),
+			"since":   ts,
+			"limit":   limit,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var a contact.Phone
+		var attrsJSON string
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.E164, &a.CountryCode, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildPhoneEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) getPhonesUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if since.IsZero() {
+		return nil, errors.New("invalid since time provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+	lmt := zeronull.Int4(int32(limit))
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.phone.updated_since",
+		SQLText: selectPhoneSinceText,
+		Args: pgx.NamedArgs{
+			"since": since,
+			"limit": lmt,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var a contact.Phone
+		var attrsJSON string
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.E164, &a.CountryCode, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildPhoneEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) buildPhoneEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *contact.Phone) (*dbt.Entity, error) {
+	if rid == 0 {
+		return nil, fmt.Errorf("no phone record found with row ID %d", rid)
 	}
 	if a.E164 == "" {
-		return nil, fmt.Errorf("phone record with row ID %d is missing E.164 format", rowID)
-	}
-
-	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
-	if created, err := parseTimestamp(c); err != nil {
-		return nil, err
-	} else {
-		e.CreatedAt = created.In(time.UTC).Local()
-	}
-	if updated, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		e.LastSeen = updated.In(time.UTC).Local()
+		return nil, fmt.Errorf("phone record with row ID %d is missing E.164 format", rid)
 	}
 
 	var attrs phoneAttributes
@@ -119,8 +231,13 @@ func (r *PostgresRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID i
 	a.CountryAbbrev = attrs.CountryAbbrev
 
 	if a.Raw == "" {
-		return nil, fmt.Errorf("phone with row ID %d is missing raw format", rowID)
+		return nil, fmt.Errorf("phone with row ID %d is missing raw format", rid)
 	}
 
-	return e, nil
+	return &dbt.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: createdAt.In(time.UTC).Local(),
+		LastSeen:  updatedAt.In(time.UTC).Local(),
+		Asset:     a,
+	}, nil
 }

@@ -233,7 +233,20 @@ CREATE OR REPLACE FUNCTION public.ipnetrecord_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.ipnetrecord
+) RETURNS SETOF TABLE (
+    entity_id     bigint,
+    id            bigint,
+    created_at    timestamp without time zone,
+    updated_at    timestamp without time zone,
+    record_cidr   cidr,
+    record_name   text,
+    handle        text,
+    whois_server  citext,
+    parent_handle text,
+    start_address inet,
+    end_address   inet,
+    attrs         jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -247,8 +260,25 @@ DECLARE
     v_end_address   inet;
     v_count         integer := 0;
     v_params        text[]  := array[]::text[];
-    v_sql           text    := 'SELECT * FROM public.ipnetrecord WHERE TRUE';
+    v_sql           text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.record_cidr,
+        a.record_name,
+        a.handle,
+        a.whois_server,
+        a.parent_handle,
+        a.start_address,
+        a.end_address,
+        a.attrs
+    FROM public.ipnetrecord a
+    JOIN public.entity e ON e.table_name = 'public.ipnetrecord'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_record_cidr   := NULLIF(_filters->>'cidr', '')::cidr;
     v_record_name   := NULLIF(_filters->>'name', '');
@@ -262,43 +292,43 @@ BEGIN
     IF v_record_cidr IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_record_cidr::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'record_cidr', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.record_cidr', v_count);
     END IF;
 
     IF v_record_name IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_record_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'record_name', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.record_name', v_count);
     END IF;
 
     IF v_handle IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_handle);
-        v_sql    := v_sql || format(' AND %I = $%s', 'handle', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.handle', v_count);
     END IF;
 
     IF v_whois_server IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_whois_server::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'whois_server', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.whois_server', v_count);
     END IF;
 
     IF v_parent_handle IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_parent_handle);
-        v_sql    := v_sql || format(' AND %I = $%s', 'parent_handle', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.parent_handle', v_count);
     END IF;
 
     IF v_start_address IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_start_address::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'start_address', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.start_address', v_count);
     END IF;
 
     IF v_end_address IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_end_address::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'end_address', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.end_address', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -308,11 +338,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
 
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
@@ -373,7 +403,7 @@ AS $fn$
     FROM public.ipnetrecord a
     JOIN public.entity e ON e.table_name = 'public.ipnetrecord'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

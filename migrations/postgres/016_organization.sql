@@ -184,7 +184,18 @@ CREATE OR REPLACE FUNCTION public.organization_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.organization
+) RETURNS SETOF TABLE (
+    entity_id       bigint,
+    id              bigint,
+    created_at      timestamp without time zone,
+    updated_at      timestamp without time zone,
+    unique_id       text,
+    org_name        text,
+    legal_name      text,
+    jurisdiction    text,
+    registration_id text,
+    attrs           jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -196,8 +207,23 @@ DECLARE
     v_registration_id text;
     v_count           integer := 0;
     v_params          text[]  := array[]::text[];
-    v_sql             text    := 'SELECT * FROM public.organization WHERE TRUE';
+    v_sql             text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.org_name,
+        a.legal_name,
+        a.jurisdiction,
+        a.registration_id,
+        a.attrs
+    FROM public.organization a
+    JOIN public.entity e ON e.table_name = 'public.organization'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_unique_id       := NULLIF(_filters->>'unique_id', '');
     v_legal_name      := NULLIF(_filters->>'legal_name', '');
@@ -209,31 +235,31 @@ BEGIN
     IF v_unique_id IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_unique_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'unique_id', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.unique_id', v_count);
     END IF;
 
     IF v_legal_name IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_legal_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'legal_name', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.legal_name', v_count);
     END IF;
 
     IF v_org_name IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_org_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'org_name', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.org_name', v_count);
     END IF;
 
     IF v_jurisdiction IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_jurisdiction);
-        v_sql    := v_sql || format(' AND %I = $%s', 'jurisdiction', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.jurisdiction', v_count);
     END IF;
 
     IF v_registration_id IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_registration_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'registration_id', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.registration_id', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -243,12 +269,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;
@@ -302,7 +327,7 @@ AS $fn$
     FROM public.organization a
     JOIN public.entity e ON e.table_name = 'public.organization'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

@@ -14,7 +14,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
-	"github.com/owasp-amass/asset-db/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
@@ -90,7 +89,7 @@ func (r *PostgresRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.A
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
@@ -178,7 +177,7 @@ func (r *PostgresRepository) findAutnumRecordsByContent(ctx context.Context, fil
 	return out, nil
 }
 
-func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*types.Entity, error) {
+func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
 	if since.IsZero() {
 		return nil, errors.New("invalid since time provided")
 	}
@@ -227,7 +226,7 @@ func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, s
 	return out, nil
 }
 
-func (r *PostgresRepository) buildAutnumRecordEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamreg.AutnumRecord) (*types.Entity, error) {
+func (r *PostgresRepository) buildAutnumRecordEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamreg.AutnumRecord) (*dbt.Entity, error) {
 	if rid == 0 {
 		return nil, errors.New("no autnum record found")
 	}
@@ -257,7 +256,7 @@ func (r *PostgresRepository) buildAutnumRecordEntity(eid, rid int64, createdAt, 
 		return nil, fmt.Errorf("autnum record updated date is missing or invalid: %v", err)
 	}
 
-	return &types.Entity{
+	return &dbt.Entity{
 		ID:        strconv.FormatInt(eid, 10),
 		CreatedAt: createdAt.In(time.UTC).Local(),
 		LastSeen:  updatedAt.In(time.UTC).Local(),

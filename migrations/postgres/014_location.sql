@@ -193,7 +193,23 @@ CREATE OR REPLACE FUNCTION public.location_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.location
+) RETURNS SETOF TABLE (
+    entity_id       bigint,
+    id              bigint,
+    created_at      timestamp without time zone,
+    updated_at      timestamp without time zone,
+    street_address  text,
+    city            text,
+    country         text,
+    unit            text,
+    building        text,
+    province        text,
+    locality        text,
+    postal_code     text,
+    street_name     text,
+    building_number text,
+    attrs           jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -210,8 +226,28 @@ DECLARE
     v_building_number text;
     v_count           integer := 0;
     v_params          text[]  := array[]::text[];
-    v_sql             text    := 'SELECT * FROM public.location WHERE TRUE';
+    v_sql             text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.street_address,
+        a.city,
+        a.country,
+        a.unit,
+        a.building,
+        a.province,
+        a.locality,
+        a.postal_code,
+        a.street_name,
+        a.building_number,
+        a.attrs
+    FROM public.location a
+    JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_street_address  := NULLIF(_filters->>'address', '');
     v_city            := NULLIF(_filters->>'city', '');
@@ -228,61 +264,61 @@ BEGIN
     IF v_street_address IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_street_address);
-        v_sql    := v_sql || format(' AND %I = $%s', 'street_address', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.street_address', v_count);
     END IF;
 
     IF v_city IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_city);
-        v_sql    := v_sql || format(' AND %I = $%s', 'city', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.city', v_count);
     END IF;
 
     IF v_country IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_country);
-        v_sql    := v_sql || format(' AND %I = $%s', 'country', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.country', v_count);
     END IF;
 
     IF v_unit IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_unit);
-        v_sql    := v_sql || format(' AND %I = $%s', 'unit', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.unit', v_count);
     END IF;
 
     IF v_building IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_building);
-        v_sql    := v_sql || format(' AND %I = $%s', 'building', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.building', v_count);
     END IF;
 
     IF v_province IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_province);
-        v_sql    := v_sql || format(' AND %I = $%s', 'province', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.province', v_count);
     END IF;
 
     IF v_locality IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_locality);
-        v_sql    := v_sql || format(' AND %I = $%s', 'locality', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.locality', v_count);
     END IF;
 
     IF v_postal_code IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_postal_code);
-        v_sql    := v_sql || format(' AND %I = $%s', 'postal_code', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.postal_code', v_count);
     END IF;
 
     IF v_street_name IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_street_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'street_name', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.street_name', v_count);
     END IF;
 
     IF v_building_number IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_building_number);
-        v_sql    := v_sql || format(' AND %I = $%s', 'building_number', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.building_number', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -292,12 +328,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;
@@ -366,7 +401,7 @@ AS $fn$
     FROM public.location a
     JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

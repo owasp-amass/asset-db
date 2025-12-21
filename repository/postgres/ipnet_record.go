@@ -14,7 +14,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/owasp-amass/asset-db/types"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
@@ -22,10 +23,22 @@ import (
 const upsertIPNetRecordText = `SELECT public.ipnetrecord_upsert_entity_json(@record::jsonb);`
 
 // Param: @row_id::bigint
-const selectIPNetRecordByID = `
+const selectIPNetRecordByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.record_cidr, a.record_name, a.handle,
 	   a.whois_server, a.parent_handle, a.start_address, a.end_address, a.attrs
 FROM public.ipnetrecord_get_by_id(@row_id::bigint) AS a;`
+
+// Params: @filters::jsonb, @since::timestamp, @limit::integer
+const selectIPNetRecordFindByContentText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.record_cidr, a.record_name, a.handle,
+	   a.whois_server, a.parent_handle, a.start_address, a.end_address, a.attrs
+FROM public.ipnetrecord_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+
+// Params: @since::timestamp, @limit::integer
+const selectIPNetRecordSinceText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.record_cidr, a.record_name, a.handle,
+	   a.whois_server, a.parent_handle, a.start_address, a.end_address, a.attrs
+FROM public.ipnetrecord_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type ipnetRecordAttributes struct {
 	Raw         string   `json:"raw,omitempty"`
@@ -104,12 +117,12 @@ func (r *PostgresRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IP
 	return id, nil
 }
 
-func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	ch := make(chan *rowResult, 1)
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.ipnet_record.by_id",
-		SQLText: selectIPNetRecordByID,
+		SQLText: selectIPNetRecordByIDText,
 		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
@@ -119,34 +132,13 @@ func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, r
 		return nil, result.Err
 	}
 
-	var row_id int64
+	var rid int64
+	var c, u time.Time
 	var a oamreg.IPNetRecord
-	var c, u, cidrstr, start, end, attrsJSON string
-	if err := result.Row.Scan(&row_id, &c, &u, &cidrstr, &a.Name, &a.Handle,
+	var cidrstr, start, end, attrsJSON string
+	if err := result.Row.Scan(&rid, &c, &u, &cidrstr, &a.Name, &a.Handle,
 		&a.WhoisServer, &a.ParentHandle, &start, &end, &attrsJSON); err != nil {
 		return nil, err
-	}
-
-	if row_id == 0 {
-		return nil, errors.New("no ipnet record found")
-	}
-	if a.Name == "" {
-		return nil, errors.New("ipnet record name cannot be empty")
-	}
-	if a.Handle == "" {
-		return nil, errors.New("ipnet record handle cannot be empty")
-	}
-
-	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
-	if created, err := parseTimestamp(c); err != nil {
-		return nil, err
-	} else {
-		e.CreatedAt = created.In(time.UTC).Local()
-	}
-	if updated, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
 	var err error
@@ -155,8 +147,174 @@ func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, r
 		return nil, err
 	}
 
-	if !a.CIDR.IsValid() {
-		return nil, errors.New("ipnet record CIDR is invalid")
+	startaddr, err := netip.ParseAddr(start)
+	if err != nil {
+		return nil, err
+	}
+	a.StartAddress = startaddr
+
+	endaddr, err := netip.ParseAddr(end)
+	if err != nil {
+		return nil, err
+	}
+	a.EndAddress = endaddr
+
+	e, err := r.buildIPNetRecordEntity(eid, rid, c, u, attrsJSON, &a)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func (r *PostgresRepository) findIPNetRecordsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ts := zeronull.Timestamp(since)
+
+	if len(filters) == 0 {
+		return nil, errors.New("no filters provided")
+	}
+
+	filtersJSON, err := json.Marshal(filters)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.ipnet_record.find_by_content",
+		SQLText: selectIPNetRecordFindByContentText,
+		Args: pgx.NamedArgs{
+			"filters": string(filtersJSON),
+			"since":   ts,
+			"limit":   limit,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var a oamreg.IPNetRecord
+		var cidrstr, start, end, attrsJSON string
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &cidrstr, &a.Name, &a.Handle,
+			&a.WhoisServer, &a.ParentHandle, &start, &end, &attrsJSON); err != nil {
+			return nil, err
+		}
+
+		var err error
+		a.CIDR, err = netip.ParsePrefix(cidrstr)
+		if err != nil {
+			continue
+		}
+
+		startaddr, err := netip.ParseAddr(start)
+		if err != nil {
+			continue
+		}
+		a.StartAddress = startaddr
+
+		endaddr, err := netip.ParseAddr(end)
+		if err != nil {
+			continue
+		}
+		a.EndAddress = endaddr
+
+		if ent, err := r.buildIPNetRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) getIPNetRecordsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if since.IsZero() {
+		return nil, errors.New("invalid since time provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+	lmt := zeronull.Int4(int32(limit))
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.ipnet_record.updated_since",
+		SQLText: selectIPNetRecordSinceText,
+		Args: pgx.NamedArgs{
+			"since": since,
+			"limit": lmt,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var a oamreg.IPNetRecord
+		var cidrstr, start, end, attrsJSON string
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &cidrstr, &a.Name, &a.Handle,
+			&a.WhoisServer, &a.ParentHandle, &start, &end, &attrsJSON); err != nil {
+			return nil, err
+		}
+
+		var err error
+		a.CIDR, err = netip.ParsePrefix(cidrstr)
+		if err != nil {
+			continue
+		}
+
+		startaddr, err := netip.ParseAddr(start)
+		if err != nil {
+			continue
+		}
+		a.StartAddress = startaddr
+
+		endaddr, err := netip.ParseAddr(end)
+		if err != nil {
+			continue
+		}
+		a.EndAddress = endaddr
+
+		if ent, err := r.buildIPNetRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) buildIPNetRecordEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamreg.IPNetRecord) (*dbt.Entity, error) {
+	if rid == 0 {
+		return nil, errors.New("no ipnet record found")
+	}
+	if a.Name == "" {
+		return nil, errors.New("ipnet record name cannot be empty")
+	}
+	if a.Handle == "" {
+		return nil, errors.New("ipnet record handle cannot be empty")
 	}
 
 	var attrs ipnetRecordAttributes
@@ -193,18 +351,9 @@ func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, r
 		return nil, fmt.Errorf("ipnet record must have a valid updated date: %v", err)
 	}
 
-	startaddr, err := netip.ParseAddr(start)
-	if err != nil {
-		return nil, err
+	if !a.CIDR.IsValid() {
+		return nil, errors.New("ipnet record CIDR is invalid")
 	}
-	a.StartAddress = startaddr
-
-	endaddr, err := netip.ParseAddr(end)
-	if err != nil {
-		return nil, err
-	}
-	a.EndAddress = endaddr
-
 	if !a.StartAddress.IsValid() || a.StartAddress.IsUnspecified() || !a.CIDR.Contains(a.StartAddress) {
 		return nil, errors.New("ipnet record start address is invalid")
 	}
@@ -212,5 +361,10 @@ func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, r
 		return nil, errors.New("ipnet record end address is invalid")
 	}
 
-	return e, nil
+	return &dbt.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: createdAt.In(time.UTC).Local(),
+		LastSeen:  updatedAt.In(time.UTC).Local(),
+		Asset:     a,
+	}, nil
 }

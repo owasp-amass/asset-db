@@ -128,7 +128,16 @@ CREATE OR REPLACE FUNCTION public.file_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.file
+) RETURNS SETOF TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    file_url   text,
+    basename   text,
+    file_type  text,
+    attrs      jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -138,8 +147,21 @@ DECLARE
     v_file_type text;
     v_count     integer := 0;
     v_params    text[]  := array[]::text[];
-    v_sql       text    := 'SELECT * FROM public.file WHERE TRUE';
+    v_sql       text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.file_url,
+        a.basename,
+        a.file_type,
+        a.attrs
+    FROM public.file a
+    JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_file_url  := NULLIF(_filters->>'url', '');
     v_basename  := NULLIF(_filters->>'name', '');
@@ -149,19 +171,19 @@ BEGIN
     IF v_file_url IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_file_url);
-        v_sql    := v_sql || format(' AND %I = $%s', 'file_url', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.file_url', v_count);
     END IF;
 
     IF v_basename IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_basename);
-        v_sql    := v_sql || format(' AND %I = $%s', 'basename', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.basename', v_count);
     END IF;
 
     IF v_file_type IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, v_file_type);
-        v_sql    := v_sql || format(' AND %I = $%s', 'file_type', v_count);
+        v_sql    := v_sql || format(' AND %I = $%s', 'a.file_type', v_count);
     END IF;
 
     IF v_count = 0 THEN
@@ -171,12 +193,11 @@ BEGIN
     IF _since IS NOT NULL THEN
         v_count  := v_count + 1;
         v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'updated_at', v_count);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
-
+    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
     END IF;
@@ -224,7 +245,7 @@ AS $fn$
     FROM public.file a
     JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
