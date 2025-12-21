@@ -195,7 +195,17 @@ CREATE OR REPLACE FUNCTION public.autnumrecord_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.autnumrecord
+) RETURNS SETOF TABLE (
+    entity_id    bigint,
+    id           bigint,
+    created_at   timestamp without time zone,
+    updated_at   timestamp without time zone,
+    handle       text,
+    asn          integer,
+    record_name  text,
+    whois_server citext,
+    attrs        jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -206,8 +216,22 @@ DECLARE
     v_whois_server citext;
     v_count        integer := 0;
     v_params       text[]  := array[]::text[];
-    v_sql          text    := 'SELECT * FROM public.autnumrecord WHERE TRUE';
+    v_sql          text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.handle,
+        a.asn,
+        a.record_name,
+        a.whois_server,
+        a.attrs
+    FROM public.autnumrecord a
+    JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_handle       := NULLIF(_filters->>'handle', '');
     v_asn          := NULLIF(_filters->>'number', '')::integer;
@@ -250,7 +274,7 @@ BEGIN
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
+    v_sql := v_sql || ' ORDER BY updated_at DESC, id DESC';
 
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
@@ -302,7 +326,7 @@ AS $fn$
     FROM public.autnumrecord a
     JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

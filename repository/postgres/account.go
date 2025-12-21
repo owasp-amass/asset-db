@@ -22,13 +22,13 @@ import (
 const upsertAccountText = `SELECT public.account_upsert_entity_json(@record::jsonb);`
 
 // Param: @row_id::bigint
-const selectAccountByID = `
+const selectAccountByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
 FROM public.account_get_by_id(@row_id::bigint) AS a;`
 
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectAccountFindByContentText = `
-SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
 FROM public.account_get_by_filters(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
@@ -86,7 +86,7 @@ func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "asset.account.by_id",
-		SQLText: selectAccountByID,
+		SQLText: selectAccountByIDText,
 		Args:    pgx.NamedArgs{"row_id": rowID},
 		Result:  ch,
 	})
@@ -127,7 +127,6 @@ func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters 
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-	lmt := zeronull.Int4(int32(limit))
 
 	ch := make(chan *rowsResult, 1)
 	r.wpool.Submit(&rowsJob{
@@ -137,7 +136,8 @@ func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters 
 		Args: pgx.NamedArgs{
 			"filters": string(filtersJSON),
 			"since":   ts,
-			"limit":   lmt},
+			"limit":   limit,
+		},
 		Result: ch,
 	})
 

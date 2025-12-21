@@ -111,7 +111,14 @@ CREATE OR REPLACE FUNCTION public.contactrecord_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.contactrecord
+) RETURNS SETOF TABLE (
+    entity_id     bigint,
+    id            bigint,
+    created_at    timestamp without time zone,
+    updated_at    timestamp without time zone,
+    discovered_at text,
+    attrs         jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -119,8 +126,19 @@ DECLARE
     v_discovered_at text;
     v_count         integer := 0;
     v_params        text[]  := array[]::text[];
-    v_sql           text    := 'SELECT * FROM public.contactrecord WHERE TRUE';
+    v_sql           text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.discovered_at,
+        a.attrs
+    FROM public.contactrecord a
+    JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_discovered_at := NULLIF(_filters->>'discovered_at', '');
 
@@ -142,7 +160,7 @@ BEGIN
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
+    v_sql := v_sql || ' ORDER BY updated_at DESC, id DESC';
 
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
@@ -185,7 +203,7 @@ AS $fn$
     FROM public.contactrecord a
     JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd
