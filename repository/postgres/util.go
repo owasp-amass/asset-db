@@ -16,7 +16,7 @@ import (
 
 // ------------------------------ Utilities ------------------------------------
 
-// parseTimestamp converts a *string timestamp into *time.Time (RFC3339 or SQLite
+// parseTimestamp converts a *string timestamp into *time.Time (RFC3339Nano or PostgreSQL
 // default format). If parsing fails, returns nil (non-fatal for presentation purposes).
 func parseTimestamp(s string) (time.Time, error) {
 	if s == "" {
@@ -28,13 +28,13 @@ func parseTimestamp(s string) (time.Time, error) {
 		return time.Time{}, nil
 	}
 
-	// Try SQLite's default (YYYY-MM-DD HH:MM:SS.SSS) then RFC3339
+	// Try PostgreSQL's default (YYYY-MM-DD HH:MM:SS.SSS) then RFC3339
 	layouts := []string{
+		time.RFC3339Nano,
 		"2006-01-02T15:04:05Z07:00",
 		"2006-01-02 15:04:05",
 		"2006-01-02 15:04:05.000",
 		time.RFC3339,
-		time.RFC3339Nano,
 	}
 
 	for _, l := range layouts {
