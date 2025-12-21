@@ -149,7 +149,17 @@ CREATE OR REPLACE FUNCTION public.account_find_by_content(
     _filters jsonb, 
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF public.account
+) RETURNS SETOF TABLE (
+    entity_id      bigint,
+    id             bigint,
+    created_at     timestamp without time zone,
+    updated_at     timestamp without time zone,
+    unique_id      text,
+    account_type   text,
+    username       text,
+    account_number text,
+    attrs          jsonb
+)
 LANGUAGE plpgsql
 STABLE
 AS $fn$
@@ -160,8 +170,22 @@ DECLARE
     v_account_number text;
     v_count          integer := 0;
     v_params         text[]  := array[]::text[];
-    v_sql            text    := 'SELECT * FROM public.account WHERE TRUE';
+    v_sql            text;
 BEGIN
+    v_sql := $Q$
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.account_type,
+        a.username,
+        a.account_number,
+        a.attrs
+    FROM public.account a
+    JOIN public.entity e ON e.table_name = 'public.account'::citext AND e.row_id = a.id WHERE TRUE$Q$;
+
     -- 1) Extract filters from JSONB
     v_unique_id      := NULLIF(_filters->>'unique_id', '');
     v_account_type   := NULLIF(_filters->>'account_type', '');
@@ -204,7 +228,7 @@ BEGIN
     END IF;
 
     -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY updated_at DESC, id ASC';
+    v_sql := v_sql || ' ORDER BY updated_at DESC, id DESC';
 
     IF _limit > 0 THEN
         v_sql := v_sql || format(' LIMIT %s', _limit);
@@ -256,7 +280,7 @@ AS $fn$
     FROM public.account a
     JOIN public.entity e ON e.table_name = 'public.account'::citext AND e.row_id = a.id
     WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id ASC
+    ORDER BY a.updated_at DESC, a.id DESC
     LIMIT _limit;
 $fn$;
 -- +migrate StatementEnd

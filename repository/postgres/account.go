@@ -12,17 +12,29 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	"github.com/owasp-amass/asset-db/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
 )
 
-// Params: @record::jsonb
+// Param: @record::jsonb
 const upsertAccountText = `SELECT public.account_upsert_entity_json(@record::jsonb);`
 
 // Param: @row_id::bigint
 const selectAccountByID = `
 SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
 FROM public.account_get_by_id(@row_id::bigint) AS a;`
+
+// Params: @filters::jsonb, @since::timestamp, @limit::integer
+const selectAccountFindByContentText = `
+SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
+FROM public.account_get_by_filters(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+
+// Params: @since::timestamp, @limit::integer
+const selectAccountSinceText = `
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
+FROM public.account_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type accountAttributes struct {
 	Balance float64 `json:"balance"`
@@ -84,15 +96,130 @@ func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID
 		return nil, result.Err
 	}
 
-	var row_id int64
+	var rid int64
+	var c, u time.Time
+	var attrsJSON string
 	var a oamacct.Account
-	var c, u, attrsJSON string
-	if err := result.Row.Scan(&row_id, &c, &u, &a.ID,
+	if err := result.Row.Scan(&rid, &c, &u, &a.ID,
 		&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
 		return nil, err
 	}
 
-	if row_id == 0 {
+	e, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ts := zeronull.Timestamp(since)
+
+	if len(filters) == 0 {
+		return nil, errors.New("no filters provided")
+	}
+
+	filtersJSON, err := json.Marshal(filters)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+	lmt := zeronull.Int4(int32(limit))
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.account.find_by_content",
+		SQLText: selectAccountFindByContentText,
+		Args: pgx.NamedArgs{
+			"filters": string(filtersJSON),
+			"since":   ts,
+			"limit":   lmt},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var attrsJSON string
+		var a oamacct.Account
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID,
+			&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*types.Entity, error) {
+	if since.IsZero() {
+		return nil, errors.New("invalid since time provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("invalid limit provided")
+	}
+	lmt := zeronull.Int4(int32(limit))
+
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
+		Ctx:     ctx,
+		Name:    "asset.account.updated_since",
+		SQLText: selectAccountSinceText,
+		Args: pgx.NamedArgs{
+			"since": since,
+			"limit": lmt,
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var out []*dbt.Entity
+	for result.Rows.Next() {
+		var eid, rid int64
+		var c, u time.Time
+		var attrsJSON string
+		var a oamacct.Account
+
+		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID,
+			&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
+			continue
+		}
+
+		if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			out = append(out, ent)
+		}
+	}
+
+	return out, nil
+}
+
+func (r *PostgresRepository) buildAccountEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *oamacct.Account) (*types.Entity, error) {
+	if rid == 0 {
 		return nil, errors.New("no account record found")
 	}
 	if a.ID == "" {
@@ -105,18 +232,6 @@ func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID
 		return nil, errors.New("account must have either a username or account number")
 	}
 
-	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
-	if created, err := parseTimestamp(c); err != nil {
-		return nil, err
-	} else {
-		e.CreatedAt = created.In(time.UTC).Local()
-	}
-	if updated, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		e.LastSeen = updated.In(time.UTC).Local()
-	}
-
 	var attrs accountAttributes
 	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
 		return nil, err
@@ -124,5 +239,10 @@ func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID
 	a.Balance = attrs.Balance
 	a.Active = attrs.Active
 
-	return e, nil
+	return &types.Entity{
+		ID:        strconv.FormatInt(eid, 10),
+		CreatedAt: createdAt.In(time.UTC).Local(),
+		LastSeen:  updatedAt.In(time.UTC).Local(),
+		Asset:     a,
+	}, nil
 }
