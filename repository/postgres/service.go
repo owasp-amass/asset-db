@@ -110,6 +110,9 @@ func (r *PostgresRepository) fetchServiceByRowID(ctx context.Context, eid, rowID
 }
 
 func (r *PostgresRepository) findServicesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -180,7 +183,7 @@ func (r *PostgresRepository) getServicesUpdatedSince(ctx context.Context, since 
 		Name:    "asset.service.updated_since",
 		SQLText: selectServiceSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

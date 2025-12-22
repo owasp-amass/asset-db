@@ -100,6 +100,9 @@ func (r *PostgresRepository) fetchContactRecordByRowID(ctx context.Context, eid,
 }
 
 func (r *PostgresRepository) findContactRecordsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -172,7 +175,7 @@ func (r *PostgresRepository) getContactRecordsUpdatedSince(ctx context.Context, 
 		Name:    "asset.contact.updated_since",
 		SQLText: selectContactRecordSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

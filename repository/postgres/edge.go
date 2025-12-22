@@ -25,7 +25,7 @@ import (
 
 // Params: @etype_name, @label, @from_entity_id, @to_entity_id, @content(JSON)
 // Returns: edge_id
-const ensureEdgeText = `SELECT public.edge_upsert(@etype_name::text, @label::text, @from_entity_id::bigint, @to_entity_id::bigint, @content::jsonb);`
+const edgeUpsertText = `SELECT public.edge_upsert(@etype::text, @label::text, @from::bigint, @to::bigint, @content::jsonb);`
 
 // Params: edge_id
 const selectEdgeByIDText = `
@@ -90,13 +90,13 @@ func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*d
 	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "edge.upsert",
-		SQLText: ensureEdgeText,
+		SQLText: edgeUpsertText,
 		Args: pgx.NamedArgs{
-			"etype_name":     string(rtype),
-			"label":          label,
-			"from_entity_id": fromID,
-			"to_entity_id":   toID,
-			"content":        string(content),
+			"etype":   string(rtype),
+			"label":   label,
+			"from":    fromID,
+			"to":      toID,
+			"content": string(content),
 		},
 		Result: ch,
 	})
@@ -246,17 +246,17 @@ func (r *PostgresRepository) DeleteEdge(ctx context.Context, id string) error {
 // since limits by updated_at >= since (zero time => no limit).
 // limit <= 0 => no explicit LIMIT.
 func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, dir string, since time.Time, labels ...string) ([]*dbt.Edge, error) {
+	if dir != "in" && dir != "out" && dir != "both" {
+		return nil, fmt.Errorf("invalid direction: %s", dir)
+	}
+
 	if !since.IsZero() {
 		since = since.UTC()
 	}
 	ts := zeronull.Timestamp(since)
 
-	if values, vargs := inClause(labels); values != "" && len(vargs) > 0 {
-		name += fmt.Sprintf(".labels%d", len(vargs))
-		where = append(where, "e.label IN "+values)
-		for k, v := range vargs {
-			args[k] = v
-		}
+	if len(labels) == 0 {
+		labels = nil
 	}
 
 	ch := make(chan *rowsResult, 1)
@@ -305,11 +305,9 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 			ToEntity:   &dbt.Entity{ID: strconv.FormatInt(toid, 10)},
 		}
 
-		if edge.CreatedAt.IsZero() || edge.LastSeen.IsZero() {
-			continue
+		if !edge.CreatedAt.IsZero() && !edge.LastSeen.IsZero() {
+			out = append(out, edge)
 		}
-
-		out = append(out, edge)
 	}
 
 	if len(out) == 0 {

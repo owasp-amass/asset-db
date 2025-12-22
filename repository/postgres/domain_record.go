@@ -130,6 +130,9 @@ func (r *PostgresRepository) fetchDomainRecordByRowID(ctx context.Context, eid, 
 }
 
 func (r *PostgresRepository) findDomainRecordsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -201,7 +204,7 @@ func (r *PostgresRepository) getDomainRecordsUpdatedSince(ctx context.Context, s
 		Name:    "asset.domainrecord.updated_since",
 		SQLText: selectDomainRecordSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

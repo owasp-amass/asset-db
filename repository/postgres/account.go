@@ -112,6 +112,9 @@ func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID
 }
 
 func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -183,7 +186,7 @@ func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since 
 		Name:    "asset.account.updated_since",
 		SQLText: selectAccountSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

@@ -114,6 +114,9 @@ func (r *PostgresRepository) fetchOrganizationByRowID(ctx context.Context, eid, 
 }
 
 func (r *PostgresRepository) findOrganizationsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -185,7 +188,7 @@ func (r *PostgresRepository) getOrganizationsUpdatedSince(ctx context.Context, s
 		Name:    "asset.organization.updated_since",
 		SQLText: selectOrganizationSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

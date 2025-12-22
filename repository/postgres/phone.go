@@ -111,6 +111,9 @@ func (r *PostgresRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID i
 }
 
 func (r *PostgresRepository) findPhonesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -181,7 +184,7 @@ func (r *PostgresRepository) getPhonesUpdatedSince(ctx context.Context, since ti
 		Name:    "asset.phone.updated_since",
 		SQLText: selectPhoneSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

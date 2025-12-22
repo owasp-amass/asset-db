@@ -111,6 +111,9 @@ func (r *PostgresRepository) fetchIdentifierByRowID(ctx context.Context, eid, ro
 }
 
 func (r *PostgresRepository) findIdentifiersByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -181,7 +184,7 @@ func (r *PostgresRepository) getIdentifiersUpdatedSince(ctx context.Context, sin
 		Name:    "asset.identifier.updated_since",
 		SQLText: selectIdentifierSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

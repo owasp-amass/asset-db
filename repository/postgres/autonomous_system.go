@@ -100,6 +100,9 @@ func (r *PostgresRepository) fetchAutonomousSystemByRowID(ctx context.Context, e
 }
 
 func (r *PostgresRepository) findAutonomousSystemsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -172,7 +175,7 @@ func (r *PostgresRepository) getAutonomousSystemsUpdatedSince(ctx context.Contex
 		Name:    "asset.autonomous_system.updated_since",
 		SQLText: selectAutonomousSystemSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

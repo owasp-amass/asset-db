@@ -167,6 +167,9 @@ func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, r
 }
 
 func (r *PostgresRepository) findIPNetRecordsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -255,7 +258,7 @@ func (r *PostgresRepository) getIPNetRecordsUpdatedSince(ctx context.Context, si
 		Name:    "asset.ipnet_record.updated_since",
 		SQLText: selectIPNetRecordSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

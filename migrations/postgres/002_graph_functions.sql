@@ -189,7 +189,7 @@ $fn$;
 
 -- Edges updated since a given timestamp (simple utility)
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.edge_updated_since(
+CREATE OR REPLACE FUNCTION public.edges_updated_since(
     _since timestamp without time zone
 ) RETURNS SETOF public.edge
 LANGUAGE sql
@@ -434,6 +434,29 @@ END
 $fn$;
 -- +migrate StatementEnd
 
+-- Get entity tag mapping by mapping ID
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.get_entity_tag_map_by_id(_map_id bigint)
+RETURNS TABLE (
+    tag_id     bigint,
+    entity_id  bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    ttype_name text,
+    content    jsonb
+)
+LANGUAGE sql
+STABLE
+AS $fn$
+    SELECT tg.tag_id, m.entity_id, m.created_at, m.updated_at, tt.name, tg.content
+    FROM public.entity_tag_map m
+    JOIN public.tag tg ON tg.tag_id = m.tag_id
+    JOIN public.tag_type_lu tt ON tt.id = tg.ttype_id
+    WHERE m.map_id = _map_id
+    LIMIT 1;
+$fn$;
+-- +migrate StatementEnd
+
 -- Simple helper: get tag_ids mapped to an entity
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.entity_get_tags(_entity_id bigint)
@@ -447,6 +470,84 @@ AS $fn$
         ON t.tag_id = m.tag_id
     WHERE m.entity_id = _entity_id
     ORDER BY t.tag_id;
+$fn$;
+-- +migrate StatementEnd
+
+-- Get tag IDs mapped to an entity with various filters
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.entity_get_tags(
+    _entity_id bigint,
+    _since     timestamp without time zone DEFAULT NULL,
+    _names     text[] DEFAULT NULL
+) RETURNS SETOF TABLE (
+    tag_id     bigint,
+    map_id     bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    ttype_name text,
+    content    jsonb
+)
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_count  integer := 0;
+    v_params text[]  := array[]::text[];
+    v_sql    text;
+BEGIN
+    v_sql := $Q$
+    SELECT 
+        tg.tag_id,
+        m.map_id, 
+        m.created_at, 
+        m.updated_at, 
+        tt.name, 
+        tg.content
+    FROM public.entity_tag_map m
+    JOIN public.tag tg ON tg.tag_id = m.tag_id
+    JOIN public.tag_type_lu tt ON tt.id = tg.ttype_id
+    WHERE m.entity_id = _entity_id WHERE TRUE$Q$;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'm.updated_at', v_count);
+    END IF;
+
+    IF _names IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _names);
+        v_sql    := v_sql || format(' AND tg.property_name = ANY($%s)', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY m.updated_at DESC, m.map_id DESC';
+
+    -- 4) Execute dynamic SQL and return results
+    CASE v_count
+        WHEN 0 THEN RETURN QUERY EXECUTE v_sql;
+        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
+        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
+    END CASE;
+
+    RETURN;
+END
+$fn$;
+-- +migrate StatementEnd
+
+-- Get the tag ID for the provided entity map ID
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.entity_tag_map_get_tag_id(_map_id bigint)
+RETURNS bigint
+LANGUAGE sql
+STABLE
+AS $fn$
+    SELECT tg.tag_id
+    FROM public.entity_tag_map m
+    JOIN public.tag tg ON tg.tag_id = m.tag_id
+    WHERE m.map_id = _map_id
+    ORDER BY m.updated_at DESC, m.map_id DESC
+    LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
@@ -507,19 +608,104 @@ END
 $fn$;
 -- +migrate StatementEnd
 
--- Simple helper: get tags mapped to an edge
+-- Get edge tag mapping by mapping ID
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.edge_get_tags(_edge_id bigint)
-RETURNS SETOF public.tag
+CREATE OR REPLACE FUNCTION public.get_edge_tag_map_by_id(_map_id bigint)
+RETURNS TABLE (
+    tag_id     bigint,
+    edge_id    bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    ttype_name text,
+    content    jsonb
+)
 LANGUAGE sql
 STABLE
 AS $fn$
-    SELECT t.*
+    SELECT tg.tag_id, m.edge_id, m.created_at, m.updated_at, tt.name, tg.content
     FROM public.edge_tag_map m
-    JOIN public.tag t
-        ON t.tag_id = m.tag_id
-    WHERE m.edge_id = _edge_id
-    ORDER BY t.tag_id;
+    JOIN public.tag tg ON tg.tag_id = m.tag_id
+    JOIN public.tag_type_lu tt ON tt.id = tg.ttype_id
+    WHERE m.map_id = _map_id
+    LIMIT 1;
+$fn$;
+-- +migrate StatementEnd
+
+-- Get tag IDs mapped to an edge with various filters
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.edge_get_tags(
+    _edge_id bigint,
+    _since   timestamp without time zone DEFAULT NULL,
+    _names   text[] DEFAULT NULL
+) RETURNS SETOF TABLE (
+    tag_id     bigint,
+    map_id     bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    ttype_name text,
+    content    jsonb
+)
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_count  integer := 0;
+    v_params text[]  := array[]::text[];
+    v_sql    text;
+BEGIN
+    v_sql := $Q$
+    SELECT 
+        tg.tag_id,
+        m.map_id, 
+        m.created_at, 
+        m.updated_at, 
+        tt.name, 
+        tg.content
+    FROM public.edge_tag_map m
+    JOIN public.tag tg ON tg.tag_id = m.tag_id
+    JOIN public.tag_type_lu tt ON tt.id = tg.ttype_id
+    WHERE m.edge_id = _edge_id WHERE TRUE$Q$;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'm.updated_at', v_count);
+    END IF;
+
+    IF _names IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _names);
+        v_sql    := v_sql || format(' AND tg.property_name = ANY($%s)', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY m.updated_at DESC, m.map_id DESC';
+
+    -- 4) Execute dynamic SQL and return results
+    CASE v_count
+        WHEN 0 THEN RETURN QUERY EXECUTE v_sql;
+        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
+        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
+    END CASE;
+
+    RETURN;
+END
+$fn$;
+-- +migrate StatementEnd
+
+-- Get the tag ID for the provided edge map ID
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.edge_tag_map_get_tag_id(_map_id bigint)
+RETURNS bigint
+LANGUAGE sql
+STABLE
+AS $fn$
+    SELECT tg.tag_id
+    FROM public.edge_tag_map m
+    JOIN public.tag tg ON tg.tag_id = m.tag_id
+    WHERE m.map_id = _map_id
+    ORDER BY m.updated_at DESC, m.map_id DESC
+    LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
@@ -527,17 +713,22 @@ COMMIT;
 
 -- +migrate Down
 
+DROP FUNCTION IF EXISTS public.edge_tag_map_get_tag_id(bigint);
 DROP FUNCTION IF EXISTS public.edge_get_tags(bigint);
+DROP FUNCTION IF EXISTS public.get_edge_tag_map_by_id(bigint);
 DROP FUNCTION IF EXISTS public.edge_tag_map_upsert(bigint, text, text, text, jsonb);
 
+DROP FUNCTION IF EXISTS public.entity_tag_map_get_tag_id(bigint);
 DROP FUNCTION IF EXISTS public.entity_get_tags(bigint);
+DROP FUNCTION IF EXISTS public.get_entity_tag_map_by_id(bigint);
 DROP FUNCTION IF EXISTS public.entity_tag_map_upsert(bigint, text, text, text, jsonb);
 
 DROP FUNCTION IF EXISTS public.tag_updated_since(timestamp without time zone);
 DROP FUNCTION IF EXISTS public.tag_get_id(text, text, text);
 DROP FUNCTION IF EXISTS public.tag_upsert(text, text, text, jsonb);
 
-DROP FUNCTION IF EXISTS public.edge_updated_since(timestamp without time zone);
+DROP FUNCTION IF EXISTS public.edges_for_entity(bigint, text, timestamp without time zone, text[]);
+DROP FUNCTION IF EXISTS public.edges_updated_since(timestamp without time zone);
 DROP FUNCTION IF EXISTS public.edge_get_id(text, text, bigint, bigint);
 DROP FUNCTION IF EXISTS public.edge_upsert(text, text, bigint, bigint, jsonb);
 

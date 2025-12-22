@@ -118,6 +118,9 @@ func (r *PostgresRepository) fetchFundsTransferByRowID(ctx context.Context, eid,
 }
 
 func (r *PostgresRepository) findFundsTransfersByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -189,7 +192,7 @@ func (r *PostgresRepository) getFundsTransfersUpdatedSince(ctx context.Context, 
 		Name:    "asset.funds_transfer.updated_since",
 		SQLText: selectFundsTransferSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

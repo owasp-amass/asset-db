@@ -111,6 +111,9 @@ func (r *PostgresRepository) fetchURLByRowID(ctx context.Context, eid, rowID int
 }
 
 func (r *PostgresRepository) findURLsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -181,7 +184,7 @@ func (r *PostgresRepository) getURLsUpdatedSince(ctx context.Context, since time
 		Name:    "asset.url.updated_since",
 		SQLText: selectURLSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

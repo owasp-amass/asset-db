@@ -100,6 +100,9 @@ func (r *PostgresRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID in
 }
 
 func (r *PostgresRepository) findFQDNsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -170,7 +173,7 @@ func (r *PostgresRepository) getFQDNsUpdatedSince(ctx context.Context, since tim
 		Name:    "asset.fqdn.updated_since",
 		SQLText: selectFQDNSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

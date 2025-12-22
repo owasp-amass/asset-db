@@ -6,30 +6,28 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-// Params: :entity_id, :tag_id
-const tagEntityText = `
-INSERT INTO entity_tag_map(entity_id, tag_id)
-VALUES (:entity_id, :tag_id)
-ON CONFLICT(entity_id, tag_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
+// Params: @entity_id, @ttype, @name, @value, @content(JSON)
+const tagEntityText = `SELECT public.entity_tag_map_upsert(@entity_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb);`
 
-// Params: :entity_id, :tag_id
-const selectEntityTagMapIDText = `
-SELECT map_id FROM entity_tag_map
-WHERE entity_id = :entity_id AND tag_id = :tag_id 
-LIMIT 1`
+// Param: @map_id
+const selectEntityTagMapByIDText = `SELECT public.get_entity_tag_map_by_id(@map_id::bigint);`
+
+// Params: @entity_id, @since, @names
+const entityGetTagsText = `SELECT public.entity_get_tags(@entity_id::bigint, @since::timestamp, @names::text[]);`
+
+// Param: @map_id
+const selectTagIDByEntityTagMapIDText = `SELECT public.entity_tag_map_get_tag_id(@map_id::bigint);`
 
 func (r *PostgresRepository) CreateEntityTag(ctx context.Context, entity *dbt.Entity, tag *dbt.EntityTag) (*dbt.EntityTag, error) {
 	return r.CreateEntityProperty(ctx, entity, tag.Property)
@@ -41,18 +39,33 @@ func (r *PostgresRepository) CreateEntityProperty(ctx context.Context, entity *d
 		return nil, err
 	}
 
-	tid, err := r.upsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), string(content))
-	if err != nil {
-		return nil, err
-	}
-
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	mid, err := r.tagEntity(ctx, eid, tid)
-	if err != nil {
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
+		Ctx:     ctx,
+		Name:    "entity.tag.upsert",
+		SQLText: tagEntityText,
+		Args: pgx.NamedArgs{
+			"entity_id": eid,
+			"ttype":     string(property.PropertyType()),
+			"name":      property.Name(),
+			"value":     property.Value(),
+			"content":   string(content),
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var tid, mid int64
+	if err := result.Row.Scan(&tid, &mid); err != nil {
 		return nil, err
 	}
 
@@ -66,20 +79,12 @@ func (r *PostgresRepository) FindEntityTagById(ctx context.Context, id string) (
 		return nil, err
 	}
 
-	const q = `
-SELECT m.map_id, m.entity_id, m.created_at, m.updated_at, tt.name, tg.content
-FROM entity_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-JOIN tag_type_lu tt ON tt.id = tg.ttype_id
-WHERE m.map_id = :map_id
-LIMIT 1`
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "entity.tag.by_id",
-		SQLText: q,
-		Args:    []any{sql.Named("map_id", mid)},
+		SQLText: selectEntityTagMapByIDText,
+		Args:    pgx.NamedArgs{"map_id": mid},
 		Result:  ch,
 	})
 
@@ -88,15 +93,18 @@ LIMIT 1`
 		return nil, result.Err
 	}
 
-	var eid, row_id int64
-	var ttype, content, c, u string
-	if err := result.Row.Scan(&row_id, &eid, &c, &u, &ttype, &content); err != nil {
+	var eid, tid int64
+	var c, u time.Time
+	var ttype, content string
+	if err := result.Row.Scan(&tid, &eid, &c, &u, &ttype, &content); err != nil {
 		return nil, err
 	}
 
 	tag := &dbt.EntityTag{
-		ID:     strconv.FormatInt(row_id, 10),
-		Entity: &dbt.Entity{ID: strconv.FormatInt(eid, 10)},
+		ID:        id,
+		CreatedAt: c.In(time.UTC).Local(),
+		LastSeen:  u.In(time.UTC).Local(),
+		Entity:    &dbt.Entity{ID: strconv.FormatInt(eid, 10)},
 	}
 
 	prop, err := extractOAMProperty(ttype, json.RawMessage(content))
@@ -104,17 +112,6 @@ LIMIT 1`
 		return nil, err
 	}
 	tag.Property = prop
-
-	if c, err := parseTimestamp(c); err != nil {
-		return nil, err
-	} else {
-		tag.CreatedAt = c.In(time.UTC).Local()
-	}
-	if u, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		tag.LastSeen = u.In(time.UTC).Local()
-	}
 
 	return tag, nil
 }
@@ -142,120 +139,60 @@ func (r *PostgresRepository) DeleteEntityTag(ctx context.Context, id string) err
 	return r.deleteTagByID(ctx, tid, true)
 }
 
-func (r *PostgresRepository) tagEntity(ctx context.Context, entityID, tagID int64) (int64, error) {
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
-		Ctx:     ctx,
-		Name:    "entity.tag.upsert_entity_tag_mapping",
-		SQLText: tagEntityText,
-		Args: []any{
-			sql.Named("entity_id", entityID),
-			sql.Named("tag_id", tagID),
-		},
-		Result: done,
-	})
-	err := <-done
-	if err != nil {
-		return 0, err
+// tagsForEntity lists all tag assignments for an entity (namespaced).
+func (r *PostgresRepository) tagsForEntity(ctx context.Context, eid int64, since time.Time, names ...string) ([]*dbt.EntityTag, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
+	ts := zeronull.Timestamp(since)
+
+	if len(names) == 0 {
+		names = nil
 	}
 
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
 		Ctx:     ctx,
-		Name:    "entity.tag.entity_tag_mapping_id_by_ids",
-		SQLText: selectEntityTagMapIDText,
-		Args: []any{
-			sql.Named("entity_id", entityID),
-			sql.Named("tag_id", tagID),
+		Name:    "entity.tags_for_entity",
+		SQLText: entityGetTagsText,
+		Args: pgx.NamedArgs{
+			"entity_id": eid,
+			"since":     ts,
+			"names":     names,
 		},
 		Result: ch,
 	})
 
 	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
 	}
-
-	var id int64
-	err = result.Row.Scan(&id)
-	return id, err
-}
-
-// tagsForEntity lists all tag assignments for an entity (namespaced).
-func (r *PostgresRepository) tagsForEntity(ctx context.Context, eid int64, since time.Time, names ...string) ([]*dbt.EntityTag, error) {
-	key := "entity.tags_for_entity"
-	args := []any{sql.Named("entity_id", eid)}
-	q := `
-SELECT m.map_id, m.created_at, m.updated_at, tt.name, tg.content
-FROM entity_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-JOIN tag_type_lu tt ON tt.id = tg.ttype_id
-WHERE m.entity_id = :entity_id`
-
-	if !since.IsZero() {
-		key += ".since"
-		q += " AND m.updated_at >= :since"
-		args = append(args, sql.Named("since", since.UTC()))
-	}
-
-	if len(names) > 0 {
-		key += "." + strings.Join(names, ".")
-		list := `('` + strings.Join(names, `', '`) + `')`
-		q += " AND tg.property_name IN " + list
-	}
-	if values, vargs := inClause(names); values != "" && len(vargs) > 0 {
-		key += fmt.Sprintf(".names%d", len(vargs))
-		q += " AND tg.property_name IN " + values
-		args = append(args, vargs...)
-	}
-
-	q += " ORDER BY m.updated_at DESC"
-
-	ch := make(chan *rowsReadResult, 1)
-	r.rpool.Submit(&rowsReadJob{
-		Ctx:     ctx,
-		Name:    key,
-		SQLText: q,
-		Args:    args,
-		Result:  ch,
-	})
-
-	result := <-ch
 	if result.Err != nil {
 		return nil, result.Err
 	}
-	defer func() { _ = result.Rows.Close() }()
 
 	var out []*dbt.EntityTag
 	for result.Rows.Next() {
-		var row_id int64
-		var ttype, content, c, u string
+		var tid, mid int64
+		var c, u time.Time
+		var ttype, content string
 
-		if err := result.Rows.Scan(&row_id, &c, &u, &ttype, &content); err != nil {
-			return nil, err
+		if err := result.Rows.Scan(&tid, &mid, &c, &u, &ttype, &content); err != nil {
+			continue
 		}
 
 		tag := &dbt.EntityTag{
-			ID:     strconv.FormatInt(row_id, 10),
-			Entity: &dbt.Entity{ID: strconv.FormatInt(eid, 10)},
+			ID:        strconv.FormatInt(mid, 10),
+			CreatedAt: c.In(time.UTC).Local(),
+			LastSeen:  u.In(time.UTC).Local(),
+			Entity:    &dbt.Entity{ID: strconv.FormatInt(eid, 10)},
 		}
 
 		prop, err := extractOAMProperty(ttype, json.RawMessage(content))
 		if err != nil {
-			return nil, err
+			continue
 		}
 		tag.Property = prop
-
-		if c, err := parseTimestamp(c); err != nil {
-			return nil, err
-		} else {
-			tag.CreatedAt = c.In(time.UTC).Local()
-		}
-		if u, err := parseTimestamp(u); err != nil {
-			return nil, err
-		} else {
-			tag.LastSeen = u.In(time.UTC).Local()
-		}
 
 		out = append(out, tag)
 	}
@@ -274,11 +211,11 @@ func (r *PostgresRepository) removeEntityTag(ctx context.Context, mid int64) (in
 	}
 
 	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	r.wpool.Submit(&execJob{
 		Ctx:     ctx,
 		Name:    "entity.tag.remove_entity_tag",
-		SQLText: `DELETE FROM entity_tag_map WHERE map_id = :map_id`,
-		Args:    []any{sql.Named("map_id", mid)},
+		SQLText: `DELETE FROM public.entity_tag_map WHERE map_id = @map_id`,
+		Args:    pgx.NamedArgs{"map_id": mid},
 		Result:  done,
 	})
 
@@ -286,20 +223,16 @@ func (r *PostgresRepository) removeEntityTag(ctx context.Context, mid int64) (in
 }
 
 func (r *PostgresRepository) entityMIDToTID(ctx context.Context, mid int64) (int64, error) {
-	const q = `
-SELECT tg.tag_id
-FROM entity_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-WHERE m.map_id = :map_id
-ORDER BY m.updated_at DESC 
-LIMIT 1;`
+	if mid == 0 {
+		return 0, errors.New("invalid entity tag map ID")
+	}
 
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "entity.tag.mid_to_tid",
-		SQLText: q,
-		Args:    []any{sql.Named("map_id", mid)},
+		SQLText: selectTagIDByEntityTagMapIDText,
+		Args:    pgx.NamedArgs{"map_id": mid},
 		Result:  ch,
 	})
 

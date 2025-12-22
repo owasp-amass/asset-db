@@ -100,6 +100,9 @@ func (r *PostgresRepository) fetchFileByRowID(ctx context.Context, eid, rowID in
 }
 
 func (r *PostgresRepository) findFilesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -170,7 +173,7 @@ func (r *PostgresRepository) getFilesUpdatedSince(ctx context.Context, since tim
 		Name:    "asset.file.updated_since",
 		SQLText: selectFileSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

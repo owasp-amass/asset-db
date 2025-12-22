@@ -133,6 +133,9 @@ func (r *PostgresRepository) fetchTLSCertificateByRowID(ctx context.Context, eid
 }
 
 func (r *PostgresRepository) findTLSCertificatesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -203,7 +206,7 @@ func (r *PostgresRepository) getTLSCertificatesUpdatedSince(ctx context.Context,
 		Name:    "asset.tls_certificate.updated_since",
 		SQLText: selectTLSCertificateSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

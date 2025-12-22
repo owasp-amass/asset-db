@@ -105,6 +105,9 @@ func (r *PostgresRepository) fetchProductReleaseByRowID(ctx context.Context, eid
 }
 
 func (r *PostgresRepository) findProductReleasesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -175,7 +178,7 @@ func (r *PostgresRepository) getProductReleasesUpdatedSince(ctx context.Context,
 		Name:    "asset.product_release.updated_since",
 		SQLText: selectProductReleaseSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

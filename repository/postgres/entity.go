@@ -269,14 +269,6 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 	return nil, fmt.Errorf("type search not implemented for asset type %q", atype)
 }
 
-// --- tiny helper used above ---
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // ============================== Asset hydration ==============================
 
 func normalizeType(name string) string { return strings.ToLower(strings.TrimSpace(name)) }

@@ -6,29 +6,28 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-// Params: :edge_id, :tag_id
-const tagEdgeText = `
-INSERT INTO edge_tag_map(edge_id, tag_id)
-VALUES (:edge_id, :tag_id)
-ON CONFLICT(edge_id, tag_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
+// Params: @edge_id, @ttype, @name, @value, @content(JSON)
+const tagEdgeText = `SELECT public.edge_tag_map_upsert(@edge_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb);`
 
-// Params: :edge_id, :tag_id
-const selectEdgeTagMapIDText = `
-SELECT map_id FROM edge_tag_map
-WHERE edge_id = :edge_id AND tag_id = :tag_id 
-LIMIT 1`
+// Param: @map_id
+const selectEdgeTagMapByIDText = `SELECT public.get_edge_tag_map_by_id(@map_id::bigint);`
+
+// Params: @edge_id, @since, @names
+const edgeGetTagsText = `SELECT public.edge_get_tags(@edge_id::bigint, @since::timestamp, @names::text[]);`
+
+// Param: @map_id
+const selectTagIDByEdgeTagMapIDText = `SELECT public.edge_tag_map_get_tag_id(@map_id::bigint);`
 
 func (r *PostgresRepository) CreateEdgeTag(ctx context.Context, edge *dbt.Edge, tag *dbt.EdgeTag) (*dbt.EdgeTag, error) {
 	return r.CreateEdgeProperty(ctx, edge, tag.Property)
@@ -40,18 +39,33 @@ func (r *PostgresRepository) CreateEdgeProperty(ctx context.Context, edge *dbt.E
 		return nil, err
 	}
 
-	tid, err := r.upsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), string(content))
-	if err != nil {
-		return nil, err
-	}
-
 	eid, err := strconv.ParseInt(edge.ID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	mid, err := r.tagEdge(ctx, eid, tid)
-	if err != nil {
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
+		Ctx:     ctx,
+		Name:    "edge.tag.upsert",
+		SQLText: tagEdgeText,
+		Args: pgx.NamedArgs{
+			"edge_id": eid,
+			"ttype":   string(property.PropertyType()),
+			"name":    property.Name(),
+			"value":   property.Value(),
+			"content": string(content),
+		},
+		Result: ch,
+	})
+
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	var tid, mid int64
+	if err := result.Row.Scan(&tid, &mid); err != nil {
 		return nil, err
 	}
 
@@ -66,20 +80,12 @@ func (r *PostgresRepository) FindEdgeTagById(ctx context.Context, id string) (*d
 		return nil, err
 	}
 
-	const q = `
-SELECT m.map_id, m.edge_id, m.created_at, m.updated_at, tt.name, tg.content
-FROM edge_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-JOIN tag_type_lu tt ON tt.id = tg.ttype_id
-WHERE m.map_id = :map_id
-LIMIT 1`
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "edge.tag.by_id",
-		SQLText: q,
-		Args:    []any{sql.Named("map_id", mid)},
+		SQLText: selectEdgeTagMapByIDText,
+		Args:    pgx.NamedArgs{"map_id": mid},
 		Result:  ch,
 	})
 
@@ -88,15 +94,18 @@ LIMIT 1`
 		return nil, result.Err
 	}
 
-	var eid, row_id int64
-	var ttype, content, c, u string
-	if err := result.Row.Scan(&row_id, &eid, &c, &u, &ttype, &content); err != nil {
+	var eid, tid int64
+	var c, u time.Time
+	var ttype, content string
+	if err := result.Row.Scan(&tid, &eid, &c, &u, &ttype, &content); err != nil {
 		return nil, err
 	}
 
 	tag := &dbt.EdgeTag{
-		ID:   strconv.FormatInt(row_id, 10),
-		Edge: &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
+		ID:        id,
+		CreatedAt: c.In(time.UTC).Local(),
+		LastSeen:  u.In(time.UTC).Local(),
+		Edge:      &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
 	}
 
 	prop, err := extractOAMProperty(ttype, json.RawMessage(content))
@@ -104,17 +113,6 @@ LIMIT 1`
 		return nil, err
 	}
 	tag.Property = prop
-
-	if c, err := parseTimestamp(c); err != nil {
-		return nil, err
-	} else {
-		tag.CreatedAt = c.In(time.UTC).Local()
-	}
-	if u, err := parseTimestamp(u); err != nil {
-		return nil, err
-	} else {
-		tag.LastSeen = u.In(time.UTC).Local()
-	}
 
 	return tag, nil
 }
@@ -142,120 +140,66 @@ func (r *PostgresRepository) DeleteEdgeTag(ctx context.Context, id string) error
 	return r.deleteTagByID(ctx, tid, true)
 }
 
-func (r *PostgresRepository) tagEdge(ctx context.Context, edgeID, tagID int64) (int64, error) {
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
-		Ctx:     ctx,
-		Name:    "edge.tag.upsert_edge_tag_mapping",
-		SQLText: tagEdgeText,
-		Args: []any{
-			sql.Named("edge_id", edgeID),
-			sql.Named("tag_id", tagID),
-		},
-		Result: done,
-	})
-	err := <-done
-	if err != nil {
-		return 0, err
+// tagsForEdge lists all tags assigned to an edge.
+func (r *PostgresRepository) tagsForEdge(ctx context.Context, eid int64, since time.Time, names ...string) ([]*dbt.EdgeTag, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
+	ts := zeronull.Timestamp(since)
+
+	if len(names) == 0 {
+		names = nil
 	}
 
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
 		Ctx:     ctx,
-		Name:    "edge.tag.edge_tag_mapping_id_by_ids",
-		SQLText: selectEdgeTagMapIDText,
-		Args: []any{
-			sql.Named("edge_id", edgeID),
-			sql.Named("tag_id", tagID),
+		Name:    "edge.tags_for_edge",
+		SQLText: edgeGetTagsText,
+		Args: pgx.NamedArgs{
+			"edge_id": eid,
+			"since":   ts,
+			"names":   names,
 		},
 		Result: ch,
 	})
 
 	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
 	}
-
-	var id int64
-	err = result.Row.Scan(&id)
-	return id, err
-}
-
-// tagsForEdge lists all tags assigned to an edge.
-func (r *PostgresRepository) tagsForEdge(ctx context.Context, eid int64, since time.Time, names ...string) ([]*dbt.EdgeTag, error) {
-	key := "edge.tag.tags_for_edge"
-	args := []any{sql.Named("edge_id", eid)}
-	q := `
-SELECT m.map_id, m.created_at, m.updated_at, tt.name, tg.content
-FROM edge_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-JOIN tag_type_lu tt ON tt.id = tg.ttype_id
-WHERE m.edge_id = :edge_id`
-
-	if !since.IsZero() {
-		key += ".since"
-		q += " AND m.updated_at >= :since"
-		args = append(args, sql.Named("since", since.UTC()))
-	}
-	if values, vargs := inClause(names); values != "" && len(vargs) > 0 {
-		key += fmt.Sprintf(".names%d", len(vargs))
-		q += " AND tg.property_name IN " + values
-		args = append(args, vargs...)
-	}
-
-	q += " ORDER BY m.updated_at DESC"
-
-	ch := make(chan *rowsReadResult, 1)
-	r.rpool.Submit(&rowsReadJob{
-		Ctx:     ctx,
-		Name:    key,
-		SQLText: q,
-		Args:    args,
-		Result:  ch,
-	})
-
-	result := <-ch
 	if result.Err != nil {
 		return nil, result.Err
 	}
-	defer func() { _ = result.Rows.Close() }()
 
 	var out []*dbt.EdgeTag
 	for result.Rows.Next() {
-		var row_id int64
-		var ttype, content, c, u string
+		var tid, mid int64
+		var c, u time.Time
+		var ttype, content string
 
-		if err := result.Rows.Scan(&row_id, &c, &u, &ttype, &content); err != nil {
-			return nil, err
+		if err := result.Rows.Scan(&tid, &mid, &c, &u, &ttype, &content); err != nil {
+			continue
 		}
 
 		tag := &dbt.EdgeTag{
-			ID:   strconv.FormatInt(row_id, 10),
-			Edge: &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
+			ID:        strconv.FormatInt(mid, 10),
+			CreatedAt: c.In(time.UTC).Local(),
+			LastSeen:  u.In(time.UTC).Local(),
+			Edge:      &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
 		}
 
 		prop, err := extractOAMProperty(ttype, json.RawMessage(content))
 		if err != nil {
-			return nil, err
+			continue
 		}
 		tag.Property = prop
-
-		if c, err := parseTimestamp(c); err != nil {
-			return nil, err
-		} else {
-			tag.CreatedAt = c.In(time.UTC).Local()
-		}
-		if u, err := parseTimestamp(u); err != nil {
-			return nil, err
-		} else {
-			tag.LastSeen = u.In(time.UTC).Local()
-		}
 
 		out = append(out, tag)
 	}
 
 	if len(out) == 0 {
-		return nil, errors.New("no tags found for edge")
+		return nil, errors.New("no tags found for entity")
 	}
 	return out, nil
 }
@@ -268,11 +212,11 @@ func (r *PostgresRepository) removeEdgeTag(ctx context.Context, mid int64) (int6
 	}
 
 	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	r.wpool.Submit(&execJob{
 		Ctx:     ctx,
 		Name:    "edge.tag.remove_edge_tag",
-		SQLText: `DELETE FROM edge_tag_map WHERE map_id = :map_id`,
-		Args:    []any{sql.Named("map_id", mid)},
+		SQLText: `DELETE FROM public.edge_tag_map WHERE map_id = @map_id`,
+		Args:    pgx.NamedArgs{"map_id": mid},
 		Result:  done,
 	})
 
@@ -280,20 +224,16 @@ func (r *PostgresRepository) removeEdgeTag(ctx context.Context, mid int64) (int6
 }
 
 func (r *PostgresRepository) edgeMIDToTID(ctx context.Context, mid int64) (int64, error) {
-	const q = `
-SELECT tg.tag_id
-FROM edge_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-WHERE m.map_id = :map_id
-ORDER BY m.updated_at DESC
-LIMIT 1`
+	if mid == 0 {
+		return 0, errors.New("invalid edge tag map ID")
+	}
 
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "edge.tag.mid_to_tid",
-		SQLText: q,
-		Args:    []any{sql.Named("map_id", mid)},
+		SQLText: selectTagIDByEdgeTagMapIDText,
+		Args:    pgx.NamedArgs{"map_id": mid},
 		Result:  ch,
 	})
 

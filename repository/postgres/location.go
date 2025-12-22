@@ -111,6 +111,9 @@ func (r *PostgresRepository) fetchLocationByRowID(ctx context.Context, eid, rowI
 }
 
 func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -183,7 +186,7 @@ func (r *PostgresRepository) getLocationsUpdatedSince(ctx context.Context, since
 		Name:    "asset.location.updated_since",
 		SQLText: selectLocationSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

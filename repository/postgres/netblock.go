@@ -129,6 +129,9 @@ func (r *PostgresRepository) fetchNetblockByRowID(ctx context.Context, eid, rowI
 }
 
 func (r *PostgresRepository) findNetblocksByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -205,7 +208,7 @@ func (r *PostgresRepository) getNetblocksUpdatedSince(ctx context.Context, since
 		Name:    "asset.netblock.updated_since",
 		SQLText: selectNetblockSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,

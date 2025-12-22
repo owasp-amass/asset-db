@@ -130,6 +130,9 @@ func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, row
 }
 
 func (r *PostgresRepository) findIPAddressesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+	if !since.IsZero() {
+		since = since.UTC()
+	}
 	ts := zeronull.Timestamp(since)
 
 	if len(filters) == 0 {
@@ -206,7 +209,7 @@ func (r *PostgresRepository) getIPAddressesUpdatedSince(ctx context.Context, sin
 		Name:    "asset.ip_address.updated_since",
 		SQLText: selectIPAddressSinceText,
 		Args: pgx.NamedArgs{
-			"since": since,
+			"since": since.UTC(),
 			"limit": lmt,
 		},
 		Result: ch,
