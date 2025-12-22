@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -21,35 +23,18 @@ import (
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 )
 
-// Params: :etype_name, :label, :from_entity_id, :to_entity_id, :content(JSON)
-const ensureEdgeText = `
-INSERT INTO edge(etype_id, label, from_entity_id, to_entity_id, content)
-VALUES ((SELECT id FROM edge_type_lu WHERE name = lower(:etype_name) LIMIT 1), 
-	lower(:label), :from_entity_id, :to_entity_id, coalesce(:content, '{}'))
-ON CONFLICT(etype_id, from_entity_id, to_entity_id, label) DO UPDATE SET
-    content = CASE
-        WHEN json_patch(edge.content, coalesce(excluded.content, '{}')) IS NOT edge.content
-        THEN json_patch(edge.content, coalesce(excluded.content, '{}'))
-        ELSE edge.content
-    END,
-    updated_at = CURRENT_TIMESTAMP`
-
-// Params: :etype_name, :label, :from_entity_id, :to_entity_id
-const selectEdgeIDBetweenText = `
-SELECT e.edge_id
-FROM edge e
-JOIN edge_type_lu t ON t.id = e.etype_id
-WHERE t.name = lower(:etype_name)
-  AND e.label = lower(:label) 
-  AND e.from_entity_id = :from_entity_id
-  AND e.to_entity_id = :to_entity_id`
+// Params: @etype_name, @label, @from_entity_id, @to_entity_id, @content(JSON)
+// Returns: edge_id
+const ensureEdgeText = `SELECT public.edge_upsert(@etype_name::text, @label::text, @from_entity_id::bigint, @to_entity_id::bigint, @content::jsonb);`
 
 // Params: edge_id
 const selectEdgeByIDText = `
 SELECT e.edge_id, e.created_at, e.updated_at, t.name, e.from_entity_id, e.to_entity_id, e.content
-FROM edge e
-JOIN edge_type_lu t ON t.id = e.etype_id
-WHERE e.edge_id = :edge_id`
+FROM public.edge e
+JOIN public.edge_type_lu t ON t.id = e.etype_id
+WHERE e.edge_id = @edge_id;`
+
+const edgesForEntityText = `SELECT public.edges_for_entity(@entity_id::bigint, @direction::text, @since::timestamp, @labels::text[]);`
 
 func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt.Edge, error) {
 	if edge == nil {
@@ -101,35 +86,17 @@ func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*d
 		return nil, fmt.Errorf("failed to marshal edge relation to JSON: %v", err)
 	}
 
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "edge.upsert",
 		SQLText: ensureEdgeText,
-		Args: []any{
-			sql.Named("etype_name", string(rtype)),
-			sql.Named("label", edge.Relation.Label()),
-			sql.Named("from_entity_id", fromID),
-			sql.Named("to_entity_id", toID),
-			sql.Named("content", string(content)),
-		},
-		Result: done,
-	})
-	err = <-done
-	if err != nil {
-		return nil, err
-	}
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "edge.id_between",
-		SQLText: selectEdgeIDBetweenText,
-		Args: []any{
-			sql.Named("etype_name", string(rtype)),
-			sql.Named("label", edge.Relation.Label()),
-			sql.Named("from_entity_id", fromID),
-			sql.Named("to_entity_id", toID),
+		Args: pgx.NamedArgs{
+			"etype_name":     string(rtype),
+			"label":          label,
+			"from_entity_id": fromID,
+			"to_entity_id":   toID,
+			"content":        string(content),
 		},
 		Result: ch,
 	})
@@ -157,12 +124,12 @@ func (r *PostgresRepository) FindEdgeById(ctx context.Context, id string) (*dbt.
 }
 
 func (r *PostgresRepository) idToEdge(ctx context.Context, id int64) (*dbt.Edge, error) {
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
+	ch := make(chan *rowResult, 1)
+	r.wpool.Submit(&rowJob{
 		Ctx:     ctx,
 		Name:    "edge.by_id",
 		SQLText: selectEdgeByIDText,
-		Args:    []any{sql.Named("edge_id", id)},
+		Args:    pgx.NamedArgs{"edge_id": id},
 		Result:  ch,
 	})
 
@@ -171,7 +138,8 @@ func (r *PostgresRepository) idToEdge(ctx context.Context, id int64) (*dbt.Edge,
 		return nil, result.Err
 	}
 
-	var c, u, etype, raw string
+	var c, u time.Time
+	var etype, raw string
 	var rowid, fromid, toid int64
 	if err := result.Row.Scan(&rowid, &c, &u, &etype, &fromid, &toid, &raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -187,21 +155,13 @@ func (r *PostgresRepository) idToEdge(ctx context.Context, id int64) (*dbt.Edge,
 
 	edge := &dbt.Edge{
 		ID:         strconv.FormatInt(id, 10),
+		CreatedAt:  c.In(time.UTC).Local(),
+		LastSeen:   u.In(time.UTC).Local(),
 		Relation:   rel,
 		FromEntity: &dbt.Entity{ID: strconv.FormatInt(fromid, 10)},
 		ToEntity:   &dbt.Entity{ID: strconv.FormatInt(toid, 10)},
 	}
 
-	if created, err := parseTimestamp(c); err == nil {
-		edge.CreatedAt = created
-	} else {
-		return nil, err
-	}
-	if updated, err := parseTimestamp(u); err == nil {
-		edge.LastSeen = updated
-	} else {
-		return nil, err
-	}
 	if edge.CreatedAt.IsZero() || edge.LastSeen.IsZero() {
 		return nil, errors.New("failed to obtain the edge timestamps")
 	}
@@ -286,62 +246,48 @@ func (r *PostgresRepository) DeleteEdge(ctx context.Context, id string) error {
 // since limits by updated_at >= since (zero time => no limit).
 // limit <= 0 => no explicit LIMIT.
 func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, dir string, since time.Time, labels ...string) ([]*dbt.Edge, error) {
-	base := `
-SELECT e.edge_id, te.name, e.from_entity_id, e.to_entity_id, e.content, e.created_at, e.updated_at
-FROM edge e
-JOIN edge_type_lu te ON te.id = e.etype_id
-`
-	var args []any
-	var name string
-	var where []string
-	switch strings.ToLower(strings.TrimSpace(dir)) {
-	case "out":
-		name = "edge.outgoing"
-		where = append(where, "e.from_entity_id = :entity_id")
-		args = append(args, sql.Named("entity_id", eid))
-	case "in":
-		name = "edge.incoming"
-		where = append(where, "e.to_entity_id = :entity_id")
-		args = append(args, sql.Named("entity_id", eid))
-	default:
-		name = "edge.both"
-		where = append(where, "(e.from_entity_id = :entity_id OR e.to_entity_id = :entity_id)")
-		args = append(args, sql.Named("entity_id", eid))
-	}
 	if !since.IsZero() {
-		name += ".since"
-		where = append(where, "e.updated_at >= :since")
-		args = append(args, sql.Named("since", since.UTC()))
+		since = since.UTC()
 	}
+	ts := zeronull.Timestamp(since)
+
 	if values, vargs := inClause(labels); values != "" && len(vargs) > 0 {
 		name += fmt.Sprintf(".labels%d", len(vargs))
 		where = append(where, "e.label IN "+values)
-		args = append(args, vargs...)
+		for k, v := range vargs {
+			args[k] = v
+		}
 	}
 
-	q := base + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.updated_at DESC"
-
-	ch := make(chan *rowsReadResult, 1)
-	r.rpool.Submit(&rowsReadJob{
+	ch := make(chan *rowsResult, 1)
+	r.wpool.Submit(&rowsJob{
 		Ctx:     ctx,
-		Name:    name,
-		SQLText: q,
-		Args:    args,
-		Result:  ch,
+		Name:    "edge.for_entity",
+		SQLText: edgesForEntityText,
+		Args: pgx.NamedArgs{
+			"entity_id": eid,
+			"direction": dir,
+			"since":     ts,
+			"labels":    labels,
+		},
+		Result: ch,
 	})
 
 	result := <-ch
+	if result.Rows != nil {
+		defer func() { _ = result.Rows.Close() }()
+	}
 	if result.Err != nil {
 		return nil, result.Err
 	}
-	defer func() { _ = result.Rows.Close() }()
 
 	var out []*dbt.Edge
 	for result.Rows.Next() {
-		var c, u, etype, raw string
+		var c, u time.Time
+		var etype, raw string
 		var rowid, fromid, toid int64
 
-		if err := result.Rows.Scan(&rowid, &etype, &fromid, &toid, &raw, &c, &u); err != nil {
+		if err := result.Rows.Scan(&rowid, c, u, &etype, &fromid, &toid, &raw); err != nil {
 			return nil, err
 		}
 
@@ -352,21 +298,13 @@ JOIN edge_type_lu te ON te.id = e.etype_id
 
 		edge := &dbt.Edge{
 			ID:         strconv.FormatInt(rowid, 10),
+			CreatedAt:  c.In(time.UTC).Local(),
+			LastSeen:   u.In(time.UTC).Local(),
 			Relation:   rel,
 			FromEntity: &dbt.Entity{ID: strconv.FormatInt(fromid, 10)},
 			ToEntity:   &dbt.Entity{ID: strconv.FormatInt(toid, 10)},
 		}
 
-		if created, err := parseTimestamp(c); err == nil {
-			edge.CreatedAt = created
-		} else {
-			return nil, err
-		}
-		if updated, err := parseTimestamp(u); err == nil {
-			edge.LastSeen = updated
-		} else {
-			return nil, err
-		}
 		if edge.CreatedAt.IsZero() || edge.LastSeen.IsZero() {
 			continue
 		}
@@ -384,11 +322,11 @@ JOIN edge_type_lu te ON te.id = e.etype_id
 func (r *PostgresRepository) deleteEdgeByID(ctx context.Context, id int64) error {
 	done := make(chan error, 1)
 
-	r.ww.Submit(&writeJob{
+	r.wpool.Submit(&execJob{
 		Ctx:     ctx,
 		Name:    "edge.del.by_id",
-		SQLText: `DELETE FROM edge WHERE edge_id = :edge_id`,
-		Args:    []any{sql.Named("edge_id", id)},
+		SQLText: `DELETE FROM edge WHERE edge_id = @edge_id`,
+		Args:    pgx.NamedArgs{"edge_id": id},
 		Result:  done,
 	})
 

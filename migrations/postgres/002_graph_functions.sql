@@ -202,6 +202,88 @@ AS $fn$
 $fn$;
 -- +migrate StatementEnd
 
+-- Edges matching the provided labels and since timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.edges_for_entity(
+    _entity_id bigint,
+    _direction text DEFAULT 'both', 
+    _since     timestamp without time zone DEFAULT NULL,
+    _labels    text[] DEFAULT NULL
+) RETURNS SETOF TABLE (
+    edge_id        bigint,
+    created_at     timestamp without time zone,
+    updated_at     timestamp without time zone,
+    etype_name     text,
+    from_entity_id bigint,
+    to_entity_id   bigint,
+    content        jsonb
+)
+LANGUAGE plpgsql
+STABLE
+AS $fn$
+DECLARE
+    v_count  integer := 0;
+    v_params text[]  := array[]::text[];
+    v_sql    text;
+BEGIN
+    v_sql := $Q$
+    SELECT 
+        e.edge_id,
+        e.created_at, 
+        e.updated_at,
+        te.name AS etype_name, 
+        e.from_entity_id, 
+        e.to_entity_id, 
+        e.content
+    FROM public.edge e
+    JOIN public.edge_type_lu te ON te.id = e.etype_id WHERE TRUE$Q$;
+
+    -- 1) Determine direction filter
+    IF lower(_direction) = 'out' THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _entity_id);
+        v_sql    := v_sql || format(' AND %I = $%s', 'e.from_entity_id', v_count);
+    ELSIF lower(_direction) = 'in' THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _entity_id);
+        v_sql    := v_sql || format(' AND %I = $%s', 'e.to_entity_id', v_count);
+    ELSIF lower(_direction) = 'both' THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _entity_id);
+        v_sql    := v_sql || format(' AND (%I = $%s OR %I = $%s)', 'e.from_entity_id', v_count, 'e.to_entity_id', v_count);
+    END IF;
+
+    IF v_count = 0 THEN
+        RAISE EXCEPTION 'edges_for_entity requires at least one direction filter';
+    END IF;
+
+    IF _since IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _since);
+        v_sql    := v_sql || format(' AND %I >= $%s', 'e.updated_at', v_count);
+    END IF;
+
+    IF _labels IS NOT NULL THEN
+        v_count  := v_count + 1;
+        v_params := array_append(v_params, _labels);
+        v_sql    := v_sql || format(' AND e.label = ANY($%s)', v_count);
+    END IF;
+
+    -- 3) Add the ORDER BY clause
+    v_sql := v_sql || ' ORDER BY e.updated_at DESC, e.edge_id DESC';
+
+    -- 4) Execute dynamic SQL and return results
+    CASE v_count
+        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
+        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
+        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
+    END CASE;
+
+    RETURN;
+END
+$fn$;
+-- +migrate StatementEnd
+
 
 -- ---------------------------------------------------------------------------
 -- TAG UPSERT + HELPERS
