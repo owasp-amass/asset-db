@@ -6,8 +6,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"sync"
@@ -15,380 +13,343 @@ import (
 
 	"github.com/caffix/queue"
 	"github.com/jackc/pgx/v5"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type job interface {
-	GetCtx() context.Context
-	GetName() string
-	GetSQLText() string
-	GetArgs() pgx.NamedArgs
+// Worker accepts jobs, batches them, and flushes them to PostgreSQL.
+type Worker struct {
+	pool     *pgxpool.Pool
+	cfg      WorkerConfig
+	queue    queue.Queue
+	wg       sync.WaitGroup
+	cancel   context.CancelFunc
+	once     sync.Once
+	flushSem chan struct{} // limits concurrent flushes
 }
 
-type execJob struct {
-	Ctx     context.Context
-	Name    string
-	SQLText string
-	Args    pgx.NamedArgs
-	Result  chan error
+// WorkerConfig controls batching and concurrency behavior.
+type WorkerConfig struct {
+	// PoolMinConns sets pgxpool MinConns. If 0, defaults to 0.
+	PoolMinConns int32
+
+	// PoolMaxConns sets pgxpool MaxConns. If 0, defaults to 8.
+	PoolMaxConns int32
+
+	// MaxConnLifetime sets pgxpool MaxConnLifetime. If 0, defaults to pgxpool default.
+	MaxConnLifetime time.Duration
+
+	// MaxConnIdleTime sets pgxpool MaxConnIdleTime. If 0, defaults to pgxpool default.
+	MaxConnIdleTime time.Duration
+
+	// HealthCheckPeriod sets pgxpool HealthCheckPeriod. If 0, defaults to pgxpool default.
+	HealthCheckPeriod time.Duration
+
+	// StatementTimeout sets pgxpool StatementTimeout. If 0, defaults to pgxpool default.
+	StatementTimeout time.Duration
+
+	// ApplicationName sets pgxpool ApplicationName. If empty, defaults to pgxpool default.
+	ApplicationName string
+
+	// MaxBatchSize is the maximum number of jobs processed per batch flush.
+	// If 0, defaults to 256.
+	MaxBatchSize int
+
+	// MaxBatchDelay is the max time to wait before flushing a partially full batch.
+	// If 0, defaults to 5ms.
+	MaxBatchDelay time.Duration
+
+	// FlushParallelism is how many batch flush goroutines run concurrently.
+	// Each flush acquires a pooled connection (and can also use a TX).
+	// If 0, defaults to PoolMaxConns (or 8).
+	FlushParallelism int
+
+	// AcquireTimeout bounds how long a flush waits for a connection.
+	// If 0, defaults to 2s.
+	AcquireTimeout time.Duration
 }
 
-func (w *execJob) GetCtx() context.Context {
-	return w.Ctx
-}
-
-func (w *execJob) GetName() string {
-	return w.Name
-}
-
-func (w *execJob) GetSQLText() string {
-	return w.SQLText
-}
-
-func (w *execJob) GetArgs() pgx.NamedArgs {
-	return w.Args
-}
-
-type rowResult struct {
-	Row *sql.Row
-	Err error
-}
-
-type rowJob struct {
-	Ctx     context.Context
-	Name    string
-	SQLText string
-	Args    pgx.NamedArgs
-	Result  chan *rowResult
-}
-
-func (r *rowJob) GetCtx() context.Context {
-	return r.Ctx
-}
-
-func (r *rowJob) GetName() string {
-	return r.Name
-}
-
-func (r *rowJob) GetSQLText() string {
-	return r.SQLText
-}
-
-func (r *rowJob) GetArgs() pgx.NamedArgs {
-	return r.Args
-}
-
-type rowsResult struct {
-	Rows *sql.Rows
-	Err  error
-}
-
-type rowsJob struct {
-	Ctx     context.Context
-	Name    string
-	SQLText string
-	Args    pgx.NamedArgs
-	Result  chan *rowsResult
-}
-
-func (r *rowsJob) GetCtx() context.Context {
-	return r.Ctx
-}
-
-func (r *rowsJob) GetName() string {
-	return r.Name
-}
-
-func (r *rowsJob) GetSQLText() string {
-	return r.SQLText
-}
-
-func (r *rowsJob) GetArgs() pgx.NamedArgs {
-	return r.Args
-}
-
-type worker struct {
-	db            *sql.DB
-	conn          *sql.Conn
-	jobs          queue.Queue
-	batchSize     int
-	batchDuration time.Duration
-	wg            sync.WaitGroup
-	quit          chan struct{}
-}
-
-type workerPool struct {
-	workers []*worker
-	next    int
-	mu      sync.Mutex
-}
-
-func newWorkerPool(db *sql.DB, numWorkers, batchSize int, batchDuration time.Duration) (*workerPool, error) {
-	pool := new(workerPool)
-	for range numWorkers {
-		rw, err := newWorker(db, batchSize, batchDuration)
-		if err != nil {
-			pool.Close()
-			return nil, err
+func withDefaults(cfg WorkerConfig) WorkerConfig {
+	if cfg.PoolMaxConns == 0 {
+		cfg.PoolMaxConns = 8
+	}
+	if cfg.MaxBatchSize == 0 {
+		cfg.MaxBatchSize = 256
+	}
+	if cfg.MaxBatchDelay == 0 {
+		cfg.MaxBatchDelay = 5 * time.Millisecond
+	}
+	if cfg.AcquireTimeout == 0 {
+		cfg.AcquireTimeout = 2 * time.Second
+	}
+	if cfg.FlushParallelism == 0 {
+		// default: one flush goroutine per connection slot
+		cfg.FlushParallelism = int(cfg.PoolMaxConns)
+		if cfg.FlushParallelism <= 0 {
+			cfg.FlushParallelism = 8
 		}
-		pool.workers = append(pool.workers, rw)
+	}
+	return cfg
+}
+
+// NewWorker creates a pgxpool with the provided connection string and starts the worker.
+func NewWorker(ctx context.Context, connString string, cfg WorkerConfig) (*Worker, error) {
+	pcfg, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("parse pgxpool config: %w", err)
 	}
 
-	return pool, nil
-}
-
-func (pool *workerPool) Submit(job any) {
-	rw := pool.GetWorker()
-	rw.Submit(job)
-}
-
-func (pool *workerPool) GetWorker() *worker {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
-	rw := pool.workers[pool.next]
-	pool.next = (pool.next + 1) % len(pool.workers)
-	return rw
-}
-
-func (pool *workerPool) Close() {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
-	for _, rw := range pool.workers {
-		rw.Close()
+	if cfg.PoolMinConns >= 0 {
+		pcfg.MinConns = cfg.PoolMinConns
 	}
-}
-
-func newWorker(db *sql.DB, batchSize int, batchDuration time.Duration) (*worker, error) {
-	w := &worker{
-		db:            db,
-		jobs:          queue.NewQueue(),
-		batchSize:     batchSize,
-		batchDuration: batchDuration,
-		quit:          make(chan struct{}),
+	if cfg.PoolMaxConns > 0 {
+		pcfg.MaxConns = cfg.PoolMaxConns
+	}
+	if cfg.MaxConnLifetime > 0 {
+		pcfg.MaxConnLifetime = cfg.MaxConnLifetime
+	}
+	if cfg.MaxConnIdleTime > 0 {
+		pcfg.MaxConnIdleTime = cfg.MaxConnIdleTime
+	}
+	if cfg.HealthCheckPeriod > 0 {
+		pcfg.HealthCheckPeriod = cfg.HealthCheckPeriod
+	}
+	if cfg.StatementTimeout > 0 {
+		timeoutMS := int(cfg.StatementTimeout.Milliseconds())
+		pcfg.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%d", timeoutMS)
+	}
+	if cfg.ApplicationName != "" {
+		pcfg.ConnConfig.RuntimeParams["application_name"] = cfg.ApplicationName
 	}
 
-	if err := w.acquireConn(); err != nil {
-		return nil, err
+	pool, err := pgxpool.NewWithConfig(ctx, pcfg)
+	if err != nil {
+		return nil, fmt.Errorf("create pgxpool: %w", err)
+	}
+
+	// ---- Fail fast: verify connectivity now ----
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		pctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+
+		err = pool.Ping(pctx)
+		cancel()
+		if err == nil {
+			break
+		}
+
+		if time.Now().After(deadline) {
+			pool.Close()
+			return nil, fmt.Errorf("failed to connect to database: %w", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	return NewWorkerWithPool(ctx, pool, cfg), nil
+}
+
+// NewWorkerWithPool uses an existing pool (useful for SDKs that own the pool elsewhere).
+func NewWorkerWithPool(ctx context.Context, pool *pgxpool.Pool, cfg WorkerConfig) *Worker {
+	wctx, cancel := context.WithCancel(ctx)
+	w := &Worker{
+		pool:     pool,
+		cfg:      cfg,
+		queue:    queue.NewQueue(),
+		cancel:   cancel,
+		flushSem: make(chan struct{}, cfg.FlushParallelism),
+	}
+	// Seed flush semaphore.
+	for i := 0; i < cap(w.flushSem); i++ {
+		w.flushSem <- struct{}{}
 	}
 
 	w.wg.Add(1)
-	go w.run()
-	return w, nil
+	go func() {
+		defer w.wg.Done()
+		w.runAggregator(wctx)
+	}()
+
+	return w
 }
 
-func (w *worker) Submit(job any) {
-	w.jobs.Append(job)
-}
-
-func (w *worker) Close() {
-	close(w.quit)
-	w.wg.Wait()
-	_ = w.conn.Close()
-}
-
-func (w *worker) acquireConn() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	conn, err := w.db.Conn(ctx)
-	if err != nil {
-		return err
+func (w *Worker) Submit(j job) {
+	// If ctx is canceled before enqueue, fail fast.
+	select {
+	case <-j.GetCtx().Done():
+		return
+	default:
 	}
 
-	w.conn = conn
-	return nil
+	w.queue.Append(j)
 }
 
-func (w *worker) run() {
-	defer w.wg.Done()
+// Shutdown stops the worker, flushes any remaining queued work, and waits for completion.
+// This does not close the underlying pool (call pool.Close() if you own it).
+func (w *Worker) Shutdown(ctx context.Context) error {
+	var err error
 
-	batchdur := time.NewTicker(w.batchDuration)
-	defer batchdur.Stop()
+	w.once.Do(func() {
+		w.cancel()
 
-	check := time.NewTicker(5 * time.Millisecond)
-	defer check.Stop()
+		done := make(chan struct{})
+		go func() {
+			w.wg.Wait()
+			close(done)
+		}()
 
-	var txlist []job
-	commit := func() {
-		var err error
-		txlist, err = w.flushJobs(txlist)
-		for err != nil && len(txlist) > 0 {
-			txlist, err = w.flushJobs(txlist)
+		select {
+		case <-done:
+		case <-ctx.Done():
+			err = ctx.Err()
 		}
-	}
+	})
 
-	queueCheck := func() {
-		for !w.jobs.Empty() {
-			j, ok := w.jobs.Next()
-			if !ok || j == nil {
-				continue
-			}
+	return err
+}
 
-			var wj job
-			switch v := j.(type) {
-			case *execJob:
-				if v.Result == nil {
-					continue
-				}
-				wj = v
-			case *rowJob:
-				if v.Result == nil {
-					continue
-				}
-				wj = v
-			case *rowsJob:
-				if v.Result == nil {
-					continue
-				}
-				wj = v
+func (w *Worker) runAggregator(ctx context.Context) {
+	// timer drives MaxBatchDelay flushes
+	timer := time.NewTimer(w.cfg.MaxBatchDelay)
+	defer func() {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
 			default:
-				continue
-			}
-
-			if wj.GetCtx() == nil {
-				errToJob(wj, errors.New("context is nil"))
-				continue
-			}
-
-			if err := wj.GetCtx().Err(); err != nil {
-				errToJob(wj, fmt.Errorf("queueCheck context error: %w", err))
-				continue
-			}
-
-			if wj.GetName() == "" || wj.GetSQLText() == "" {
-				errToJob(wj, errors.New("invalid job parameters"))
-				continue
-			}
-
-			txlist = append(txlist, wj)
-			if len(txlist) >= w.batchSize {
-				commit()
-				return
 			}
 		}
+	}()
+
+	var batch []job
+	flush := func(items []job) {
+		if len(items) == 0 {
+			return
+		}
+		// Acquire flush slot (limits concurrent flush work)
+		select {
+		case <-ctx.Done():
+			// Fail all outstanding items if shutting down
+			for _, it := range items {
+				it.Done() <- errors.New("worker pool shutting down")
+				close(it.Done())
+			}
+			return
+		case <-w.flushSem:
+		}
+
+		w.wg.Add(1)
+		go func(items []job) {
+			defer w.wg.Done()
+			defer func() { w.flushSem <- struct{}{} }()
+
+			var err error
+			for range 5 {
+				err = w.flushBatch(ctx, items)
+				if err == nil {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if err != nil {
+				for _, it := range items {
+					it.Done() <- err
+					close(it.Done())
+				}
+			}
+		}(items)
+	}
+
+	resetTimer := func() {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(w.cfg.MaxBatchDelay)
 	}
 
 	for {
+		// If shutting down and channel closed/drained, flush remainder and exit
 		select {
-		case <-w.quit:
-			for !w.jobs.Empty() {
-				queueCheck()
-			}
-			commit()
+		case <-ctx.Done():
+			// Drain channel until closed, then flush whatever remains.
+			w.queue.Process(func(element any) {
+				it, ok := element.(job)
+				if !ok {
+					return
+				}
+				batch = append(batch, it)
+				if len(batch) >= w.cfg.MaxBatchSize {
+					flush(batch)
+					batch = nil
+				}
+			})
+			flush(batch)
 			return
-		case <-batchdur.C:
-			queueCheck()
-			commit()
-		case <-w.jobs.Signal():
-			queueCheck()
+		default:
+		}
+
+		select {
+		case <-w.queue.Signal():
+			element, ok := w.queue.Next()
+			if !ok {
+				continue
+			}
+			it, ok := element.(job)
+			if !ok {
+				continue
+			}
+			batch = append(batch, it)
+			if len(batch) == 1 {
+				// first item starts the timer window
+				resetTimer()
+			}
+			if len(batch) >= w.cfg.MaxBatchSize {
+				flush(batch)
+				batch = nil
+				resetTimer()
+			}
+
+		case <-timer.C:
+			flush(batch)
+			batch = nil
+			resetTimer()
 		}
 	}
 }
 
-func (w *worker) flushJobs(jobs []job) ([]job, error) {
-	if len(jobs) == 0 {
-		return []job{}, nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (w *Worker) flushBatch(ctx context.Context, items []job) error {
+	// Acquire with timeout so a stall doesn’t deadlock the worker under load
+	acqCtx, cancel := context.WithTimeout(ctx, w.cfg.AcquireTimeout)
 	defer cancel()
 
-	tx, err := w.conn.BeginTx(ctx, nil)
+	conn, err := w.pool.Acquire(acqCtx)
 	if err != nil {
-		if errors.Is(err, driver.ErrBadConn) {
-			_ = w.conn.Close()
-			if err := w.acquireConn(); err != nil {
-				return jobs, err
-			}
-			tx, err = w.conn.BeginTx(ctx, nil)
-		} else {
-			return jobs, err
-		}
+		return fmt.Errorf("acquire conn: %w", err)
 	}
-	if err != nil {
-		return jobs, err
-	}
-	defer func() { _ = tx.Rollback() }()
+	defer conn.Release()
 
-	var failed bool
-	var goodjobs []job
-	var jobResults []any
-	for i, job := range jobs {
-		if err := job.GetCtx().Err(); err != nil {
-			errToJob(job, fmt.Errorf("flushJobs context error: %w", err))
-			continue
-		}
-
-		switch v := job.(type) {
-		case *execJob:
-			_, err := tx.ExecContext(v.Ctx, v.SQLText, v.Args)
-			if err != nil {
-				errToJob(job, err)
-				goodjobs = append(goodjobs, jobs[i+1:]...)
-				failed = true
-				break
-			}
-			jobResults = append(jobResults, nil)
-		case *rowJob:
-			row := tx.QueryRowContext(v.Ctx, v.SQLText, v.Args)
-			jobResults = append(jobResults, &rowResult{Row: row, Err: nil})
-		case *rowsJob:
-			rows, err := tx.QueryContext(v.Ctx, v.SQLText, v.Args)
-			if err != nil {
-				errToJob(job, err)
-				goodjobs = append(goodjobs, jobs[i+1:]...)
-				failed = true
-				break
-			}
-			jobResults = append(jobResults, &rowsResult{Rows: rows, Err: nil})
-		}
-
-		goodjobs = append(goodjobs, job)
-	}
-
-	if !failed {
-		if err := tx.Commit(); err == nil {
-			returnJobResults(goodjobs, jobResults)
-			return []job{}, nil
-		}
-	}
-	return goodjobs, errors.New("transaction failed")
+	return w.flushBatchWithQuerier(ctx, conn, items)
 }
 
-func errToJob(j job, err error) {
-	switch v := j.(type) {
-	case *execJob:
-		v.Result <- err
-	case *rowJob:
-		v.Result <- &rowResult{Row: nil, Err: err}
-	case *rowsJob:
-		v.Result <- &rowsResult{Rows: nil, Err: err}
-	}
+type batchSender interface {
+	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
 }
 
-func returnJobResults(jobs []job, results []any) {
-	for i, j := range jobs {
-		switch v := j.(type) {
-		case *execJob:
-			if res, ok := results[i].(error); ok {
-				v.Result <- res
-			} else {
-				v.Result <- errors.New("invalid result type")
-			}
-		case *rowJob:
-			if res, ok := results[i].(*rowResult); ok {
-				v.Result <- res
-			} else {
-				v.Result <- &rowResult{Row: nil, Err: errors.New("invalid result type")}
-			}
-		case *rowsJob:
-			if res, ok := results[i].(*rowsResult); ok {
-				v.Result <- res
-			} else {
-				v.Result <- &rowsResult{Rows: nil, Err: errors.New("invalid result type")}
-			}
-		}
+func (w *Worker) flushBatchWithQuerier(ctx context.Context, q batchSender, items []job) error {
+	var b pgx.Batch
+
+	// Build batch
+	for _, it := range items {
+		it.Queue(&b)
 	}
+
+	br := q.SendBatch(ctx, &b)
+	defer func() { _ = br.Close() }()
+
+	// Decode results in the exact enqueue order.
+	for _, it := range items {
+		it.Done() <- it.Decode(br)
+		close(it.Done())
+	}
+	return nil
 }

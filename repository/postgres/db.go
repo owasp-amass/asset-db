@@ -24,7 +24,9 @@ const (
 // PostgresRepository is a repository implementation.
 type PostgresRepository struct {
 	DB     *sql.DB
-	wpool  *workerPool
+	pool   *Worker
+	dsn    string
+	cfg    WorkerConfig
 	dbtype string
 }
 
@@ -34,7 +36,15 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 		return nil, fmt.Errorf("unsupported database type: %s", dbtype)
 	}
 
-	repo, err := postgresDatabase(dsn)
+	repo, err := postgresDatabase(dsn, WorkerConfig{
+		PoolMinConns:      2,
+		PoolMaxConns:      int32(numberOfWorkers),
+		MaxConnLifetime:   30 * time.Minute,
+		MaxConnIdleTime:   5 * time.Minute,
+		HealthCheckPeriod: 1 * time.Minute,
+		StatementTimeout:  60 * time.Second,
+		ApplicationName:   "asset-db",
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +52,7 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 }
 
 // postgresDatabase creates a new PostgreSQL database connection using the provided data source name (dsn).
-func postgresDatabase(dsn string) (*PostgresRepository, error) {
+func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error) {
 	dsn = dsn + "?sslmode=disable&statement_cache_capacity=256&timezone=UTC&connect_timeout=5"
 	dsn = dsn + "&application_name=asset-db&statement_timeout=60000&lock_timeout=5000"
 
@@ -68,34 +78,34 @@ func postgresDatabase(dsn string) (*PostgresRepository, error) {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	db.SetMaxOpenConns(numberOfWorkers)
-	db.SetMaxIdleConns(numberOfWorkers / 2)
-	db.SetConnMaxIdleTime(5 * time.Minute)
-	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	return &PostgresRepository{
 		DB:     db,
+		dsn:    dsn,
+		cfg:    withDefaults(cfg),
 		dbtype: Postgres,
 	}, nil
 }
 
-func (sql *PostgresRepository) Prepare(ctx context.Context) error {
-	wpool, err := newWorkerPool(sql.DB, numberOfWorkers, 100, time.Millisecond)
+func (pr *PostgresRepository) Prepare(ctx context.Context) error {
+	w, err := NewWorker(ctx, pr.dsn, pr.cfg)
 	if err != nil {
 		return err
 	}
 
-	sql.wpool = wpool
+	pr.pool = w
 	return nil
 }
 
 // Close implements the Repository interface.
-func (sql *PostgresRepository) Close() error {
-	if sql.wpool != nil {
-		sql.wpool.Close()
+func (pr *PostgresRepository) Close() error {
+	if pr.pool != nil {
+		pr.pool.Shutdown(context.TODO())
 	}
-	if sql.DB != nil {
-		return sql.DB.Close()
+	if pr.DB != nil {
+		return pr.DB.Close()
 	}
 	return errors.New("failed to obtain access to the database handle")
 }

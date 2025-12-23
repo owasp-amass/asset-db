@@ -59,48 +59,27 @@ func (r *PostgresRepository) upsertAccount(ctx context.Context, a *oamacct.Accou
 		return 0, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.account.upsert",
-		SQLText: upsertAccountText,
-		Args:    pgx.NamedArgs{"record": string(record)},
-		Result:  ch,
+	var id int64
+	j := NewRowJob(ctx, upsertAccountText, pgx.NamedArgs{"record": string(record)}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.account.by_id",
-		SQLText: selectAccountByIDText,
-		Args:    pgx.NamedArgs{"row_id": rowID},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var rid int64
 	var c, u time.Time
 	var attrsJSON string
 	var a oamacct.Account
-	if err := result.Row.Scan(&rid, &c, &u, &a.ID,
-		&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
+
+	j := NewRowJob(ctx, selectAccountByIDText, pgx.NamedArgs{"row_id": rowID}, func(row pgx.Row) error {
+		return row.Scan(&rid, &c, &u, &a.ID, &a.Type, &a.Username, &a.Number, &attrsJSON)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -129,43 +108,35 @@ func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters 
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.account.find_by_content",
-		SQLText: selectAccountFindByContentText,
-		Args: pgx.NamedArgs{
-			"filters": string(filtersJSON),
-			"since":   ts,
-			"limit":   limit,
-		},
-		Result: ch,
-	})
-
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
+	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamacct.Account
+	j := NewRowsJob(ctx, selectAccountFindByContentText, pgx.NamedArgs{
+		"filters": string(filtersJSON),
+		"since":   ts,
+		"limit":   lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamacct.Account
 
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID,
-			&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
-			continue
-		}
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
+				&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
+				continue
+			}
 
-		if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
+			if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
 		}
+		return nil
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -180,41 +151,32 @@ func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since 
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.account.updated_since",
-		SQLText: selectAccountSinceText,
-		Args: pgx.NamedArgs{
-			"since": since.UTC(),
-			"limit": lmt,
-		},
-		Result: ch,
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, selectAccountSinceText, pgx.NamedArgs{
+		"since": since.UTC(),
+		"limit": lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamacct.Account
+
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
+				&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
+				continue
+			}
+
+			if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
+		}
+		return nil
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamacct.Account
-
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.ID,
-			&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
-			continue
-		}
-
-		if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
