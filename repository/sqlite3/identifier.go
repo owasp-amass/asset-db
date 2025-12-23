@@ -20,9 +20,10 @@ import (
 
 // Params: :unique_id, :id_type, :attrs
 const upsertIdentifierText = `
-INSERT INTO identifier(unique_id, id_type, attrs) 
-VALUES (:unique_id, :id_type, :attrs) 
+INSERT INTO identifier(unique_id, id_value, id_type, attrs) 
+VALUES (:unique_id, :id_value, :id_type, :attrs) 
 ON CONFLICT(unique_id) DO UPDATE SET
+    id_value   = COALESCE(excluded.id_value,  identifier.id_value),
     id_type    = COALESCE(excluded.id_type,   identifier.id_type),
 	attrs      = json_patch(identifier.attrs, excluded.attrs),
     updated_at = CURRENT_TIMESTAMP`
@@ -36,7 +37,7 @@ LIMIT 1`
 
 // Param: :row_id
 const selectIdentifierByID = `
-SELECT id, created_at, updated_at, unique_id, id_type, attrs
+SELECT id, created_at, updated_at, unique_id, id_value, id_type, attrs
 FROM identifier 
 WHERE id = :row_id
 LIMIT 1`
@@ -54,6 +55,9 @@ func (r *SqliteRepository) upsertIdentifier(ctx context.Context, a *oamgen.Ident
 	}
 	if a.UniqueID == "" {
 		return 0, fmt.Errorf("identifier unique ID cannot be empty")
+	}
+	if a.ID == "" {
+		return 0, fmt.Errorf("identifier ID cannot be empty")
 	}
 	if a.Type == "" {
 		return 0, fmt.Errorf("identifier type cannot be empty")
@@ -77,6 +81,7 @@ func (r *SqliteRepository) upsertIdentifier(ctx context.Context, a *oamgen.Ident
 		SQLText: upsertIdentifierText,
 		Args: []any{
 			sql.Named("unique_id", a.UniqueID),
+			sql.Named("id_value", a.ID),
 			sql.Named("id_type", a.Type),
 			sql.Named("attrs", attrsJSON),
 		},
@@ -127,7 +132,7 @@ func (r *SqliteRepository) fetchIdentifierByRowID(ctx context.Context, eid, rowI
 	var a oamgen.Identifier
 	var c, u, attrsJSON string
 	if err := result.Row.Scan(&row_id, &c, &u,
-		&a.UniqueID, &a.Type, &attrsJSON); err != nil {
+		&a.UniqueID, &a.ID, &a.Type, &attrsJSON); err != nil {
 		return nil, err
 	}
 
@@ -136,6 +141,9 @@ func (r *SqliteRepository) fetchIdentifierByRowID(ctx context.Context, eid, rowI
 	}
 	if a.UniqueID == "" {
 		return nil, errors.New("identifier unique ID is missing")
+	}
+	if a.ID == "" {
+		return nil, errors.New("identifier ID is missing")
 	}
 	if a.Type == "" {
 		return nil, fmt.Errorf("identifier type is missing")

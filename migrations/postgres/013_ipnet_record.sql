@@ -39,7 +39,7 @@ DECLARE
     v_row    bigint;
     v_handle text;
 BEGIN
-    v_handle := (_rec->>'handle');
+    v_handle := NULLIF(_rec->>'handle', '');
 
     -- 1) Upsert into ipnetrecord by handle.
     v_row := public.ipnetrecord_upsert_json(_rec);
@@ -228,12 +228,13 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.ipnetrecord_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
+    _limit   integer DEFAULT NULL
+) RETURNS TABLE (
     entity_id     bigint,
     id            bigint,
     created_at    timestamp without time zone,
@@ -251,121 +252,94 @@ LANGUAGE plpgsql
 STABLE
 AS $fn$
 DECLARE
-    v_record_cidr   cidr;
-    v_record_name   text;
-    v_handle        text;
-    v_whois_server  citext;
-    v_parent_handle text;
-    v_start_address inet;
-    v_end_address   inet;
-    v_count         integer := 0;
-    v_params        text[]  := array[]::text[];
-    v_sql           text;
+    v_record_cidr   cidr   := NULLIF(_filters->>'cidr', '')::cidr;
+    v_record_name   text   := NULLIF(_filters->>'name', '');
+    v_handle        text   := NULLIF(_filters->>'handle', '');
+    v_whois_server  citext := NULLIF(_filters->>'whois_server', '')::citext;
+    v_parent_handle text   := NULLIF(_filters->>'parent_handle', '');
+    v_start_address inet   := NULLIF(_filters->>'start_address', '')::inet;
+    v_end_address   inet   := NULLIF(_filters->>'end_address', '')::inet;
+
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
 BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.record_cidr,
-        a.record_name,
-        a.handle,
-        a.whois_server,
-        a.parent_handle,
-        a.start_address,
-        a.end_address,
-        a.attrs
-    FROM public.ipnetrecord a
-    JOIN public.entity e ON e.table_name = 'public.ipnetrecord'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_record_cidr   := NULLIF(_filters->>'cidr', '')::cidr;
-    v_record_name   := NULLIF(_filters->>'name', '');
-    v_handle        := NULLIF(_filters->>'handle', '');
-    v_whois_server  := NULLIF(_filters->>'whois_server', '')::citext;
-    v_parent_handle := NULLIF(_filters->>'parent_handle', '');
-    v_start_address := NULLIF(_filters->>'start_address', '')::inet;
-    v_end_address   := NULLIF(_filters->>'end_address', '')::inet;
-
-    -- 2) Build the params array from the filters
-    IF v_record_cidr IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_record_cidr::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.record_cidr', v_count);
-    END IF;
-
-    IF v_record_name IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_record_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.record_name', v_count);
-    END IF;
-
-    IF v_handle IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_handle);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.handle', v_count);
-    END IF;
-
-    IF v_whois_server IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_whois_server::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.whois_server', v_count);
-    END IF;
-
-    IF v_parent_handle IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_parent_handle);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.parent_handle', v_count);
-    END IF;
-
-    IF v_start_address IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_start_address::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.start_address', v_count);
-    END IF;
-
-    IF v_end_address IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_end_address::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.end_address', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
+    -- Require at least one supported filter
+    IF v_record_cidr IS NULL
+       AND v_record_name IS NULL
+       AND v_handle IS NULL
+       AND v_whois_server IS NULL
+       AND v_parent_handle IS NULL
+       AND v_start_address IS NULL
+       AND v_end_address IS NULL THEN
         RAISE EXCEPTION 'ipnetrecord_find_by_content requires at least one filter';
     END IF;
 
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.record_cidr,
+            a.record_name,
+            a.handle,
+            a.whois_server,
+            a.parent_handle,
+            a.start_address,
+            a.end_address,
+            a.attrs
+        FROM public.ipnetrecord a
+        JOIN public.entity e
+          ON e.table_name = 'public.ipnetrecord'::citext
+         AND e.row_id     = a.id
+        WHERE
+            (v_record_cidr   IS NULL OR a.record_cidr   = v_record_cidr)
+        AND (v_record_name   IS NULL OR a.record_name   = v_record_name)
+        AND (v_handle        IS NULL OR a.handle        = v_handle)
+        AND (v_whois_server  IS NULL OR a.whois_server  = v_whois_server)
+        AND (v_parent_handle IS NULL OR a.parent_handle = v_parent_handle)
+        AND (v_start_address IS NULL OR a.start_address = v_start_address)
+        AND (v_end_address   IS NULL OR a.end_address   = v_end_address)
+        AND (_since          IS NULL OR a.updated_at    >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.record_cidr,
+            a.record_name,
+            a.handle,
+            a.whois_server,
+            a.parent_handle,
+            a.start_address,
+            a.end_address,
+            a.attrs
+        FROM public.ipnetrecord a
+        JOIN public.entity e
+          ON e.table_name = 'public.ipnetrecord'::citext
+         AND e.row_id     = a.id
+        WHERE
+            (v_record_cidr   IS NULL OR a.record_cidr   = v_record_cidr)
+        AND (v_record_name   IS NULL OR a.record_name   = v_record_name)
+        AND (v_handle        IS NULL OR a.handle        = v_handle)
+        AND (v_whois_server  IS NULL OR a.whois_server  = v_whois_server)
+        AND (v_parent_handle IS NULL OR a.parent_handle = v_parent_handle)
+        AND (v_start_address IS NULL OR a.start_address = v_start_address)
+        AND (v_end_address   IS NULL OR a.end_address   = v_end_address)
+        AND (_since          IS NULL OR a.updated_at    >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
     END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-        WHEN 5 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5];
-        WHEN 6 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6];
-        WHEN 7 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7];
-        WHEN 8 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8];
-    END CASE;
-
-    RETURN;
 END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.ipnetrecord_updated_since(
     _since timestamp without time zone,
@@ -384,27 +358,57 @@ CREATE OR REPLACE FUNCTION public.ipnetrecord_updated_since(
     end_address   inet,
     attrs         jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.record_cidr,
-        a.record_name,
-        a.handle,
-        a.whois_server,
-        a.parent_handle,
-        a.start_address,
-        a.end_address,
-        a.attrs
-    FROM public.ipnetrecord a
-    JOIN public.entity e ON e.table_name = 'public.ipnetrecord'::citext AND e.row_id = a.id
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.record_cidr,
+            a.record_name,
+            a.handle,
+            a.whois_server,
+            a.parent_handle,
+            a.start_address,
+            a.end_address,
+            a.attrs
+        FROM public.ipnetrecord a
+        JOIN public.entity e
+          ON e.table_name = 'public.ipnetrecord'::citext
+         AND e.row_id     = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.record_cidr,
+            a.record_name,
+            a.handle,
+            a.whois_server,
+            a.parent_handle,
+            a.start_address,
+            a.end_address,
+            a.attrs
+        FROM public.ipnetrecord a
+        JOIN public.entity e
+          ON e.table_name = 'public.ipnetrecord'::citext
+         AND e.row_id     = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
@@ -413,7 +417,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.ipnetrecord_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.ipnetrecord_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.ipnetrecord_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.ipnetrecord_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.ipnetrecord_upsert_json(jsonb);

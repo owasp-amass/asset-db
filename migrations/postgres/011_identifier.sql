@@ -33,7 +33,7 @@ DECLARE
     v_row       bigint;
     v_unique_id text;
 BEGIN
-    v_unique_id := (_rec->>'unique_id');
+    v_unique_id := NULLIF(_rec->>'unique_id', '');
 
     -- 1) Upsert into identifier by unique_id.
     v_row := public.identifier_upsert_json(_rec);
@@ -73,6 +73,7 @@ BEGIN
     )
     ON CONFLICT (id_value, id_type) DO UPDATE
     SET
+        unique_id  = EXCLUDED.unique_id,
         attrs      = identifier.attrs || COALESCE(EXCLUDED.attrs, '{}'::jsonb),
         updated_at = now()
     RETURNING id INTO v_id;
@@ -142,103 +143,13 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: unique_id, id, id_type
+-- Requires at least one supported filter to be present.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.identifier_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
-    entity_id  bigint,
-    id         bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    unique_id  text,
-    id_value   text,
-    id_type    text,
-    attrs      jsonb
-)
-LANGUAGE plpgsql
-STABLE
-AS $fn$
-DECLARE
-    v_unique_id text;
-    v_id_value  text;
-    v_id_type   text;
-    v_count     integer := 0;
-    v_params    text[]  := array[]::text[];
-    v_sql       text;
-BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.unique_id,
-        a.id_value,
-        a.id_type,
-        a.attrs
-    FROM public.identifier a
-    JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_unique_id      := NULLIF(_filters->>'unique_id', '');
-    v_id_value       := NULLIF(_filters->>'id', '');
-    v_id_type        := NULLIF(_filters->>'id_type', '');
-
-    -- 2) Build the params array from the filters
-    IF v_unique_id IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_unique_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.unique_id', v_count);
-    END IF;
-
-    IF v_id_value IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_id_value);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.id_value', v_count);
-    END IF;
-
-    IF v_id_type IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_id_type);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.id_type', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
-        RAISE EXCEPTION 'identifier_find_by_content requires at least one filter';
-    END IF;
-
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
-    END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id ASC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-    END CASE;
-
-    RETURN;
-END
-$fn$;
--- +migrate StatementEnd
-
--- Rows updated since a given timestamp
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.identifier_updated_since(
-    _since timestamp without time zone,
-    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -252,6 +163,14 @@ CREATE OR REPLACE FUNCTION public.identifier_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
+    WITH f AS (
+        SELECT
+            NULLIF(_filters->>'unique_id','') AS unique_id,
+            NULLIF(_filters->>'id','')        AS id_value,
+            NULLIF(_filters->>'id_type','')   AS id_type,
+            _since                            AS since_ts,
+            GREATEST(COALESCE(_limit, 0), 0)  AS lim
+    )
     SELECT
         e.entity_id,
         a.id,
@@ -263,9 +182,55 @@ AS $fn$
         a.attrs
     FROM public.identifier a
     JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
+    CROSS JOIN f
+    WHERE
+        -- require at least one supported filter
+        (f.unique_id IS NOT NULL OR f.id_value IS NOT NULL OR f.id_type IS NOT NULL)
+      AND (f.unique_id IS NULL OR a.unique_id = f.unique_id)
+      AND (f.id_value  IS NULL OR a.id_value  = f.id_value)
+      AND (f.id_type   IS NULL OR a.id_type   = f.id_type)
+      AND (f.since_ts  IS NULL OR a.updated_at >= f.since_ts)
+    ORDER BY a.updated_at DESC, a.id DESC
+    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+$fn$;
+-- +migrate StatementEnd
+
+-- Rows updated since a given timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.identifier_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT 0
+) RETURNS TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    unique_id  text,
+    id_value   text,
+    id_type    text,
+    attrs      jsonb
+)
+LANGUAGE sql
+STABLE
+AS $fn$
+    WITH p AS (
+        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.id_value,
+        a.id_type,
+        a.attrs
+    FROM public.identifier a
+    JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
+    CROSS JOIN p
     WHERE a.updated_at >= _since
     ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
 $fn$;
 -- +migrate StatementEnd
 
@@ -274,7 +239,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.identifier_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.identifier_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.identifier_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.identifier_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.identifier_upsert_json(jsonb);

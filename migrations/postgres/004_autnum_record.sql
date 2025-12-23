@@ -33,7 +33,7 @@ DECLARE
     v_row    bigint;
     v_handle text;
 BEGIN
-    v_handle := (_rec->>'handle');
+    v_handle := NULLIF(_rec->>'handle', '');
 
     -- 1) Upsert into autnumrecord.
     v_row := public.autnumrecord_upsert_json(_rec);
@@ -165,9 +165,9 @@ BEGIN
     ) || '{}'::jsonb;
 
     RETURN public.autnumrecord_upsert(
-        v_record_name,
         v_handle,
         v_asn,
+        v_record_name,
         v_whois_server,
         v_attrs
     );
@@ -190,12 +190,14 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: handle, number (asn), name (record_name), whois_server
+-- Requires at least one supported filter to be present.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.autnumrecord_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
+    _limit   integer DEFAULT NULL
+) RETURNS TABLE (
     entity_id    bigint,
     id           bigint,
     created_at   timestamp without time zone,
@@ -210,85 +212,64 @@ LANGUAGE plpgsql
 STABLE
 AS $fn$
 DECLARE
-    v_handle       text;
-    v_asn          integer;
-    v_record_name  text;
-    v_whois_server citext;
-    v_count        integer := 0;
-    v_params       text[]  := array[]::text[];
-    v_sql          text;
+    v_handle       text    := NULLIF(_filters->>'handle', '');
+    v_asn          integer := NULLIF(_filters->>'number', '')::integer;
+    v_record_name  text    := NULLIF(_filters->>'name', '');
+    v_whois_server citext  := NULLIF(_filters->>'whois_server', '')::citext;
+    v_limit        integer := NULLIF(_limit, 0);
 BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.handle,
-        a.asn,
-        a.record_name,
-        a.whois_server,
-        a.attrs
-    FROM public.autnumrecord a
-    JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_handle       := NULLIF(_filters->>'handle', '');
-    v_asn          := NULLIF(_filters->>'number', '')::integer;
-    v_record_name  := NULLIF(_filters->>'name', '');
-    v_whois_server := NULLIF(_filters->>'whois_server', '')::citext;
-
-    -- 2) Build the params array from the filters
-    IF v_handle IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_handle);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.handle', v_count);
+    IF v_handle IS NULL AND v_asn IS NULL AND v_record_name IS NULL AND v_whois_server IS NULL THEN
+        RAISE EXCEPTION 'autnumrecord_find_by_content requires at least one supported filter';
     END IF;
 
-    IF v_asn IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_asn::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.asn', v_count);
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.handle,
+            a.asn,
+            a.record_name,
+            a.whois_server,
+            a.attrs
+        FROM public.autnumrecord a
+        JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id
+        WHERE
+            -- require at least one supported filter
+            (v_handle IS NOT NULL OR v_asn IS NOT NULL OR v_record_name IS NOT NULL OR v_whois_server IS NOT NULL)
+          AND (v_handle       IS NULL OR a.handle       = v_handle)
+          AND (v_asn          IS NULL OR a.asn          = v_asn)
+          AND (v_record_name  IS NULL OR a.record_name  = v_record_name)
+          AND (v_whois_server IS NULL OR a.whois_server = v_whois_server)
+          AND ( _since        IS NULL OR a.updated_at   >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.handle,
+            a.asn,
+            a.record_name,
+            a.whois_server,
+            a.attrs
+        FROM public.autnumrecord a
+        JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id
+        WHERE
+            -- require at least one supported filter
+            (v_handle IS NOT NULL OR v_asn IS NOT NULL OR v_record_name IS NOT NULL OR v_whois_server IS NOT NULL)
+          AND (v_handle       IS NULL OR a.handle       = v_handle)
+          AND (v_asn          IS NULL OR a.asn          = v_asn)
+          AND (v_record_name  IS NULL OR a.record_name  = v_record_name)
+          AND (v_whois_server IS NULL OR a.whois_server = v_whois_server)
+          AND ( _since        IS NULL OR a.updated_at   >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
     END IF;
-
-    IF v_record_name IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_record_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.record_name', v_count);
-    END IF;
-
-    IF v_whois_server IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_whois_server::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.whois_server', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
-        RAISE EXCEPTION 'autnumrecord_find_by_content requires at least one filter';
-    END IF;
-
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
-    END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-        WHEN 5 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5];
-    END CASE;
-
-    RETURN;
 END
 $fn$;
 -- +migrate StatementEnd
@@ -309,24 +290,47 @@ CREATE OR REPLACE FUNCTION public.autnumrecord_updated_since(
     whois_server citext,
     attrs        jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.handle,
-        a.asn,
-        a.record_name,
-        a.whois_server,
-        a.attrs
-    FROM public.autnumrecord a
-    JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0);
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.handle,
+            a.asn,
+            a.record_name,
+            a.whois_server,
+            a.attrs
+        FROM public.autnumrecord a
+        JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.handle,
+            a.asn,
+            a.record_name,
+            a.whois_server,
+            a.attrs
+        FROM public.autnumrecord a
+        JOIN public.entity e ON e.table_name = 'public.autnumrecord'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
@@ -335,7 +339,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.autnumrecord_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.autnumrecord_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.autnumrecord_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.autnumrecord_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.autnumrecord_upsert_json(jsonb);

@@ -28,7 +28,7 @@ DECLARE
     v_fqdn text;
     v_row  bigint;
 BEGIN
-    v_fqdn := (_rec->>'fqdn');
+    v_fqdn := NULLIF(_rec->>'name', '');
 
     -- 1) Upsert into fqdn.
     v_row := public.fqdn_upsert_json(_rec);
@@ -36,7 +36,7 @@ BEGIN
     -- 2) Upsert into entity via the generic helper.
     RETURN public.entity_upsert(
         _etype_name  := 'fqdn'::citext,
-        _natural_key := v_fqdn::citext,
+        _natural_key := lower(v_fqdn)::citext,
         _table_name  := 'public.fqdn'::citext,
         _row_id      := v_row
     );
@@ -106,81 +106,13 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: fqdn (preferred) or name (compat).
+-- Requires at least one supported filter to be present.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.fqdn_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
-    entity_id  bigint,
-    id         bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    fqdn       citext,
-    attrs      jsonb
-)
-LANGUAGE plpgsql
-STABLE
-AS $fn$
-DECLARE
-    v_fqdn   text;
-    v_count  integer := 0;
-    v_params text[]  := array[]::text[];
-    v_sql    text;
-BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.fqdn,
-        a.attrs
-    FROM public.fqdn a
-    JOIN public.entity e ON e.table_name = 'public.fqdn'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_fqdn  := NULLIF(_filters->>'name', '');
-
-    -- 2) Build the params array from the filters
-    IF v_fqdn IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_fqdn);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.fqdn', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
-        RAISE EXCEPTION 'fqdn_find_by_content requires at least one filter';
-    END IF;
-
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
-    END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-    END CASE;
-
-    RETURN;
-END
-$fn$;
--- +migrate StatementEnd
-
--- Rows updated since a given timestamp
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fqdn_updated_since(
-    _since timestamp without time zone,
-    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -192,6 +124,17 @@ CREATE OR REPLACE FUNCTION public.fqdn_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
+    WITH f AS (
+        SELECT
+            lower(
+              COALESCE(
+                NULLIF(_filters->>'fqdn',''),
+                NULLIF(_filters->>'name','')
+              )
+            )::citext AS fqdn,
+            _since AS since_ts,
+            GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
     SELECT
         e.entity_id,
         a.id,
@@ -201,9 +144,49 @@ AS $fn$
         a.attrs
     FROM public.fqdn a
     JOIN public.entity e ON e.table_name = 'public.fqdn'::citext AND e.row_id = a.id
+    CROSS JOIN f
+    WHERE
+        -- require at least one supported filter
+        (f.fqdn IS NOT NULL)
+      AND (a.fqdn = f.fqdn)
+      AND (f.since_ts IS NULL OR a.updated_at >= f.since_ts)
+    ORDER BY a.updated_at DESC, a.id DESC
+    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+$fn$;
+-- +migrate StatementEnd
+
+-- Rows updated since a given timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.fqdn_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT 0
+) RETURNS TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    fqdn       citext,
+    attrs      jsonb
+)
+LANGUAGE sql
+STABLE
+AS $fn$
+    WITH p AS (
+        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.fqdn,
+        a.attrs
+    FROM public.fqdn a
+    JOIN public.entity e ON e.table_name = 'public.fqdn'::citext AND e.row_id = a.id
+    CROSS JOIN p
     WHERE a.updated_at >= _since
     ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
 $fn$;
 -- +migrate StatementEnd
 
@@ -212,7 +195,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.fqdn_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.fqdn_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.fqdn_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.fqdn_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.fqdn_upsert_json(jsonb);

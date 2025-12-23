@@ -28,14 +28,16 @@ func TestCreateAssetForIdentifier(t *testing.T) {
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	unique_id := "someone@owasp.org"
+	idvalue := "someone@owasp.org"
 	idtype := oamgen.EmailAddress
+	unique_id := idtype + ":" + idvalue
 	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	status := "active"
 	idasset, err := db.CreateAsset(ctx, &oamgen.Identifier{
 		UniqueID:       unique_id,
+		ID:             idvalue,
 		Type:           idtype,
 		CreationDate:   created,
 		UpdatedDate:    updated,
@@ -64,7 +66,8 @@ func TestCreateAssetForIdentifier(t *testing.T) {
 	assert.True(t, ok, "Asset found by ID is not of type *oamgen.Identifier")
 	assert.Equal(t, found.ID, idasset.ID, "Identifier found by Entity ID does not have matching IDs")
 	assert.Equal(t, idasset2.UniqueID, unique_id, "Identifier found by ID does not have a matching UniqueID")
-	assert.Equal(t, idasset2.Type, idtype, "Identifier found by ID does not have a matching Type")
+	assert.Equal(t, idasset2.ID, idvalue, "Identifier found by Entity ID does not have a matching ID value")
+	assert.Equal(t, idasset2.Type, idtype, "Identifier found by Entity ID does not have a matching Type")
 	assert.Equal(t, idasset2.CreationDate, created, "Identifier found by ID does not have a matching CreationDate")
 	assert.Equal(t, idasset2.UpdatedDate, updated, "Identifier found by ID does not have a matching UpdatedDate")
 	assert.Equal(t, idasset2.ExpirationDate, expiration, "Identifier found by ID does not have a matching ExpirationDate")
@@ -89,14 +92,16 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	unique_id := "someone@owasp.org"
+	idvalue := "someone@owasp.org"
 	idtype := oamgen.EmailAddress
+	unique_id := idtype + ":" + idvalue
 	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
 	status := "active"
 	idasset, err := db.CreateAsset(ctx, &oamgen.Identifier{
 		UniqueID:       unique_id,
+		ID:             idvalue,
 		Type:           idtype,
 		CreationDate:   created,
 		UpdatedDate:    updated,
@@ -109,12 +114,12 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 	after := time.Now()
 
 	_, err = db.FindOneEntityByContent(ctx, oam.Identifier, after, dbt.ContentFilters{
-		"id": unique_id,
+		"unique_id": unique_id,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
 	found, err := db.FindOneEntityByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
-		"id": unique_id,
+		"unique_id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Identifier")
 	assert.NotNil(t, found, "Entity found by content for the Identifier should not be nil")
@@ -122,15 +127,16 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 	idasset2, ok := found.Asset.(*oamgen.Identifier)
 	assert.True(t, ok, "Identifier found by content is not of type *oamgen.Identifier")
 	assert.Equal(t, found.ID, idasset.ID, "Identifier found by content does not have matching IDs")
-	assert.Equal(t, idasset2.UniqueID, unique_id, "Identifier found by ID does not have a matching UniqueID")
-	assert.Equal(t, idasset2.Type, idtype, "Identifier found by ID does not have a matching Type")
-	assert.Equal(t, idasset2.CreationDate, created, "Identifier found by ID does not have a matching CreationDate")
-	assert.Equal(t, idasset2.UpdatedDate, updated, "Identifier found by ID does not have a matching UpdatedDate")
-	assert.Equal(t, idasset2.ExpirationDate, expiration, "Identifier found by ID does not have a matching ExpirationDate")
-	assert.Equal(t, idasset2.Status, status, "Identifier found by ID does not have a matching Status")
+	assert.Equal(t, idasset2.UniqueID, unique_id, "Identifier found by Entity ID does not have a matching UniqueID")
+	assert.Equal(t, idasset2.ID, idvalue, "Identifier found by Entity ID does not have a matching ID value")
+	assert.Equal(t, idasset2.Type, idtype, "Identifier found by Entity ID does not have a matching Type")
+	assert.Equal(t, idasset2.CreationDate, created, "Identifier found by Entity ID does not have a matching CreationDate")
+	assert.Equal(t, idasset2.UpdatedDate, updated, "Identifier found by Entity ID does not have a matching UpdatedDate")
+	assert.Equal(t, idasset2.ExpirationDate, expiration, "Identifier found by Entity ID does not have a matching ExpirationDate")
+	assert.Equal(t, idasset2.Status, status, "Identifier found by Entity ID does not have a matching Status")
 
 	ents, err := db.FindEntitiesByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
-		"id": unique_id,
+		"unique_id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the Identifier")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Identifier")

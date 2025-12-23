@@ -30,7 +30,7 @@ DECLARE
     v_url text;
     v_row bigint;
 BEGIN
-    v_url := (_rec->>'url');
+    v_url := NULLIF(_rec->>'url', '');
 
     -- 1) Upsert into url.
     v_row := public.url_upsert_json(_rec);
@@ -152,12 +152,13 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.url_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
+    _limit   integer DEFAULT NULL
+) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
     created_at timestamp without time zone,
@@ -172,69 +173,58 @@ AS $fn$
 DECLARE
     v_url    text;
     v_scheme text;
-    v_count  integer := 0;
-    v_params text[]  := array[]::text[];
-    v_sql    text;
+    v_limit  integer := NULLIF(_limit, 0); -- treat 0 as unlimited
 BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.raw_url,
-        a.scheme,
-        a.attrs
-    FROM public.url a
-    JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
+    -- Extract filters
     v_url    := NULLIF(_filters->>'url', '');
     v_scheme := NULLIF(_filters->>'scheme', '');
 
-    -- 2) Build the params array from the filters
-    IF v_url IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_url);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.raw_url', v_count);
-    END IF;
-
-    IF v_scheme IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_scheme);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.scheme', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
+    IF v_url IS NULL AND v_scheme IS NULL THEN
         RAISE EXCEPTION 'url_find_by_content requires at least one filter';
     END IF;
 
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.raw_url,
+            a.scheme,
+            a.attrs
+        FROM public.url a
+        JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id
+        WHERE
+            (v_url    IS NULL OR a.raw_url = v_url)
+        AND (v_scheme IS NULL OR a.scheme  = v_scheme)
+        AND (_since   IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.raw_url,
+            a.scheme,
+            a.attrs
+        FROM public.url a
+        JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id
+        WHERE
+            (v_url    IS NULL OR a.raw_url = v_url)
+        AND (v_scheme IS NULL OR a.scheme  = v_scheme)
+        AND (_since   IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
     END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-    END CASE;
-
-    RETURN;
 END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.url_updated_since(
     _since timestamp without time zone,
@@ -248,22 +238,43 @@ CREATE OR REPLACE FUNCTION public.url_updated_since(
     scheme     text,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.raw_url,
-        a.scheme,
-        a.attrs
-    FROM public.url a
-    JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.raw_url,
+            a.scheme,
+            a.attrs
+        FROM public.url a
+        JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.raw_url,
+            a.scheme,
+            a.attrs
+        FROM public.url a
+        JOIN public.entity e ON e.table_name = 'public.url'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
@@ -272,7 +283,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.url_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.url_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.url_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.url_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.url_upsert_json(jsonb);

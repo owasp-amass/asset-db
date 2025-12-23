@@ -28,7 +28,7 @@ DECLARE
     v_asn integer;
     v_row bigint;
 BEGIN
-    v_asn := (_rec->>'number')::integer;
+    v_asn := NULLIF(_rec->>'number', '')::integer;
 
     -- 1) Upsert into autonomoussystem by ASN.
     v_row := public.autonomoussystem_upsert_json(_rec);
@@ -106,81 +106,13 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: number (asn)
+-- Requires at least one supported filter to be present.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.autonomoussystem_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
-    entity_id  bigint,
-    id         bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    asn        integer,
-    attrs      jsonb
-)
-LANGUAGE plpgsql
-STABLE
-AS $fn$
-DECLARE
-    v_asn    integer;
-    v_count  integer := 0;
-    v_params text[]  := array[]::text[];
-    v_sql    text;
-BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.asn,
-        a.attrs
-    FROM public.autonomoussystem a
-    JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_asn := NULLIF(_filters->>'number', '')::integer;
-
-    -- 2) Build the params array from the filters
-    IF v_asn IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_asn::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.asn', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
-        RAISE EXCEPTION 'autonomoussystem_find_by_content requires at least one filter';
-    END IF;
-
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
-    END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-    END CASE;
-
-    RETURN;
-END
-$fn$;
--- +migrate StatementEnd
-
--- Rows updated since a given timestamp
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(
-    _since timestamp without time zone,
-    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -192,6 +124,12 @@ CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
+    WITH f AS (
+        SELECT
+            NULLIF(_filters->>'number', '')::integer AS asn,
+            _since                                   AS since_ts,
+            GREATEST(COALESCE(_limit, 0), 0)         AS lim
+    )
     SELECT
         e.entity_id,
         a.id,
@@ -201,9 +139,49 @@ AS $fn$
         a.attrs
     FROM public.autonomoussystem a
     JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
+    CROSS JOIN f
+    WHERE
+        -- require at least one supported filter
+        (f.asn IS NOT NULL)
+      AND (a.asn = f.asn)
+      AND (f.since_ts IS NULL OR a.updated_at >= f.since_ts)
+    ORDER BY a.updated_at DESC, a.id DESC
+    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+$fn$;
+-- +migrate StatementEnd
+
+-- Rows updated since a given timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT 0
+) RETURNS TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    asn        integer,
+    attrs      jsonb
+)
+LANGUAGE sql
+STABLE
+AS $fn$
+    WITH p AS (
+        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.asn,
+        a.attrs
+    FROM public.autonomoussystem a
+    JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
+    CROSS JOIN p
     WHERE a.updated_at >= _since
     ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
 $fn$;
 -- +migrate StatementEnd
 
@@ -212,7 +190,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.autonomoussystem_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.autonomoussystem_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.autonomoussystem_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.autonomoussystem_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_json(jsonb);

@@ -110,6 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_tag_updated_at ON tag (updated_at);
 CREATE INDEX IF NOT EXISTS idx_tag_ttype_id ON tag (ttype_id);
 CREATE INDEX IF NOT EXISTS idx_tag_property_name ON tag (property_name);
 CREATE INDEX IF NOT EXISTS idx_tag_tt_name ON tag (ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_tag_property_name_value ON tag (property_name, property_value);
 
 -- +migrate StatementBegin
 CREATE TRIGGER IF NOT EXISTS trg_tag_au
@@ -129,6 +130,7 @@ CREATE TABLE IF NOT EXISTS entity_tag_map (
 );
 CREATE INDEX IF NOT EXISTS idx_entity_tag_map_created_at ON entity_tag_map (created_at);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_map_updated_at ON entity_tag_map (updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_updated ON entity_tag_map (entity_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_id ON entity_tag_map (entity_id);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_map_tag_id ON entity_tag_map (tag_id);
 
@@ -142,6 +144,7 @@ CREATE TABLE IF NOT EXISTS edge_tag_map (
 );
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_created_at ON edge_tag_map (created_at);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_updated_at ON edge_tag_map (updated_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_updated ON edge_tag_map (edge_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_id ON edge_tag_map (edge_id);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_tag_id ON edge_tag_map (tag_id);
 
@@ -1087,6 +1090,7 @@ DROP TABLE IF EXISTS account;
 DROP INDEX IF EXISTS idx_edge_tag_map;
 DROP INDEX IF EXISTS idx_edge_tag_map_tag_id;
 DROP INDEX IF EXISTS idx_edge_tag_map_edge_id;
+DROP INDEX IF EXISTS idx_edge_tag_map_edge_updated;
 DROP INDEX IF EXISTS idx_edge_tag_map_updated_at;
 DROP INDEX IF EXISTS idx_edge_tag_map_created_at;
 DROP TABLE IF EXISTS edge_tag_map;
@@ -1094,11 +1098,13 @@ DROP TABLE IF EXISTS edge_tag_map;
 DROP INDEX IF EXISTS idx_entity_tag_map;
 DROP INDEX IF EXISTS idx_entity_tag_map_tag_id;
 DROP INDEX IF EXISTS idx_entity_tag_map_entity_id;
+DROP INDEX IF EXISTS idx_entity_tag_map_entity_updated;
 DROP INDEX IF EXISTS idx_entity_tag_map_updated_at;
 DROP INDEX IF EXISTS idx_entity_tag_map_created_at;
 DROP TABLE IF EXISTS entity_tag_map;
 
 DROP TRIGGER IF EXISTS trg_tag_au;
+DROP INDEX IF EXISTS idx_tag_property_name_value;
 DROP INDEX IF EXISTS idx_tag_tt_name;
 DROP INDEX IF EXISTS idx_tag_property_value;
 DROP INDEX IF EXISTS idx_tag_ttype_id;

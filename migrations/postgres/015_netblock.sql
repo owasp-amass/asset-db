@@ -28,7 +28,7 @@ DECLARE
     v_cidr text;
     v_row  bigint;
 BEGIN
-    v_cidr := (_rec->>'cidr');
+    v_cidr := NULLIF(_rec->>'cidr', '');
 
     -- 1) Upsert into netblock.
     v_row := public.netblock_upsert_json(_rec);
@@ -122,12 +122,15 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: cidr
+-- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.netblock_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
+    _limit   integer DEFAULT NULL
+) RETURNS TABLE (
     entity_id     bigint,
     id            bigint,
     created_at    timestamp without time zone,
@@ -139,61 +142,47 @@ LANGUAGE plpgsql
 STABLE
 AS $fn$
 DECLARE
-    v_cidr   cidr;
-    v_count  integer := 0;
-    v_params text[]  := array[]::text[];
-    v_sql    text;
+    v_cidr  cidr    := NULLIF(_filters->>'cidr', '')::cidr;
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
 BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.netblock_cidr,
-        a.attrs
-    FROM public.netblock a
-    JOIN public.entity e ON e.table_name = 'public.netblock'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_cidr := NULLIF(_filters->>'cidr', '')::cidr;
-
-    -- 2) Build the params array from the filters
-    IF v_cidr IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_cidr::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.netblock_cidr', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
+    IF v_cidr IS NULL THEN
         RAISE EXCEPTION 'netblock_find_by_content requires at least one filter';
     END IF;
 
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.netblock_cidr,
+            a.attrs
+        FROM public.netblock a
+        JOIN public.entity e ON e.table_name = 'public.netblock'::citext AND e.row_id = a.id
+        WHERE a.netblock_cidr = v_cidr AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.netblock_cidr,
+            a.attrs
+        FROM public.netblock a
+        JOIN public.entity e ON e.table_name = 'public.netblock'::citext AND e.row_id = a.id
+        WHERE a.netblock_cidr = v_cidr AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
     END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-    END CASE;
-
-    RETURN;
 END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.netblock_updated_since(
     _since timestamp without time zone,
@@ -206,21 +195,41 @@ CREATE OR REPLACE FUNCTION public.netblock_updated_since(
     netblock_cidr cidr,
     attrs         jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.netblock_cidr,
-        a.attrs
-    FROM public.netblock a
-    JOIN public.entity e ON e.table_name = 'public.netblock'::citext AND e.row_id = a.id
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.netblock_cidr,
+            a.attrs
+        FROM public.netblock a
+        JOIN public.entity e ON e.table_name = 'public.netblock'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.netblock_cidr,
+            a.attrs
+        FROM public.netblock a
+        JOIN public.entity e ON e.table_name = 'public.netblock'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
@@ -229,7 +238,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.netblock_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.netblock_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.netblock_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.netblock_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.netblock_upsert_json(jsonb);

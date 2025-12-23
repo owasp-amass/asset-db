@@ -34,7 +34,7 @@ DECLARE
     v_unique_id text;
     v_row       bigint;
 BEGIN
-    v_unique_id := _rec->>'unique_id';
+    v_unique_id := NULLIF(_rec->>'unique_id', '');
 
     -- 1) Upsert into person.
     v_row := public.person_upsert_json(_rec);
@@ -146,12 +146,15 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: unique_id, full_name, first_name, family_name
+-- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.person_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
+    _limit   integer DEFAULT NULL
+) RETURNS TABLE (
     entity_id   bigint,
     id          bigint,
     created_at  timestamp without time zone,
@@ -166,90 +169,70 @@ LANGUAGE plpgsql
 STABLE
 AS $fn$
 DECLARE
-    v_unique_id   text;
-    v_full_name   text;
-    v_first_name  text;
-    v_family_name text;
-    v_count       integer := 0;
-    v_params      text[]  := array[]::text[];
-    v_sql         text;
+    v_unique_id   text    := NULLIF(_filters->>'unique_id', '');
+    v_full_name   text    := NULLIF(_filters->>'full_name', '');
+    v_first_name  text    := NULLIF(_filters->>'first_name', '');
+    v_family_name text    := NULLIF(_filters->>'family_name', '');
+    v_limit       integer := NULLIF(_limit, 0); -- treat 0 as unlimited
 BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.unique_id,
-        a.full_name,
-        a.first_name,
-        a.family_name,
-        a.attrs
-    FROM public.person a
-    JOIN public.entity e ON e.table_name = 'public.person'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_unique_id   := NULLIF(_filters->>'unique_id', '');
-    v_full_name   := NULLIF(_filters->>'full_name', '');
-    v_first_name  := NULLIF(_filters->>'first_name', '');
-    v_family_name := NULLIF(_filters->>'family_name', '');
-
-    -- 2) Build the params array from the filters
-    IF v_unique_id IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_unique_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.unique_id', v_count);
-    END IF;
-
-    IF v_full_name IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_full_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.full_name', v_count);
-    END IF;
-
-    IF v_first_name IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_first_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.first_name', v_count);
-    END IF;
-
-    IF v_family_name IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_family_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.family_name', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
+    IF v_unique_id IS NULL
+       AND v_full_name IS NULL
+       AND v_first_name IS NULL
+       AND v_family_name IS NULL
+    THEN
         RAISE EXCEPTION 'person_find_by_content requires at least one filter';
     END IF;
 
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.full_name,
+            a.first_name,
+            a.family_name,
+            a.attrs
+        FROM public.person a
+        JOIN public.entity e ON e.table_name = 'public.person'::citext AND e.row_id = a.id
+        WHERE
+            (v_unique_id   IS NULL OR a.unique_id   = v_unique_id)
+        AND (v_full_name   IS NULL OR a.full_name   = v_full_name)
+        AND (v_first_name  IS NULL OR a.first_name  = v_first_name)
+        AND (v_family_name IS NULL OR a.family_name = v_family_name)
+        AND (_since        IS NULL OR a.updated_at  >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.full_name,
+            a.first_name,
+            a.family_name,
+            a.attrs
+        FROM public.person a
+        JOIN public.entity e ON e.table_name = 'public.person'::citext AND e.row_id = a.id
+        WHERE
+            (v_unique_id   IS NULL OR a.unique_id   = v_unique_id)
+        AND (v_full_name   IS NULL OR a.full_name   = v_full_name)
+        AND (v_first_name  IS NULL OR a.first_name  = v_first_name)
+        AND (v_family_name IS NULL OR a.family_name = v_family_name)
+        AND (_since        IS NULL OR a.updated_at  >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
     END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-        WHEN 5 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5];
-    END CASE;
-
-    RETURN;
 END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.person_updated_since(
     _since timestamp without time zone,
@@ -265,24 +248,47 @@ CREATE OR REPLACE FUNCTION public.person_updated_since(
     family_name text,
     attrs       jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.unique_id,
-        a.full_name,
-        a.first_name,
-        a.family_name,
-        a.attrs
-    FROM public.person a
-    JOIN public.entity e ON e.table_name = 'public.person'::citext AND e.row_id = a.id
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.full_name,
+            a.first_name,
+            a.family_name,
+            a.attrs
+        FROM public.person a
+        JOIN public.entity e ON e.table_name = 'public.person'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.full_name,
+            a.first_name,
+            a.family_name,
+            a.attrs
+        FROM public.person a
+        JOIN public.entity e ON e.table_name = 'public.person'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
@@ -291,7 +297,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.person_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.person_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.person_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.person_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.person_upsert_json(jsonb);

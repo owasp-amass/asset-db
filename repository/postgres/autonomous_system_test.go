@@ -6,16 +6,46 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForAutonomousSystem() {
+type PostgresAutonomousSystemTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+	ctx       context.Context
+}
+
+func TestPostgresAutonomousSystemTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresAutonomousSystemTestSuite))
+}
+
+func (suite *PostgresAutonomousSystemTestSuite) SetupSuite() {
+	var err error
+	suite.ctx = context.Background()
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresAutonomousSystemTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(suite.ctx); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresAutonomousSystemTestSuite) TestCreateAssetForAutonomousSystem() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -54,7 +84,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForAutonomousSystem() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the AutonomousSystem")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForAutonomousSystem() {
+func (suite *PostgresAutonomousSystemTestSuite) TestFindEntitiesByContentForAutonomousSystem() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

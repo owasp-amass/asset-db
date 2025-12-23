@@ -32,7 +32,7 @@ DECLARE
     v_unique_id text;
     v_row       bigint;
 BEGIN
-    v_unique_id := (_rec->>'unique_id');
+    v_unique_id := NULLIF(_rec->>'unique_id', '');
 
     -- 1) Upsert into fundstransfer.
     v_row := public.fundstransfer_upsert_json(_rec);
@@ -114,9 +114,6 @@ BEGIN
                             ELSE NULL
                           END;
 
-    IF v_amount IS NOT NULL AND v_amount = 0 THEN
-        v_amount := NULL;
-    END IF;
     IF v_exchange_rate IS NOT NULL AND v_exchange_rate = 0 THEN
         v_exchange_rate := NULL;
     END IF;
@@ -156,110 +153,13 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: unique_id, amount, reference_number
+-- Requires at least one supported filter to be present.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.fundstransfer_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
-    entity_id        bigint,
-    id               bigint,
-    created_at       timestamp without time zone,
-    updated_at       timestamp without time zone,
-    unique_id        text,
-    amount           numeric,
-    reference_number text,
-    attrs            jsonb
-)
-LANGUAGE plpgsql
-STABLE
-AS $fn$
-DECLARE
-    v_unique_id        text;
-    v_amount           numeric;
-    v_reference_number text;
-    v_count            integer := 0;
-    v_params           text[]  := array[]::text[];
-    v_sql              text;
-BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.unique_id,
-        a.amount,
-        a.reference_number,
-        a.attrs
-    FROM public.fundstransfer a
-    JOIN public.entity e ON e.table_name = 'public.fundstransfer'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_unique_id        := NULLIF(_filters->>'unique_id', '');
-    v_amount           := CASE
-                            WHEN _filters ? 'amount' THEN (_filters->>'amount')::numeric
-                            ELSE NULL
-                          END;
-    v_reference_number := NULLIF(_filters->>'reference_number', '');
-
-    IF v_amount IS NOT NULL AND v_amount = 0 THEN
-        v_amount := NULL;
-    END IF;
-
-    -- 2) Build the params array from the filters
-    IF v_unique_id IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_unique_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.unique_id', v_count);
-    END IF;
-
-    IF v_amount IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_amount::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.amount', v_count);
-    END IF;
-
-    IF v_reference_number IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_reference_number);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.reference_number', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
-        RAISE EXCEPTION 'fundstransfer_find_by_content requires at least one filter';
-    END IF;
-
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
-    END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-    END CASE;
-
-    RETURN;
-END
-$fn$;
--- +migrate StatementEnd
-
--- Rows updated since a given timestamp
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.fundstransfer_updated_since(
-    _since timestamp without time zone,
-    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id        bigint,
     id               bigint,
@@ -273,6 +173,14 @@ CREATE OR REPLACE FUNCTION public.fundstransfer_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
+    WITH f AS (
+        SELECT
+            NULLIF(_filters->>'unique_id','')        AS unique_id,
+            NULLIF(_filters->>'amount','')::numeric  AS amount,
+            NULLIF(_filters->>'reference_number','') AS reference_number,
+            _since                                   AS since_ts,
+            GREATEST(COALESCE(_limit, 0), 0)         AS lim
+    )
     SELECT
         e.entity_id,
         a.id,
@@ -284,9 +192,55 @@ AS $fn$
         a.attrs
     FROM public.fundstransfer a
     JOIN public.entity e ON e.table_name = 'public.fundstransfer'::citext AND e.row_id = a.id
+    CROSS JOIN f
+    WHERE
+        -- require at least one supported filter
+        (f.unique_id IS NOT NULL OR f.amount IS NOT NULL OR f.reference_number IS NOT NULL)
+      AND (f.unique_id        IS NULL OR a.unique_id        = f.unique_id)
+      AND (f.amount           IS NULL OR a.amount           = f.amount)
+      AND (f.reference_number IS NULL OR a.reference_number = f.reference_number)
+      AND (f.since_ts         IS NULL OR a.updated_at       >= f.since_ts)
+    ORDER BY a.updated_at DESC, a.id DESC
+    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+$fn$;
+-- +migrate StatementEnd
+
+-- Rows updated since a given timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.fundstransfer_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT 0
+) RETURNS TABLE (
+    entity_id        bigint,
+    id               bigint,
+    created_at       timestamp without time zone,
+    updated_at       timestamp without time zone,
+    unique_id        text,
+    amount           numeric,
+    reference_number text,
+    attrs            jsonb
+)
+LANGUAGE sql
+STABLE
+AS $fn$
+    WITH p AS (
+        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.unique_id,
+        a.amount,
+        a.reference_number,
+        a.attrs
+    FROM public.fundstransfer a
+    JOIN public.entity e ON e.table_name = 'public.fundstransfer'::citext AND e.row_id = a.id
+    CROSS JOIN p
     WHERE a.updated_at >= _since
     ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
 $fn$;
 -- +migrate StatementEnd
 
@@ -295,7 +249,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.fundstransfer_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.fundstransfer_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.fundstransfer_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.fundstransfer_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.fundstransfer_upsert_json(jsonb);

@@ -44,19 +44,28 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 // postgresDatabase creates a new PostgreSQL database connection using the provided data source name (dsn).
 func postgresDatabase(dsn string) (*PostgresRepository, error) {
 	dsn = dsn + "?sslmode=disable&statement_cache_capacity=256&timezone=UTC&connect_timeout=5"
-	dsn = dsn + "&application_name=asset-db&statement_timeout=60000&lock_timeout=5000&idle_in_transaction_session_timeout=30000"
+	dsn = dsn + "&application_name=asset-db&statement_timeout=60000&lock_timeout=5000"
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		pctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
-	err = db.PingContext(ctx)
-	if err != nil {
-		return nil, err
+		err = db.PingContext(pctx)
+		cancel()
+		if err == nil {
+			break
+		}
+
+		if time.Now().After(deadline) {
+			_ = db.Close()
+			return nil, err
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	db.SetMaxOpenConns(numberOfWorkers)

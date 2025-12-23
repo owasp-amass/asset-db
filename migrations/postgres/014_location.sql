@@ -46,7 +46,7 @@ DECLARE
     v_addr text;
     v_row  bigint;
 BEGIN
-    v_addr := (_rec->>'address');
+    v_addr := NULLIF(_rec->>'address', '');
 
     -- 1) Upsert into location.
     v_row := public.location_upsert_json(_rec);
@@ -135,7 +135,7 @@ DECLARE
     v_gln             text;
     v_attrs           jsonb;
 BEGIN
-    v_street_address  := NULLIF(_rec->>'street_address', '');
+    v_street_address  := NULLIF(_rec->>'address', '');
     v_city            := NULLIF(_rec->>'city', '');
     v_country         := NULLIF(_rec->>'country', '');
     v_unit            := NULLIF(_rec->>'unit', '');
@@ -188,12 +188,16 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: street_address (or address), city, country, unit, building,
+-- province, locality, postal_code, street_name, building_number
+-- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.location_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
+    _limit   integer DEFAULT NULL
+) RETURNS TABLE (
     entity_id       bigint,
     id              bigint,
     created_at      timestamp without time zone,
@@ -214,150 +218,107 @@ LANGUAGE plpgsql
 STABLE
 AS $fn$
 DECLARE
-    v_street_address  text;
-    v_city            text;
-    v_country         text;
-    v_unit            text;
-    v_building        text;
-    v_province        text;
-    v_locality        text;
-    v_postal_code     text;
-    v_street_name     text;
-    v_building_number text;
-    v_count           integer := 0;
-    v_params          text[]  := array[]::text[];
-    v_sql             text;
+    -- Support both "street_address" and legacy "address"
+    v_street_address  text := NULLIF(_filters->>'address', '');
+    v_city            text := NULLIF(_filters->>'city', '');
+    v_country         text := NULLIF(_filters->>'country', '');
+    v_unit            text := NULLIF(_filters->>'unit', '');
+    v_building        text := NULLIF(_filters->>'building', '');
+    v_province        text := NULLIF(_filters->>'province', '');
+    v_locality        text := NULLIF(_filters->>'locality', '');
+    v_postal_code     text := NULLIF(_filters->>'postal_code', '');
+    v_street_name     text := NULLIF(_filters->>'street_name', '');
+    v_building_number text := NULLIF(_filters->>'building_number', '');
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
 BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.street_address,
-        a.city,
-        a.country,
-        a.unit,
-        a.building,
-        a.province,
-        a.locality,
-        a.postal_code,
-        a.street_name,
-        a.building_number,
-        a.attrs
-    FROM public.location a
-    JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_street_address  := NULLIF(_filters->>'address', '');
-    v_city            := NULLIF(_filters->>'city', '');
-    v_country         := NULLIF(_filters->>'country', '');
-    v_unit            := NULLIF(_filters->>'unit', '');
-    v_building        := NULLIF(_filters->>'building', '');
-    v_province        := NULLIF(_filters->>'province', '');
-    v_locality        := NULLIF(_filters->>'locality', '');
-    v_postal_code     := NULLIF(_filters->>'postal_code', '');
-    v_street_name     := NULLIF(_filters->>'street_name', '');
-    v_building_number := NULLIF(_filters->>'building_number', '');
-
-    -- 2) Build the params array from the filters
-    IF v_street_address IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_street_address);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.street_address', v_count);
-    END IF;
-
-    IF v_city IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_city);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.city', v_count);
-    END IF;
-
-    IF v_country IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_country);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.country', v_count);
-    END IF;
-
-    IF v_unit IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_unit);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.unit', v_count);
-    END IF;
-
-    IF v_building IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_building);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.building', v_count);
-    END IF;
-
-    IF v_province IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_province);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.province', v_count);
-    END IF;
-
-    IF v_locality IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_locality);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.locality', v_count);
-    END IF;
-
-    IF v_postal_code IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_postal_code);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.postal_code', v_count);
-    END IF;
-
-    IF v_street_name IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_street_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.street_name', v_count);
-    END IF;
-
-    IF v_building_number IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_building_number);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.building_number', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
+    -- Require at least one supported filter
+    IF v_street_address IS NULL
+       AND v_city IS NULL
+       AND v_country IS NULL
+       AND v_unit IS NULL
+       AND v_building IS NULL
+       AND v_province IS NULL
+       AND v_locality IS NULL
+       AND v_postal_code IS NULL
+       AND v_street_name IS NULL
+       AND v_building_number IS NULL THEN
         RAISE EXCEPTION 'location_find_by_content requires at least one filter';
     END IF;
 
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.street_address,
+            a.city,
+            a.country,
+            a.unit,
+            a.building,
+            a.province,
+            a.locality,
+            a.postal_code,
+            a.street_name,
+            a.building_number,
+            a.attrs
+        FROM public.location a
+        JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id
+        WHERE
+            (v_street_address  IS NULL OR a.street_address  = v_street_address)
+        AND (v_city            IS NULL OR a.city            = v_city)
+        AND (v_country         IS NULL OR a.country         = v_country)
+        AND (v_unit            IS NULL OR a.unit            = v_unit)
+        AND (v_building        IS NULL OR a.building        = v_building)
+        AND (v_province        IS NULL OR a.province        = v_province)
+        AND (v_locality        IS NULL OR a.locality        = v_locality)
+        AND (v_postal_code     IS NULL OR a.postal_code     = v_postal_code)
+        AND (v_street_name     IS NULL OR a.street_name     = v_street_name)
+        AND (v_building_number IS NULL OR a.building_number = v_building_number)
+        AND (_since            IS NULL OR a.updated_at      >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.street_address,
+            a.city,
+            a.country,
+            a.unit,
+            a.building,
+            a.province,
+            a.locality,
+            a.postal_code,
+            a.street_name,
+            a.building_number,
+            a.attrs
+        FROM public.location a
+        JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id
+        WHERE
+            (v_street_address  IS NULL OR a.street_address  = v_street_address)
+        AND (v_city            IS NULL OR a.city            = v_city)
+        AND (v_country         IS NULL OR a.country         = v_country)
+        AND (v_unit            IS NULL OR a.unit            = v_unit)
+        AND (v_building        IS NULL OR a.building        = v_building)
+        AND (v_province        IS NULL OR a.province        = v_province)
+        AND (v_locality        IS NULL OR a.locality        = v_locality)
+        AND (v_postal_code     IS NULL OR a.postal_code     = v_postal_code)
+        AND (v_street_name     IS NULL OR a.street_name     = v_street_name)
+        AND (v_building_number IS NULL OR a.building_number = v_building_number)
+        AND (_since            IS NULL OR a.updated_at      >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
     END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-        WHEN 5 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5];
-        WHEN 6 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6];
-        WHEN 7 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7];
-        WHEN 8 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8];
-        WHEN 9 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8], v_params[9];
-        WHEN 10 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8], v_params[9], v_params[10];
-        WHEN 11 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7], v_params[8], v_params[9], v_params[10], v_params[11];
-    END CASE;
-
-    RETURN;
 END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.location_updated_since(
     _since timestamp without time zone,
@@ -379,30 +340,59 @@ CREATE OR REPLACE FUNCTION public.location_updated_since(
     building_number text,
     attrs           jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.street_address,
-        a.city,
-        a.country,
-        a.unit,
-        a.building,
-        a.province,
-        a.locality,
-        a.postal_code,
-        a.street_name,
-        a.building_number,
-        a.attrs
-    FROM public.location a
-    JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.street_address,
+            a.city,
+            a.country,
+            a.unit,
+            a.building,
+            a.province,
+            a.locality,
+            a.postal_code,
+            a.street_name,
+            a.building_number,
+            a.attrs
+        FROM public.location a
+        JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.street_address,
+            a.city,
+            a.country,
+            a.unit,
+            a.building,
+            a.province,
+            a.locality,
+            a.postal_code,
+            a.street_name,
+            a.building_number,
+            a.attrs
+        FROM public.location a
+        JOIN public.entity e ON e.table_name = 'public.location'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
@@ -411,7 +401,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.location_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.location_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.location_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.location_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.location_upsert_json(jsonb);

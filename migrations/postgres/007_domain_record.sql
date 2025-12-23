@@ -38,7 +38,7 @@ DECLARE
     v_domain text;
     v_row    bigint;
 BEGIN
-    v_domain := (_rec->>'domain');
+    v_domain := NULLIF(_rec->>'domain', '');
 
     -- 1) Upsert into domainrecord.
     v_row := public.domainrecord_upsert_json(_rec);
@@ -127,7 +127,11 @@ BEGIN
     v_expiration_date := NULLIF(_rec->>'expiration_date', '')::timestamp;
     v_whois_server    := (_rec->>'whois_server');
     v_object_id       := (_rec->>'id');
-    v_dnssec          := (_rec->>'dnssec')::boolean;
+    v_dnssec          := CASE
+                            WHEN _rec ? 'dnssec' AND NULLIF(_rec->>'dnssec','') IS NOT NULL
+                                THEN (_rec->>'dnssec')::boolean
+                            ELSE NULL
+                         END;
 
     -- record_status as JSON array of text, if present
     IF _rec ? 'record_status' THEN
@@ -177,12 +181,14 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: domain, name (record_name), punycode, extension, id (object_id), whois_server
+-- Requires at least one supported filter to be present.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.domainrecord_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
+) RETURNS TABLE (
     entity_id    bigint,
     id           bigint,
     created_at   timestamp without time zone,
@@ -195,21 +201,20 @@ CREATE OR REPLACE FUNCTION public.domainrecord_find_by_content(
     object_id    text,
     attrs        jsonb
 )
-LANGUAGE plpgsql
+LANGUAGE sql
 STABLE
 AS $fn$
-DECLARE
-    v_domain       text;
-    v_record_name  text;
-    v_punycode     text;
-    v_extension    text;
-    v_whois_server citext;
-    v_object_id    text;
-    v_count        integer := 0;
-    v_params       text[]  := array[]::text[];
-    v_sql          text;
-BEGIN
-    v_sql := $Q$
+    WITH f AS (
+        SELECT
+            NULLIF(_filters->>'domain', '')               AS domain_text,
+            NULLIF(_filters->>'name', '')                 AS record_name,
+            NULLIF(_filters->>'punycode', '')             AS punycode,
+            NULLIF(_filters->>'extension', '')            AS extension,
+            NULLIF(_filters->>'id', '')                   AS object_id,
+            NULLIF(_filters->>'whois_server', '')::citext AS whois_server,
+            _since                                        AS since_ts,
+            GREATEST(COALESCE(_limit, 0), 0)              AS lim
+    )
     SELECT
         e.entity_id,
         a.id,
@@ -223,82 +228,27 @@ BEGIN
         a.object_id,
         a.attrs
     FROM public.domainrecord a
-    JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_domain       := NULLIF(_filters->>'domain', '');
-    v_record_name  := NULLIF(_filters->>'name', '');
-    v_punycode     := NULLIF(_filters->>'punycode', '');
-    v_extension    := NULLIF(_filters->>'extension', '');
-    v_object_id    := NULLIF(_filters->>'id', '');
-    v_whois_server := NULLIF(_filters->>'whois_server', '')::citext;
-
-    -- 2) Build the params array from the filters
-    IF v_domain IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_domain);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.domain', v_count);
-    END IF;
-
-    IF v_record_name IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_record_name);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.record_name', v_count);
-    END IF;
-
-    IF v_punycode IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_punycode);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.punycode', v_count);
-    END IF;
-
-    IF v_extension IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_extension);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.extension', v_count);
-    END IF;
-
-    IF v_object_id IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_object_id);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.object_id', v_count);
-    END IF;
-
-    IF v_whois_server IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_whois_server::text);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.whois_server', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
-        RAISE EXCEPTION 'domainrecord_find_by_content requires at least one filter';
-    END IF;
-
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
-    END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-        WHEN 5 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5];
-        WHEN 6 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6];
-        WHEN 7 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4], v_params[5], v_params[6], v_params[7];
-    END CASE;
-
-    RETURN;
-END
+    JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
+    CROSS JOIN f
+    WHERE
+        -- require at least one supported filter
+        (
+            f.domain_text  IS NOT NULL OR
+            f.record_name  IS NOT NULL OR
+            f.punycode     IS NOT NULL OR
+            f.extension    IS NOT NULL OR
+            f.object_id    IS NOT NULL OR
+            f.whois_server IS NOT NULL
+        )
+      AND (f.domain_text  IS NULL OR a.domain = f.domain_text::citext)
+      AND (f.record_name  IS NULL OR a.record_name = f.record_name)
+      AND (f.punycode     IS NULL OR a.punycode = f.punycode)
+      AND (f.extension    IS NULL OR a.extension = f.extension)
+      AND (f.object_id    IS NULL OR a.object_id = f.object_id)
+      AND (f.whois_server IS NULL OR a.whois_server = f.whois_server)
+      AND (f.since_ts     IS NULL OR a.updated_at >= f.since_ts)
+    ORDER BY a.updated_at DESC, a.id DESC
+    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
 $fn$;
 -- +migrate StatementEnd
 
@@ -323,6 +273,9 @@ CREATE OR REPLACE FUNCTION public.domainrecord_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
+    WITH p AS (
+        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
     SELECT
         e.entity_id,
         a.id,
@@ -337,9 +290,10 @@ AS $fn$
         a.attrs
     FROM public.domainrecord a
     JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
+    CROSS JOIN p
     WHERE a.updated_at >= _since
     ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
 $fn$;
 -- +migrate StatementEnd
 
@@ -348,7 +302,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.domainrecord_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.domainrecord_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.domainrecord_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.domainrecord_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.domainrecord_upsert_json(jsonb);

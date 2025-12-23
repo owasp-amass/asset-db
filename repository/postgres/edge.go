@@ -284,10 +284,11 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 	var out []*dbt.Edge
 	for result.Rows.Next() {
 		var c, u time.Time
-		var etype, raw string
+		var etype, label, raw string
 		var rowid, fromid, toid int64
 
-		if err := result.Rows.Scan(&rowid, c, u, &etype, &fromid, &toid, &raw); err != nil {
+		if err := result.Rows.Scan(&rowid, &c, &u,
+			&etype, &fromid, &toid, &label, &raw); err != nil {
 			return nil, err
 		}
 

@@ -10,16 +10,14 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	neomigrations "github.com/owasp-amass/asset-db/migrations/neo4j"
-
-	//pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
+	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/neo4j"
+	"github.com/owasp-amass/asset-db/repository/postgres"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
-	//"gorm.io/driver/postgres"
 )
 
 // New creates a new assetDB instance.
@@ -49,8 +47,8 @@ func migrateDatabase(dbtype string, repo repository.Repository) error {
 		fallthrough
 	case sqlite3.SQLiteMemory:
 		return sqliteMigrate(repo, sqlitemigrations.Migrations())
-	/*case sqlrepo.Postgres:
-	return sqlMigrate("postgres", postgres.Open(dsn), pgmigrations.Migrations())*/
+	case postgres.Postgres:
+		return postgresMigrate(repo, pgmigrations.Migrations())
 	case neo4j.Neo4j:
 		return neoMigrate(repo)
 	}
@@ -70,6 +68,22 @@ func sqliteMigrate(repo repository.Repository, fs embed.FS) error {
 	db := r.DB
 
 	_, err := migrate.Exec(db, "sqlite3", migsrc, migrate.Up)
+	return err
+}
+
+func postgresMigrate(repo repository.Repository, fs embed.FS) error {
+	migsrc := migrate.EmbedFileSystemMigrationSource{
+		FileSystem: fs,
+		Root:       "/",
+	}
+
+	r, ok := repo.(*postgres.PostgresRepository)
+	if !ok {
+		return fmt.Errorf("failed to cast repository to postgresRepository")
+	}
+	db := r.DB
+
+	_, err := migrate.Exec(db, "postgres", migsrc, migrate.Up)
 	return err
 }
 

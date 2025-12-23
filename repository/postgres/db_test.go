@@ -7,8 +7,6 @@ package postgres
 import (
 	"context"
 	"embed"
-	"log"
-	"testing"
 	"time"
 
 	postgresmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
@@ -19,45 +17,34 @@ import (
 
 type PostgresRepoTestSuite struct {
 	suite.Suite
-	pgContainer *testhelpers.PostgresContainer
-	db          *PostgresRepository
-	ctx         context.Context
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+	ctx       context.Context
 }
 
-func TestPostgresRepoTestSuite(t *testing.T) {
-	suite.Run(t, new(PostgresRepoTestSuite))
-}
-
-func (suite *PostgresRepoTestSuite) SetupSuite() {
-	suite.ctx = context.Background()
-	pgContainer, err := testhelpers.CreatePostgresContainer(suite.ctx)
+func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresRepository, error) {
+	pgContainer, err := testhelpers.CreatePostgresContainer(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
 	}
 
-	suite.pgContainer = pgContainer
-	repository, err := New("postgres", suite.pgContainer.ConnectionString)
+	repository, err := New("postgres", pgContainer.ConnectionString)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
 	}
 
-	suite.db = repository
-	if err := postgresMigrate(suite.db, postgresmigrations.Migrations()); err != nil {
-		log.Fatal(err)
+	db := repository
+	if err := postgresMigrate(db, postgresmigrations.Migrations()); err != nil {
+		return nil, nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := suite.db.Prepare(ctx); err != nil {
-		log.Fatal(err)
+	if err := db.Prepare(ctx); err != nil {
+		return nil, nil, err
 	}
-}
-
-func (suite *PostgresRepoTestSuite) TearDownSuite() {
-	if err := suite.pgContainer.Terminate(suite.ctx); err != nil {
-		log.Fatalf("error terminating postgres container: %s", err)
-	}
+	return pgContainer, db, nil
 }
 
 func postgresMigrate(repo *PostgresRepository, fs embed.FS) error {

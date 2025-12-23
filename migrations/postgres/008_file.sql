@@ -32,7 +32,7 @@ DECLARE
     v_url text;
     v_row bigint;
 BEGIN
-    v_url := (_rec->>'url');
+    v_url := NULLIF(_rec->>'url', '');
 
     -- 1) Upsert into file.
     v_row := public.file_upsert_json(_rec);
@@ -123,103 +123,13 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
+-- Supported keys in _filters: url (file_url), name (basename), type (file_type)
+-- Requires at least one supported filter to be present.
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.file_find_by_content(
-    _filters jsonb, 
+    _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
     _limit   integer DEFAULT 0
-) RETURNS SETOF TABLE (
-    entity_id  bigint,
-    id         bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    file_url   text,
-    basename   text,
-    file_type  text,
-    attrs      jsonb
-)
-LANGUAGE plpgsql
-STABLE
-AS $fn$
-DECLARE
-    v_file_url  text;
-    v_basename  text;
-    v_file_type text;
-    v_count     integer := 0;
-    v_params    text[]  := array[]::text[];
-    v_sql       text;
-BEGIN
-    v_sql := $Q$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.file_url,
-        a.basename,
-        a.file_type,
-        a.attrs
-    FROM public.file a
-    JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id WHERE TRUE$Q$;
-
-    -- 1) Extract filters from JSONB
-    v_file_url  := NULLIF(_filters->>'url', '');
-    v_basename  := NULLIF(_filters->>'name', '');
-    v_file_type := NULLIF(_filters->>'type', '');
-
-    -- 2) Build the params array from the filters
-    IF v_file_url IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_file_url);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.file_url', v_count);
-    END IF;
-
-    IF v_basename IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_basename);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.basename', v_count);
-    END IF;
-
-    IF v_file_type IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, v_file_type);
-        v_sql    := v_sql || format(' AND %I = $%s', 'a.file_type', v_count);
-    END IF;
-
-    IF v_count = 0 THEN
-        RAISE EXCEPTION 'file_find_by_content requires at least one filter';
-    END IF;
-
-    IF _since IS NOT NULL THEN
-        v_count  := v_count + 1;
-        v_params := array_append(v_params, _since::text);
-        v_sql    := v_sql || format(' AND %I >= $%s', 'a.updated_at', v_count);
-    END IF;
-
-    -- 3) Add the ORDER BY clause
-    v_sql := v_sql || ' ORDER BY a.updated_at DESC, a.id DESC';
-    IF _limit > 0 THEN
-        v_sql := v_sql || format(' LIMIT %s', _limit);
-    END IF;
-
-    -- 4) Execute dynamic SQL and return results
-    CASE v_count
-        WHEN 1 THEN RETURN QUERY EXECUTE v_sql USING v_params[1];
-        WHEN 2 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2];
-        WHEN 3 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3];
-        WHEN 4 THEN RETURN QUERY EXECUTE v_sql USING v_params[1], v_params[2], v_params[3], v_params[4];
-    END CASE;
-
-    RETURN;
-END
-$fn$;
--- +migrate StatementEnd
-
--- Rows updated since a given timestamp
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.file_updated_since(
-    _since timestamp without time zone,
-    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -233,6 +143,14 @@ CREATE OR REPLACE FUNCTION public.file_updated_since(
 LANGUAGE sql
 STABLE
 AS $fn$
+    WITH f AS (
+        SELECT
+            NULLIF(_filters->>'url',  '')    AS file_url,
+            NULLIF(_filters->>'name', '')    AS basename,
+            NULLIF(_filters->>'type', '')    AS file_type,
+            _since                           AS since_ts,
+            GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
     SELECT
         e.entity_id,
         a.id,
@@ -244,9 +162,55 @@ AS $fn$
         a.attrs
     FROM public.file a
     JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
+    CROSS JOIN f
+    WHERE
+        -- require at least one supported filter
+        (f.file_url IS NOT NULL OR f.basename IS NOT NULL OR f.file_type IS NOT NULL)
+      AND (f.file_url  IS NULL OR a.file_url  = f.file_url)
+      AND (f.basename  IS NULL OR a.basename  = f.basename)
+      AND (f.file_type IS NULL OR a.file_type = f.file_type)
+      AND (f.since_ts  IS NULL OR a.updated_at >= f.since_ts)
+    ORDER BY a.updated_at DESC, a.id DESC
+    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+$fn$;
+-- +migrate StatementEnd
+
+-- Rows updated since a given timestamp
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.file_updated_since(
+    _since timestamp without time zone,
+    _limit integer DEFAULT 0
+) RETURNS TABLE (
+    entity_id  bigint,
+    id         bigint,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    file_url   text,
+    basename   text,
+    file_type  text,
+    attrs      jsonb
+)
+LANGUAGE sql
+STABLE
+AS $fn$
+    WITH p AS (
+        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
+    )
+    SELECT
+        e.entity_id,
+        a.id,
+        a.created_at,
+        a.updated_at,
+        a.file_url,
+        a.basename,
+        a.file_type,
+        a.attrs
+    FROM public.file a
+    JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
+    CROSS JOIN p
     WHERE a.updated_at >= _since
     ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT _limit;
+    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
 $fn$;
 -- +migrate StatementEnd
 
@@ -255,7 +219,7 @@ COMMIT;
 -- +migrate Down
 
 DROP FUNCTION IF EXISTS public.file_updated_since(timestamp without time zone, integer);
-DROP FUNCTION IF EXISTS public.file_find_by_content(jsonb, timestamp without time zone);
+DROP FUNCTION IF EXISTS public.file_find_by_content(jsonb, timestamp without time zone, integer);
 DROP FUNCTION IF EXISTS public.file_get_by_id(bigint);
 
 DROP FUNCTION IF EXISTS public.file_upsert_json(jsonb);
