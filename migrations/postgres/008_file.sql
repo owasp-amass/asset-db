@@ -125,11 +125,12 @@ $fn$;
 -- Rows matching the provided filters and since timestamp
 -- Supported keys in _filters: url (file_url), name (basename), type (file_type)
 -- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.file_find_by_content(
     _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
+    _limit   integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -140,46 +141,75 @@ CREATE OR REPLACE FUNCTION public.file_find_by_content(
     file_type  text,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH f AS (
+DECLARE
+    v_file_url  text;
+    v_basename  text;
+    v_file_type text;
+    v_limit     integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    -- Extract filters
+    v_file_url  := NULLIF(_filters->>'url',  '');
+    v_basename  := NULLIF(_filters->>'name', '');
+    v_file_type := NULLIF(_filters->>'type', '');
+
+    IF v_file_url IS NULL AND v_basename IS NULL AND v_file_type IS NULL THEN
+        RAISE EXCEPTION 'file_find_by_content requires at least one filter';
+    END IF;
+
+    IF v_limit IS NULL THEN
+        RETURN QUERY
         SELECT
-            NULLIF(_filters->>'url',  '')    AS file_url,
-            NULLIF(_filters->>'name', '')    AS basename,
-            NULLIF(_filters->>'type', '')    AS file_type,
-            _since                           AS since_ts,
-            GREATEST(COALESCE(_limit, 0), 0) AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.file_url,
-        a.basename,
-        a.file_type,
-        a.attrs
-    FROM public.file a
-    JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
-    CROSS JOIN f
-    WHERE
-        -- require at least one supported filter
-        (f.file_url IS NOT NULL OR f.basename IS NOT NULL OR f.file_type IS NOT NULL)
-      AND (f.file_url  IS NULL OR a.file_url  = f.file_url)
-      AND (f.basename  IS NULL OR a.basename  = f.basename)
-      AND (f.file_type IS NULL OR a.file_type = f.file_type)
-      AND (f.since_ts  IS NULL OR a.updated_at >= f.since_ts)
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.file_url,
+            a.basename,
+            a.file_type,
+            a.attrs
+        FROM public.file a
+        JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
+        WHERE
+            (v_file_url  IS NULL OR a.file_url  = v_file_url)
+        AND (v_basename  IS NULL OR a.basename  = v_basename)
+        AND (v_file_type IS NULL OR a.file_type = v_file_type)
+        AND (_since      IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.file_url,
+            a.basename,
+            a.file_type,
+            a.attrs
+        FROM public.file a
+        JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
+        WHERE
+            (v_file_url  IS NULL OR a.file_url  = v_file_url)
+        AND (v_basename  IS NULL OR a.basename  = v_basename)
+        AND (v_file_type IS NULL OR a.file_type = v_file_type)
+        AND (_since      IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
+
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.file_updated_since(
     _since timestamp without time zone,
-    _limit integer DEFAULT 0
+    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -190,27 +220,45 @@ CREATE OR REPLACE FUNCTION public.file_updated_since(
     file_type  text,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH p AS (
-        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.file_url,
-        a.basename,
-        a.file_type,
-        a.attrs
-    FROM public.file a
-    JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
-    CROSS JOIN p
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.file_url,
+            a.basename,
+            a.file_type,
+            a.attrs
+        FROM public.file a
+        JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.file_url,
+            a.basename,
+            a.file_type,
+            a.attrs
+        FROM public.file a
+        JOIN public.entity e ON e.table_name = 'public.file'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 

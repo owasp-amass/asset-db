@@ -143,13 +143,14 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
--- Supported keys in _filters: unique_id, id, id_type
+-- Supported keys in _filters: unique_id, id (id_value), id_type
 -- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.identifier_find_by_content(
     _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
+    _limit   integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -160,46 +161,73 @@ CREATE OR REPLACE FUNCTION public.identifier_find_by_content(
     id_type    text,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH f AS (
+DECLARE
+    v_unique_id text;
+    v_id_value  text;
+    v_id_type   text;
+    v_limit     integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    v_unique_id := NULLIF(_filters->>'unique_id', '');
+    v_id_value  := NULLIF(_filters->>'id', '');
+    v_id_type   := NULLIF(_filters->>'id_type', '');
+
+    IF v_unique_id IS NULL AND v_id_value IS NULL AND v_id_type IS NULL THEN
+        RAISE EXCEPTION 'identifier_find_by_content requires at least one filter';
+    END IF;
+
+    IF v_limit IS NULL OR v_limit < 0 THEN
+        RETURN QUERY
         SELECT
-            NULLIF(_filters->>'unique_id','') AS unique_id,
-            NULLIF(_filters->>'id','')        AS id_value,
-            NULLIF(_filters->>'id_type','')   AS id_type,
-            _since                            AS since_ts,
-            GREATEST(COALESCE(_limit, 0), 0)  AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.unique_id,
-        a.id_value,
-        a.id_type,
-        a.attrs
-    FROM public.identifier a
-    JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
-    CROSS JOIN f
-    WHERE
-        -- require at least one supported filter
-        (f.unique_id IS NOT NULL OR f.id_value IS NOT NULL OR f.id_type IS NOT NULL)
-      AND (f.unique_id IS NULL OR a.unique_id = f.unique_id)
-      AND (f.id_value  IS NULL OR a.id_value  = f.id_value)
-      AND (f.id_type   IS NULL OR a.id_type   = f.id_type)
-      AND (f.since_ts  IS NULL OR a.updated_at >= f.since_ts)
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.id_value,
+            a.id_type,
+            a.attrs
+        FROM public.identifier a
+        JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
+        WHERE
+            (v_unique_id IS NULL OR a.unique_id = v_unique_id)
+        AND (v_id_value  IS NULL OR a.id_value  = v_id_value)
+        AND (v_id_type   IS NULL OR a.id_type   = v_id_type)
+        AND (_since      IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.id_value,
+            a.id_type,
+            a.attrs
+        FROM public.identifier a
+        JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
+        WHERE
+            (v_unique_id IS NULL OR a.unique_id = v_unique_id)
+        AND (v_id_value  IS NULL OR a.id_value  = v_id_value)
+        AND (v_id_type   IS NULL OR a.id_type   = v_id_type)
+        AND (_since      IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.identifier_updated_since(
     _since timestamp without time zone,
-    _limit integer DEFAULT 0
+    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -210,27 +238,45 @@ CREATE OR REPLACE FUNCTION public.identifier_updated_since(
     id_type    text,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH p AS (
-        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.unique_id,
-        a.id_value,
-        a.id_type,
-        a.attrs
-    FROM public.identifier a
-    JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
-    CROSS JOIN p
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL OR v_limit < 0 THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.id_value,
+            a.id_type,
+            a.attrs
+        FROM public.identifier a
+        JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.unique_id,
+            a.id_value,
+            a.id_type,
+            a.attrs
+        FROM public.identifier a
+        JOIN public.entity e ON e.table_name = 'public.identifier'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 

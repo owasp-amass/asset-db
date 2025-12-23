@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -252,12 +253,12 @@ func (w *worker) run() {
 			}
 
 			if err := wj.GetCtx().Err(); err != nil {
-				errToJob(wj, err)
+				errToJob(wj, fmt.Errorf("queueCheck context error: %w", err))
 				continue
 			}
 
 			if wj.GetName() == "" || wj.GetSQLText() == "" {
-				errToJob(wj, errors.New("invalid write job"))
+				errToJob(wj, errors.New("invalid job parameters"))
 				continue
 			}
 
@@ -316,7 +317,7 @@ func (w *worker) flushJobs(jobs []job) ([]job, error) {
 	var jobResults []any
 	for i, job := range jobs {
 		if err := job.GetCtx().Err(); err != nil {
-			errToJob(job, err)
+			errToJob(job, fmt.Errorf("flushJobs context error: %w", err))
 			continue
 		}
 

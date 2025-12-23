@@ -181,13 +181,15 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
--- Supported keys in _filters: domain, name (record_name), punycode, extension, id (object_id), whois_server
+-- Supported keys in _filters: domain, name (record_name), 
+-- punycode, extension, id (object_id), whois_server
 -- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.domainrecord_find_by_content(
     _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
+    _limit   integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id    bigint,
     id           bigint,
@@ -201,58 +203,94 @@ CREATE OR REPLACE FUNCTION public.domainrecord_find_by_content(
     object_id    text,
     attrs        jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH f AS (
+DECLARE
+    v_domain       citext;
+    v_record_name  text;
+    v_punycode     text;
+    v_extension    text;
+    v_object_id    text;
+    v_whois_server citext;
+    v_limit        integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    -- Extract filters
+    v_domain       := NULLIF(_filters->>'domain', '')::citext;
+    v_record_name  := NULLIF(_filters->>'name', '');
+    v_punycode     := NULLIF(_filters->>'punycode', '');
+    v_extension    := NULLIF(_filters->>'extension', '');
+    v_object_id    := NULLIF(_filters->>'id', '');
+    v_whois_server := NULLIF(_filters->>'whois_server', '')::citext;
+
+    IF v_domain IS NULL
+       AND v_record_name IS NULL
+       AND v_punycode IS NULL
+       AND v_extension IS NULL
+       AND v_object_id IS NULL
+       AND v_whois_server IS NULL
+    THEN
+        RAISE EXCEPTION 'domainrecord_find_by_content requires at least one filter';
+    END IF;
+
+    IF v_limit IS NULL THEN
+        RETURN QUERY
         SELECT
-            NULLIF(_filters->>'domain', '')               AS domain_text,
-            NULLIF(_filters->>'name', '')                 AS record_name,
-            NULLIF(_filters->>'punycode', '')             AS punycode,
-            NULLIF(_filters->>'extension', '')            AS extension,
-            NULLIF(_filters->>'id', '')                   AS object_id,
-            NULLIF(_filters->>'whois_server', '')::citext AS whois_server,
-            _since                                        AS since_ts,
-            GREATEST(COALESCE(_limit, 0), 0)              AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.domain,
-        a.record_name,
-        a.punycode,
-        a.extension,
-        a.whois_server,
-        a.object_id,
-        a.attrs
-    FROM public.domainrecord a
-    JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
-    CROSS JOIN f
-    WHERE
-        -- require at least one supported filter
-        (
-            f.domain_text  IS NOT NULL OR
-            f.record_name  IS NOT NULL OR
-            f.punycode     IS NOT NULL OR
-            f.extension    IS NOT NULL OR
-            f.object_id    IS NOT NULL OR
-            f.whois_server IS NOT NULL
-        )
-      AND (f.domain_text  IS NULL OR a.domain = f.domain_text::citext)
-      AND (f.record_name  IS NULL OR a.record_name = f.record_name)
-      AND (f.punycode     IS NULL OR a.punycode = f.punycode)
-      AND (f.extension    IS NULL OR a.extension = f.extension)
-      AND (f.object_id    IS NULL OR a.object_id = f.object_id)
-      AND (f.whois_server IS NULL OR a.whois_server = f.whois_server)
-      AND (f.since_ts     IS NULL OR a.updated_at >= f.since_ts)
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.domain,
+            a.record_name,
+            a.punycode,
+            a.extension,
+            a.whois_server,
+            a.object_id,
+            a.attrs
+        FROM public.domainrecord a
+        JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
+        WHERE
+            (v_domain       IS NULL OR a.domain       = v_domain)
+        AND (v_record_name  IS NULL OR a.record_name  = v_record_name)
+        AND (v_punycode     IS NULL OR a.punycode     = v_punycode)
+        AND (v_extension    IS NULL OR a.extension    = v_extension)
+        AND (v_object_id    IS NULL OR a.object_id    = v_object_id)
+        AND (v_whois_server IS NULL OR a.whois_server = v_whois_server)
+        AND (_since         IS NULL OR a.updated_at   >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.domain,
+            a.record_name,
+            a.punycode,
+            a.extension,
+            a.whois_server,
+            a.object_id,
+            a.attrs
+        FROM public.domainrecord a
+        JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
+        WHERE
+            (v_domain       IS NULL OR a.domain       = v_domain)
+        AND (v_record_name  IS NULL OR a.record_name  = v_record_name)
+        AND (v_punycode     IS NULL OR a.punycode     = v_punycode)
+        AND (v_extension    IS NULL OR a.extension    = v_extension)
+        AND (v_object_id    IS NULL OR a.object_id    = v_object_id)
+        AND (v_whois_server IS NULL OR a.whois_server = v_whois_server)
+        AND (_since         IS NULL OR a.updated_at   >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.domainrecord_updated_since(
     _since timestamp without time zone,
@@ -270,30 +308,51 @@ CREATE OR REPLACE FUNCTION public.domainrecord_updated_since(
     object_id    text,
     attrs        jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH p AS (
-        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.domain,
-        a.record_name,
-        a.punycode,
-        a.extension,
-        a.whois_server,
-        a.object_id,
-        a.attrs
-    FROM public.domainrecord a
-    JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
-    CROSS JOIN p
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.domain,
+            a.record_name,
+            a.punycode,
+            a.extension,
+            a.whois_server,
+            a.object_id,
+            a.attrs
+        FROM public.domainrecord a
+        JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.domain,
+            a.record_name,
+            a.punycode,
+            a.extension,
+            a.whois_server,
+            a.object_id,
+            a.attrs
+        FROM public.domainrecord a
+        JOIN public.entity e ON e.table_name = 'public.domainrecord'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 

@@ -125,6 +125,7 @@ $fn$;
 -- Rows matching the provided filters and since timestamp
 -- Supported keys in _filters: address
 -- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.ipaddress_find_by_content(
     _filters jsonb,
@@ -138,36 +139,57 @@ CREATE OR REPLACE FUNCTION public.ipaddress_find_by_content(
     ip_address inet,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH f AS (
+DECLARE
+    v_address inet;
+    v_limit   integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    v_address := CASE
+                   WHEN NULLIF(_filters->>'address', '') IS NOT NULL
+                     THEN NULLIF(_filters->>'address', '')::inet
+                   ELSE NULL
+                 END;
+
+    IF v_address IS NULL THEN
+        RAISE EXCEPTION 'ipaddress_find_by_content requires at least one filter';
+    END IF;
+
+    IF v_limit IS NULL OR v_limit < 0 THEN
+        RETURN QUERY
         SELECT
-            NULLIF(_filters->>'address', '')::inet AS address,
-            _since                                 AS since_ts,
-            NULLIF(_limit, 0)                      AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.ip_address,
-        a.attrs
-    FROM public.ipaddress a
-    JOIN public.entity e ON e.table_name = 'public.ipaddress'::citext AND e.row_id = a.id
-    CROSS JOIN f
-    WHERE
-        -- require at least one supported filter
-        (f.address IS NOT NULL)
-      AND (f.address IS NULL OR a.ip_address = f.address)
-      AND (f.since_ts IS NULL OR a.updated_at >= f.since_ts)
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT f.lim;
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.ip_address,
+            a.attrs
+        FROM public.ipaddress a
+        JOIN public.entity e ON e.table_name = 'public.ipaddress'::citext AND e.row_id = a.id
+        WHERE a.ip_address = v_address AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.ip_address,
+            a.attrs
+        FROM public.ipaddress a
+        JOIN public.entity e ON e.table_name = 'public.ipaddress'::citext AND e.row_id = a.id
+        WHERE a.ip_address = v_address AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.ipaddress_updated_since(
     _since timestamp without time zone,
@@ -180,21 +202,41 @@ CREATE OR REPLACE FUNCTION public.ipaddress_updated_since(
     ip_address inet,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.ip_address,
-        a.attrs
-    FROM public.ipaddress a
-    JOIN public.entity e ON e.table_name = 'public.ipaddress'::citext AND e.row_id = a.id
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT NULLIF(_limit, 0);
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL OR v_limit < 0 THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.ip_address,
+            a.attrs
+        FROM public.ipaddress a
+        JOIN public.entity e ON e.table_name = 'public.ipaddress'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.ip_address,
+            a.attrs
+        FROM public.ipaddress a
+        JOIN public.entity e ON e.table_name = 'public.ipaddress'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 

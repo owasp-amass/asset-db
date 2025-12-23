@@ -108,11 +108,12 @@ $fn$;
 -- Rows matching the provided filters and since timestamp
 -- Supported keys in _filters: number (asn)
 -- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.autonomoussystem_find_by_content(
     _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
+    _limit   integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -121,40 +122,57 @@ CREATE OR REPLACE FUNCTION public.autonomoussystem_find_by_content(
     asn        integer,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH f AS (
+DECLARE
+    v_asn   integer;
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    v_asn := NULLIF(_filters->>'number', '')::integer;
+
+    IF v_asn IS NULL THEN
+        RAISE EXCEPTION 'autonomoussystem_find_by_content requires at least one filter';
+    END IF;
+
+    IF v_limit IS NULL THEN
+        RETURN QUERY
         SELECT
-            NULLIF(_filters->>'number', '')::integer AS asn,
-            _since                                   AS since_ts,
-            GREATEST(COALESCE(_limit, 0), 0)         AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.asn,
-        a.attrs
-    FROM public.autonomoussystem a
-    JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
-    CROSS JOIN f
-    WHERE
-        -- require at least one supported filter
-        (f.asn IS NOT NULL)
-      AND (a.asn = f.asn)
-      AND (f.since_ts IS NULL OR a.updated_at >= f.since_ts)
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.asn,
+            a.attrs
+        FROM public.autonomoussystem a
+        JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
+        WHERE a.asn = v_asn AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.asn,
+            a.attrs
+        FROM public.autonomoussystem a
+        JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
+        WHERE a.asn = v_asn AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(
     _since timestamp without time zone,
-    _limit integer DEFAULT 0
+    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id  bigint,
     id         bigint,
@@ -163,25 +181,41 @@ CREATE OR REPLACE FUNCTION public.autonomoussystem_updated_since(
     asn        integer,
     attrs      jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH p AS (
-        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.asn,
-        a.attrs
-    FROM public.autonomoussystem a
-    JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
-    CROSS JOIN p
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.asn,
+            a.attrs
+        FROM public.autonomoussystem a
+        JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.asn,
+            a.attrs
+        FROM public.autonomoussystem a
+        JOIN public.entity e ON e.table_name = 'public.autonomoussystem'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 

@@ -108,11 +108,12 @@ $fn$;
 -- Rows matching the provided filters and since timestamp
 -- Supported keys in _filters: discovered_at
 -- Requires at least one supported filter to be present.
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.contactrecord_find_by_content(
     _filters jsonb,
     _since   timestamp without time zone DEFAULT NULL,
-    _limit   integer DEFAULT 0
+    _limit   integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id     bigint,
     id            bigint,
@@ -121,39 +122,57 @@ CREATE OR REPLACE FUNCTION public.contactrecord_find_by_content(
     discovered_at text,
     attrs         jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH f AS (
+DECLARE
+    v_discovered_at text;
+    v_limit         integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    v_discovered_at := NULLIF(_filters->>'discovered_at', '');
+
+    IF v_discovered_at IS NULL THEN
+        RAISE EXCEPTION 'contactrecord_find_by_content requires at least one filter';
+    END IF;
+
+    IF v_limit IS NULL THEN
+        RETURN QUERY
         SELECT
-            NULLIF(_filters->>'discovered_at', '') AS discovered_at,
-            _since                                 AS since_ts,
-            GREATEST(COALESCE(_limit, 0), 0)       AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.discovered_at,
-        a.attrs
-    FROM public.contactrecord a
-    JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
-    CROSS JOIN f
-    WHERE
-        (f.discovered_at IS NOT NULL)
-      AND (a.discovered_at = f.discovered_at)
-      AND (f.since_ts IS NULL OR a.updated_at >= f.since_ts)
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM f) > 0 THEN (SELECT lim FROM f) ELSE ALL END;
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.discovered_at,
+            a.attrs
+        FROM public.contactrecord a
+        JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
+        WHERE a.discovered_at = v_discovered_at AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.discovered_at,
+            a.attrs
+        FROM public.contactrecord a
+        JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
+        WHERE a.discovered_at = v_discovered_at AND (_since IS NULL OR a.updated_at >= _since)
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
 -- Rows updated since a given timestamp
+-- _limit = NULL means unlimited (0 treated as unlimited)
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.contactrecord_updated_since(
     _since timestamp without time zone,
-    _limit integer DEFAULT 0
+    _limit integer DEFAULT NULL
 ) RETURNS TABLE (
     entity_id     bigint,
     id            bigint,
@@ -162,25 +181,41 @@ CREATE OR REPLACE FUNCTION public.contactrecord_updated_since(
     discovered_at text,
     attrs         jsonb
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 AS $fn$
-    WITH p AS (
-        SELECT GREATEST(COALESCE(_limit, 0), 0) AS lim
-    )
-    SELECT
-        e.entity_id,
-        a.id,
-        a.created_at,
-        a.updated_at,
-        a.discovered_at,
-        a.attrs
-    FROM public.contactrecord a
-    JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
-    CROSS JOIN p
-    WHERE a.updated_at >= _since
-    ORDER BY a.updated_at DESC, a.id DESC
-    LIMIT CASE WHEN (SELECT lim FROM p) > 0 THEN (SELECT lim FROM p) ELSE ALL END;
+DECLARE
+    v_limit integer := NULLIF(_limit, 0); -- treat 0 as unlimited
+BEGIN
+    IF v_limit IS NULL THEN
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.discovered_at,
+            a.attrs
+        FROM public.contactrecord a
+        JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC;
+    ELSE
+        RETURN QUERY
+        SELECT
+            e.entity_id,
+            a.id,
+            a.created_at,
+            a.updated_at,
+            a.discovered_at,
+            a.attrs
+        FROM public.contactrecord a
+        JOIN public.entity e ON e.table_name = 'public.contactrecord'::citext AND e.row_id = a.id
+        WHERE a.updated_at >= _since
+        ORDER BY a.updated_at DESC, a.id DESC
+        LIMIT v_limit;
+    END IF;
+END
 $fn$;
 -- +migrate StatementEnd
 
