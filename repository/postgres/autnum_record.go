@@ -68,48 +68,27 @@ func (r *PostgresRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.A
 		return 0, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.autnum.upsert",
-		SQLText: upsertAutnumRecordText,
-		Args:    pgx.NamedArgs{"record": string(record)},
-		Result:  ch,
+	var id int64
+	j := NewRowJob(ctx, upsertAutnumRecordText, pgx.NamedArgs{"record": string(record)}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 func (r *PostgresRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.autnum.by_id",
-		SQLText: selectAutnumByIDText,
-		Args:    pgx.NamedArgs{"row_id": rowID},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var rid int64
 	var c, u time.Time
 	var attrsJSON string
 	var a oamreg.AutnumRecord
-	if err := result.Row.Scan(&rid, &c, &u, &a.Handle,
-		&a.Number, &a.Name, &a.WhoisServer, &attrsJSON); err != nil {
+
+	j := NewRowJob(ctx, selectAutnumByIDText, pgx.NamedArgs{"row_id": rowID}, func(row pgx.Row) error {
+		return row.Scan(&rid, &c, &u, &a.Handle, &a.Number, &a.Name, &a.WhoisServer, &attrsJSON)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -138,43 +117,35 @@ func (r *PostgresRepository) findAutnumRecordsByContent(ctx context.Context, fil
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.autnum.find_by_content",
-		SQLText: selectAutnumFindByContentText,
-		Args: pgx.NamedArgs{
-			"filters": string(filtersJSON),
-			"since":   ts,
-			"limit":   limit,
-		},
-		Result: ch,
-	})
-
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
+	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamreg.AutnumRecord
+	j := NewRowsJob(ctx, selectAutnumFindByContentText, pgx.NamedArgs{
+		"filters": string(filtersJSON),
+		"since":   ts,
+		"limit":   lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamreg.AutnumRecord
 
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.Handle,
-			&a.Number, &a.Name, &a.WhoisServer, &attrsJSON); err != nil {
-			continue
-		}
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Handle,
+				&a.Number, &a.Name, &a.WhoisServer, &attrsJSON); err != nil {
+				continue
+			}
 
-		if ent, err := r.buildAutnumRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
+			if ent, err := r.buildAutnumRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
 		}
+		return nil
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -189,41 +160,32 @@ func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, s
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.autnum.updated_since",
-		SQLText: selectAutnumSinceText,
-		Args: pgx.NamedArgs{
-			"since": since.UTC(),
-			"limit": lmt,
-		},
-		Result: ch,
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, selectAutnumSinceText, pgx.NamedArgs{
+		"since": since.UTC(),
+		"limit": lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamreg.AutnumRecord
+
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Handle,
+				&a.Number, &a.Name, &a.WhoisServer, &attrsJSON); err != nil {
+				continue
+			}
+
+			if ent, err := r.buildAutnumRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
+		}
+		return nil
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamreg.AutnumRecord
-
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.Handle,
-			&a.Number, &a.Name, &a.WhoisServer, &attrsJSON); err != nil {
-			continue
-		}
-
-		if ent, err := r.buildAutnumRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
@@ -29,28 +30,18 @@ func (r *PostgresRepository) upsertTag(ctx context.Context, ttype, name, value, 
 		return 0, fmt.Errorf("tag name and value cannot be empty")
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "tag.upsert",
-		SQLText: upsertTagText,
-		Args: pgx.NamedArgs{
-			"ttype":   ttype,
-			"name":    name,
-			"value":   value,
-			"content": string(content),
-		},
-		Result: ch,
+	var id int64
+	j := NewRowJob(ctx, upsertTagText, pgx.NamedArgs{
+		"ttype":   ttype,
+		"name":    name,
+		"value":   value,
+		"content": string(content),
+	}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	err := result.Row.Scan(&id)
-	return id, err
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 // deleteTagByID deletes a tag dictionary row.
@@ -59,58 +50,58 @@ func (r *PostgresRepository) upsertTag(ctx context.Context, ttype, name, value, 
 func (r *PostgresRepository) deleteTagByID(ctx context.Context, tagID int64, onlyIfOrphaned bool) error {
 	if onlyIfOrphaned {
 		const q = `
-DELETE FROM public.tag 
-WHERE tag_id = @tag_id
-  AND NOT EXISTS (SELECT 1 FROM public.entity_tag_map WHERE tag_id = tag.tag_id)
-  AND NOT EXISTS (SELECT 1 FROM public.edge_tag_map   WHERE tag_id = tag.tag_id)`
+			DELETE FROM public.tag 
+			WHERE tag_id = @tag_id
+			AND NOT EXISTS (SELECT 1 FROM public.entity_tag_map WHERE tag_id = tag.tag_id)
+			AND NOT EXISTS (SELECT 1 FROM public.edge_tag_map   WHERE tag_id = tag.tag_id)`
 
-		done := make(chan error, 1)
-		r.wpool.Submit(&execJob{
-			Ctx:     ctx,
-			Name:    "tag.delete_if_orphaned",
-			SQLText: q,
-			Args:    pgx.NamedArgs{"tag_id": tagID},
-			Result:  done,
+		j := NewExecJob(ctx, q, pgx.NamedArgs{"tag_id": tagID}, func(tag pgconn.CommandTag) error {
+			if tag.RowsAffected() == 0 {
+				return fmt.Errorf("tag %d is still in use or does not exist", tagID)
+			}
+			return nil
 		})
+		r.pool.Submit(j)
 
-		return <-done
+		return j.Wait()
 	}
 
 	// Unconditional delete (FK CASCADE should clean maps if configured; else do it manually)
-	done := make(chan error, 1)
-	r.wpool.Submit(&execJob{
-		Ctx:     ctx,
-		Name:    "tag.delete.entity_tag_mappings",
-		SQLText: `DELETE FROM public.entity_tag_map WHERE tag_id = @tag_id`,
-		Args:    pgx.NamedArgs{"tag_id": tagID},
-		Result:  done,
+	j1 := NewExecJob(ctx, `DELETE FROM public.entity_tag_map WHERE tag_id = @tag_id`, pgx.NamedArgs{
+		"tag_id": tagID,
+	}, func(tag pgconn.CommandTag) error {
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("tag %d is still in use or does not exist", tagID)
+		}
+		return nil
 	})
-	err := <-done
-	if err != nil {
-		return err
-	}
+	r.pool.Submit(j1)
 
-	r.wpool.Submit(&execJob{
-		Ctx:     ctx,
-		Name:    "tag.delete.edge_tag_mappings",
-		SQLText: `DELETE FROM public.edge_tag_map WHERE tag_id = @tag_id`,
-		Args:    pgx.NamedArgs{"tag_id": tagID},
-		Result:  done,
+	j2 := NewExecJob(ctx, `DELETE FROM public.edge_tag_map WHERE tag_id = @tag_id`, pgx.NamedArgs{
+		"tag_id": tagID,
+	}, func(tag pgconn.CommandTag) error {
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("tag %d is still in use or does not exist", tagID)
+		}
+		return nil
 	})
-	err = <-done
-	if err != nil {
-		return err
-	}
+	r.pool.Submit(j2)
 
-	r.wpool.Submit(&execJob{
-		Ctx:     ctx,
-		Name:    "tag.delete.tag_by_id",
-		SQLText: `DELETE FROM public.tag WHERE tag_id = @tag_id`,
-		Args:    pgx.NamedArgs{"tag_id": tagID},
-		Result:  done,
+	_ = j1.Wait()
+	_ = j2.Wait()
+
+	j := NewExecJob(ctx, `DELETE FROM public.tag WHERE tag_id = @tag_id`, pgx.NamedArgs{
+		"tag_id": tagID,
+	}, func(tag pgconn.CommandTag) error {
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("tag %d does not exist", tagID)
+		}
+		return nil
 	})
+	r.pool.Submit(j)
 
-	return <-done
+	j.Wait()
+	return nil
 }
 
 func extractOAMProperty(ttype string, content []byte) (oam.Property, error) {
