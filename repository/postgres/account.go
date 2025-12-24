@@ -131,7 +131,7 @@ func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters 
 				out = append(out, ent)
 			}
 		}
-		return nil
+		return rows.Err()
 	})
 
 	r.pool.Submit(j)
@@ -171,7 +171,7 @@ func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since 
 				out = append(out, ent)
 			}
 		}
-		return nil
+		return rows.Err()
 	})
 
 	r.pool.Submit(j)

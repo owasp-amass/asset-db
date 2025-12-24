@@ -48,47 +48,31 @@ func (r *PostgresRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (in
 		return 0, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.fqdn.upsert",
-		SQLText: upsertFQDNText,
-		Args:    pgx.NamedArgs{"record": string(record)},
-		Result:  ch,
+	var id int64
+	j := NewRowJob(ctx, upsertFQDNText, pgx.NamedArgs{
+		"record": string(record),
+	}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 func (r *PostgresRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.fqdn.by_id",
-		SQLText: selectFQDNByIDText,
-		Args:    pgx.NamedArgs{"row_id": rowID},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var rid int64
 	var a oamdns.FQDN
 	var c, u time.Time
 	var attrsJSON string
-	if err := result.Row.Scan(&rid, &c, &u, &a.Name, &attrsJSON); err != nil {
+
+	j := NewRowJob(ctx, selectFQDNByIDText, pgx.NamedArgs{
+		"row_id": rowID,
+	}, func(row pgx.Row) error {
+		return row.Scan(&rid, &c, &u, &a.Name, &attrsJSON)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -117,42 +101,34 @@ func (r *PostgresRepository) findFQDNsByContent(ctx context.Context, filters dbt
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.fqdn.find_by_content",
-		SQLText: selectFQDNFindByContentText,
-		Args: pgx.NamedArgs{
-			"filters": string(filtersJSON),
-			"since":   ts,
-			"limit":   limit,
-		},
-		Result: ch,
-	})
-
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
+	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var a oamdns.FQDN
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
+	j := NewRowsJob(ctx, selectFQDNFindByContentText, pgx.NamedArgs{
+		"filters": string(filtersJSON),
+		"since":   ts,
+		"limit":   lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var a oamdns.FQDN
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
 
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.Name, &attrsJSON); err != nil {
-			continue
-		}
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Name, &attrsJSON); err != nil {
+				continue
+			}
 
-		if ent, err := r.buildFQDNEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
+			if ent, err := r.buildFQDNEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
 		}
+		return rows.Err()
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -167,40 +143,31 @@ func (r *PostgresRepository) getFQDNsUpdatedSince(ctx context.Context, since tim
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.fqdn.updated_since",
-		SQLText: selectFQDNSinceText,
-		Args: pgx.NamedArgs{
-			"since": since.UTC(),
-			"limit": lmt,
-		},
-		Result: ch,
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, selectFQDNSinceText, pgx.NamedArgs{
+		"since": since.UTC(),
+		"limit": lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var a oamdns.FQDN
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Name, &attrsJSON); err != nil {
+				continue
+			}
+
+			if ent, err := r.buildFQDNEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
+		}
+		return rows.Err()
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var a oamdns.FQDN
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.Name, &attrsJSON); err != nil {
-			continue
-		}
-
-		if ent, err := r.buildFQDNEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil

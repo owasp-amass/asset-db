@@ -6,7 +6,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -14,7 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgconn"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
@@ -274,26 +273,17 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 func normalizeType(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
 
 func (r *PostgresRepository) fetchEntityTypeAndRowID(ctx context.Context, eid int64) (string, int64, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "entity.type_row_by_id",
-		SQLText: `SELECT e.etype_name, e.row_id FROM public.entity_get_by_id(@entity_id::bigint) AS e;`,
-		Args:    pgx.NamedArgs{"entity_id": eid},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return "", 0, result.Err
-	}
-
 	var etype string
 	var rowID int64
-	if err := result.Row.Scan(&etype, &rowID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", 0, fmt.Errorf("entity %d not found", eid)
-		}
+
+	j := NewRowJob(ctx,
+		`SELECT e.etype_name, e.row_id FROM public.entity_get_by_id(@entity_id::bigint) AS e`,
+		pgx.NamedArgs{"entity_id": eid}, func(row pgx.Row) error {
+			return row.Scan(&etype, &rowID)
+		})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return "", 0, err
 	}
 
@@ -374,50 +364,48 @@ func (r *PostgresRepository) DeleteEntity(ctx context.Context, id string) error 
 func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, alsoDeleteAsset bool) error {
 	// Optionally remove the concrete asset row (requires looking up its table + row_id)
 	if alsoDeleteAsset {
-		const qSel = `SELECT table_name, row_id FROM entity WHERE entity_id = @entity_id LIMIT 1`
-		ch := make(chan *rowResult, 1)
-		r.wpool.Submit(&rowJob{
-			Ctx:     ctx,
-			Name:    "entity.delete.table_row_from_id",
-			SQLText: qSel,
-			Args:    pgx.NamedArgs{"entity_id": eid},
-			Result:  ch,
-		})
-
-		result := <-ch
-		if result.Err != nil {
-			return result.Err
-		}
-
 		var id int64
 		var table string
-		if err := result.Row.Scan(&table, &id); err != nil {
+		qSel := `SELECT table_name, row_id FROM entity WHERE entity_id = @entity_id LIMIT 1`
+
+		j := NewRowJob(ctx, qSel, pgx.NamedArgs{
+			"entity_id": eid,
+		}, func(row pgx.Row) error {
+			return row.Scan(&table, &id)
+		})
+
+		r.pool.Submit(j)
+		if err := j.Wait(); err != nil {
 			return err
 		}
 
 		if table != "" {
-			done := make(chan error, 1)
-			r.wpool.Submit(&execJob{
-				Ctx:     ctx,
-				Name:    "asset." + table + ".delete_by_id",
-				SQLText: fmt.Sprintf(`DELETE FROM %s WHERE id = @row_id`, table),
-				Args:    pgx.NamedArgs{"row_id": id},
-				Result:  done,
+			j := NewExecJob(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = @row_id`, table), pgx.NamedArgs{
+				"row_id": id,
+			}, func(tag pgconn.CommandTag) error {
+				if tag.RowsAffected() == 0 {
+					return fmt.Errorf("asset row %d not found in table %s", id, table)
+				}
+				return nil
 			})
-			if err := <-done; err != nil {
+
+			r.pool.Submit(j)
+			if err := j.Wait(); err != nil {
 				return err
 			}
 		}
 	}
 
 	// Delete the entity (FKs should take care of edges, tag maps if schema has CASCADE)
-	done := make(chan error, 1)
-	r.wpool.Submit(&execJob{
-		Ctx:     ctx,
-		Name:    "entity.delete.by_id",
-		SQLText: `DELETE FROM entity WHERE entity_id = @entity_id`,
-		Args:    pgx.NamedArgs{"entity_id": eid},
-		Result:  done,
+	j := NewExecJob(ctx, `DELETE FROM entity WHERE entity_id = @entity_id`, pgx.NamedArgs{
+		"entity_id": eid,
+	}, func(tag pgconn.CommandTag) error {
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("entity %d not found", eid)
+		}
+		return nil
 	})
-	return <-done
+
+	r.pool.Submit(j)
+	return j.Wait()
 }

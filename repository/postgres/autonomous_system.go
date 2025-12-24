@@ -48,47 +48,31 @@ func (r *PostgresRepository) upsertAutonomousSystem(ctx context.Context, a *oamn
 		return 0, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.autonomous_system.upsert",
-		SQLText: upsertAutonomousSystemText,
-		Args:    pgx.NamedArgs{"record": string(record)},
-		Result:  ch,
+	var id int64
+	j := NewRowJob(ctx, upsertAutonomousSystemText, pgx.NamedArgs{
+		"record": string(record),
+	}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 func (r *PostgresRepository) fetchAutonomousSystemByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.autonomous_system.by_id",
-		SQLText: selectAutonomousSystemByIDText,
-		Args:    pgx.NamedArgs{"row_id": rowID},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var rid int64
 	var c, u time.Time
 	var attrsJSON string
 	var a oamnet.AutonomousSystem
-	if err := result.Row.Scan(&rid, &c, &u, &a.Number, &attrsJSON); err != nil {
+
+	j := NewRowJob(ctx, selectAutonomousSystemByIDText, pgx.NamedArgs{
+		"row_id": rowID,
+	}, func(row pgx.Row) error {
+		return row.Scan(&rid, &c, &u, &a.Number, &attrsJSON)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -117,44 +101,36 @@ func (r *PostgresRepository) findAutonomousSystemsByContent(ctx context.Context,
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.autonomous_system.find_by_content",
-		SQLText: selectAutonomousSystemFindByContentText,
-		Args: pgx.NamedArgs{
-			"filters": string(filtersJSON),
-			"since":   ts,
-			"limit":   limit,
-		},
-		Result: ch,
-	})
-
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
+	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamnet.AutonomousSystem
+	j := NewRowsJob(ctx, selectAutonomousSystemFindByContentText, pgx.NamedArgs{
+		"filters": string(filtersJSON),
+		"since":   ts,
+		"limit":   lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamnet.AutonomousSystem
 
-		if err := result.Rows.Scan(&eid, &rid, &c,
-			&u, &a.Number, &attrsJSON); err != nil {
-			continue
-		}
+			if err := rows.Scan(&eid, &rid, &c,
+				&u, &a.Number, &attrsJSON); err != nil {
+				continue
+			}
 
-		if ent, err := r.buildAutonomousSystemEntity(
-			eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
+			if ent, err := r.buildAutonomousSystemEntity(
+				eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
 		}
+		return rows.Err()
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -169,42 +145,33 @@ func (r *PostgresRepository) getAutonomousSystemsUpdatedSince(ctx context.Contex
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.autonomous_system.updated_since",
-		SQLText: selectAutonomousSystemSinceText,
-		Args: pgx.NamedArgs{
-			"since": since.UTC(),
-			"limit": lmt,
-		},
-		Result: ch,
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, selectAutonomousSystemSinceText, pgx.NamedArgs{
+		"since": since.UTC(),
+		"limit": lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamnet.AutonomousSystem
+
+			if err := rows.Scan(&eid, &rid, &c,
+				&u, &a.Number, &attrsJSON); err != nil {
+				continue
+			}
+
+			if ent, err := r.buildAutonomousSystemEntity(
+				eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
+		}
+		return rows.Err()
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamnet.AutonomousSystem
-
-		if err := result.Rows.Scan(&eid, &rid, &c,
-			&u, &a.Number, &attrsJSON); err != nil {
-			continue
-		}
-
-		if ent, err := r.buildAutonomousSystemEntity(
-			eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -44,28 +45,19 @@ func (r *PostgresRepository) CreateEdgeProperty(ctx context.Context, edge *dbt.E
 		return nil, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "edge.tag.upsert",
-		SQLText: tagEdgeText,
-		Args: pgx.NamedArgs{
-			"edge_id": eid,
-			"ttype":   string(property.PropertyType()),
-			"name":    property.Name(),
-			"value":   property.Value(),
-			"content": string(content),
-		},
-		Result: ch,
+	var tid, mid int64
+	j := NewRowJob(ctx, tagEdgeText, pgx.NamedArgs{
+		"edge_id": eid,
+		"ttype":   string(property.PropertyType()),
+		"name":    property.Name(),
+		"value":   property.Value(),
+		"content": string(content),
+	}, func(row pgx.Row) error {
+		return row.Scan(&tid, &mid)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var tid, mid int64
-	if err := result.Row.Scan(&tid, &mid); err != nil {
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -80,24 +72,17 @@ func (r *PostgresRepository) FindEdgeTagById(ctx context.Context, id string) (*d
 		return nil, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "edge.tag.by_id",
-		SQLText: selectEdgeTagMapByIDText,
-		Args:    pgx.NamedArgs{"map_id": mid},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var eid, tid int64
 	var c, u time.Time
 	var ttype, content string
-	if err := result.Row.Scan(&tid, &eid, &c, &u, &ttype, &content); err != nil {
+	j := NewRowJob(ctx, selectEdgeTagMapByIDText, pgx.NamedArgs{
+		"map_id": mid,
+	}, func(row pgx.Row) error {
+		return row.Scan(&tid, &eid, &c, &u, &ttype, &content)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -151,51 +136,42 @@ func (r *PostgresRepository) tagsForEdge(ctx context.Context, eid int64, since t
 		names = nil
 	}
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "edge.tags_for_edge",
-		SQLText: edgeGetTagsText,
-		Args: pgx.NamedArgs{
-			"edge_id": eid,
-			"since":   ts,
-			"names":   names,
-		},
-		Result: ch,
+	var out []*dbt.EdgeTag
+	j := NewRowsJob(ctx, edgeGetTagsText, pgx.NamedArgs{
+		"edge_id": eid,
+		"since":   ts,
+		"names":   names,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var tid, mid int64
+			var c, u time.Time
+			var ttype, content string
+
+			if err := rows.Scan(&tid, &mid, &c, &u, &ttype, &content); err != nil {
+				continue
+			}
+
+			tag := &dbt.EdgeTag{
+				ID:        strconv.FormatInt(mid, 10),
+				CreatedAt: c.In(time.UTC).Local(),
+				LastSeen:  u.In(time.UTC).Local(),
+				Edge:      &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
+			}
+
+			prop, err := extractOAMProperty(ttype, json.RawMessage(content))
+			if err != nil {
+				continue
+			}
+			tag.Property = prop
+
+			out = append(out, tag)
+		}
+		return rows.Err()
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.EdgeTag
-	for result.Rows.Next() {
-		var tid, mid int64
-		var c, u time.Time
-		var ttype, content string
-
-		if err := result.Rows.Scan(&tid, &mid, &c, &u, &ttype, &content); err != nil {
-			continue
-		}
-
-		tag := &dbt.EdgeTag{
-			ID:        strconv.FormatInt(mid, 10),
-			CreatedAt: c.In(time.UTC).Local(),
-			LastSeen:  u.In(time.UTC).Local(),
-			Edge:      &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
-		}
-
-		prop, err := extractOAMProperty(ttype, json.RawMessage(content))
-		if err != nil {
-			continue
-		}
-		tag.Property = prop
-
-		out = append(out, tag)
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	if len(out) == 0 {
@@ -211,16 +187,17 @@ func (r *PostgresRepository) removeEdgeTag(ctx context.Context, mid int64) (int6
 		return 0, err
 	}
 
-	done := make(chan error, 1)
-	r.wpool.Submit(&execJob{
-		Ctx:     ctx,
-		Name:    "edge.tag.remove_edge_tag",
-		SQLText: `DELETE FROM public.edge_tag_map WHERE map_id = @map_id`,
-		Args:    pgx.NamedArgs{"map_id": mid},
-		Result:  done,
+	j := NewExecJob(ctx, `DELETE FROM public.edge_tag_map WHERE map_id = @map_id`, pgx.NamedArgs{
+		"map_id": mid,
+	}, func(tag pgconn.CommandTag) error {
+		if tag.RowsAffected() == 0 {
+			return errors.New("edge tag map not found")
+		}
+		return nil
 	})
 
-	return tid, <-done
+	r.pool.Submit(j)
+	return tid, j.Wait()
 }
 
 func (r *PostgresRepository) edgeMIDToTID(ctx context.Context, mid int64) (int64, error) {
@@ -228,21 +205,13 @@ func (r *PostgresRepository) edgeMIDToTID(ctx context.Context, mid int64) (int64
 		return 0, errors.New("invalid edge tag map ID")
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "edge.tag.mid_to_tid",
-		SQLText: selectTagIDByEdgeTagMapIDText,
-		Args:    pgx.NamedArgs{"map_id": mid},
-		Result:  ch,
+	var tid int64
+	j := NewRowJob(ctx, selectTagIDByEdgeTagMapIDText, pgx.NamedArgs{
+		"map_id": mid,
+	}, func(row pgx.Row) error {
+		return row.Scan(&tid)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var tid int64
-	err := result.Row.Scan(&tid)
-	return tid, err
+	r.pool.Submit(j)
+	return tid, j.Wait()
 }

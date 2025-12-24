@@ -59,47 +59,31 @@ func (r *PostgresRepository) upsertIdentifier(ctx context.Context, a *oamgen.Ide
 		return 0, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.identifier.upsert",
-		SQLText: upsertIdentifierText,
-		Args:    pgx.NamedArgs{"record": string(record)},
-		Result:  ch,
+	var id int64
+	j := NewRowJob(ctx, upsertIdentifierText, pgx.NamedArgs{
+		"record": string(record),
+	}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 func (r *PostgresRepository) fetchIdentifierByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.identifier.by_id",
-		SQLText: selectIdentifierByIDText,
-		Args:    pgx.NamedArgs{"row_id": rowID},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var row_id int64
 	var c, u time.Time
 	var attrsJSON string
 	var a oamgen.Identifier
-	if err := result.Row.Scan(&row_id, &c, &u, &a.UniqueID, &a.Type, &attrsJSON); err != nil {
+
+	j := NewRowJob(ctx, selectIdentifierByIDText, pgx.NamedArgs{
+		"row_id": rowID,
+	}, func(row pgx.Row) error {
+		return row.Scan(&row_id, &c, &u, &a.UniqueID, &a.Type, &attrsJSON)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -128,42 +112,34 @@ func (r *PostgresRepository) findIdentifiersByContent(ctx context.Context, filte
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.identifier.find_by_content",
-		SQLText: selectIdentifierFindByContentText,
-		Args: pgx.NamedArgs{
-			"filters": string(filtersJSON),
-			"since":   ts,
-			"limit":   limit,
-		},
-		Result: ch,
-	})
-
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
+	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamgen.Identifier
+	j := NewRowsJob(ctx, selectIdentifierFindByContentText, pgx.NamedArgs{
+		"filters": string(filtersJSON),
+		"since":   ts,
+		"limit":   lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamgen.Identifier
 
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.UniqueID, &a.Type, &attrsJSON); err != nil {
-			continue
-		}
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.UniqueID, &a.Type, &attrsJSON); err != nil {
+				continue
+			}
 
-		if ent, err := r.buildIdentifierEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
+			if ent, err := r.buildIdentifierEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
 		}
+		return rows.Err()
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -178,40 +154,31 @@ func (r *PostgresRepository) getIdentifiersUpdatedSince(ctx context.Context, sin
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.identifier.updated_since",
-		SQLText: selectIdentifierSinceText,
-		Args: pgx.NamedArgs{
-			"since": since.UTC(),
-			"limit": lmt,
-		},
-		Result: ch,
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, selectIdentifierSinceText, pgx.NamedArgs{
+		"since": since.UTC(),
+		"limit": lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var attrsJSON string
+			var a oamgen.Identifier
+
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.UniqueID, &a.Type, &attrsJSON); err != nil {
+				continue
+			}
+
+			if ent, err := r.buildIdentifierEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
+		}
+		return rows.Err()
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var attrsJSON string
-		var a oamgen.Identifier
-
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &a.UniqueID, &a.Type, &attrsJSON); err != nil {
-			continue
-		}
-
-		if ent, err := r.buildIdentifierEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil

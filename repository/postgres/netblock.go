@@ -71,47 +71,31 @@ func (r *PostgresRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbl
 		return 0, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.netblock.upsert",
-		SQLText: upsertNetblockText,
-		Args:    pgx.NamedArgs{"record": string(record)},
-		Result:  ch,
+	var id int64
+	j := NewRowJob(ctx, upsertNetblockText, pgx.NamedArgs{
+		"record": string(record),
+	}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 func (r *PostgresRepository) fetchNetblockByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.netblock.by_id",
-		SQLText: selectNetblockByIDText,
-		Args:    pgx.NamedArgs{"row_id": rowID},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var rid int64
 	var c, u time.Time
 	var a oamnet.Netblock
 	var cidrstr, attrsJSON string
-	if err := result.Row.Scan(&rid, &c, &u, &cidrstr, &attrsJSON); err != nil {
+
+	j := NewRowJob(ctx, selectNetblockByIDText, pgx.NamedArgs{
+		"row_id": rowID,
+	}, func(row pgx.Row) error {
+		return row.Scan(&rid, &c, &u, &cidrstr, &attrsJSON)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -146,48 +130,40 @@ func (r *PostgresRepository) findNetblocksByContent(ctx context.Context, filters
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.netblock.find_by_content",
-		SQLText: selectNetblockFindByContentText,
-		Args: pgx.NamedArgs{
-			"filters": string(filtersJSON),
-			"since":   ts,
-			"limit":   limit,
-		},
-		Result: ch,
-	})
-
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
+	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var a oamnet.Netblock
-		var cidrstr, attrsJSON string
+	j := NewRowsJob(ctx, selectNetblockFindByContentText, pgx.NamedArgs{
+		"filters": string(filtersJSON),
+		"since":   ts,
+		"limit":   lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var a oamnet.Netblock
+			var cidrstr, attrsJSON string
 
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &cidrstr, &attrsJSON); err != nil {
-			continue
-		}
+			if err := rows.Scan(&eid, &rid, &c, &u, &cidrstr, &attrsJSON); err != nil {
+				continue
+			}
 
-		cidr, err := netip.ParsePrefix(cidrstr)
-		if err != nil {
-			return nil, err
-		}
-		a.CIDR = cidr
+			cidr, err := netip.ParsePrefix(cidrstr)
+			if err != nil {
+				continue
+			}
+			a.CIDR = cidr
 
-		if ent, err := r.buildNetblockEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
+			if ent, err := r.buildNetblockEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
 		}
+		return rows.Err()
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -202,46 +178,37 @@ func (r *PostgresRepository) getNetblocksUpdatedSince(ctx context.Context, since
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.netblock.updated_since",
-		SQLText: selectNetblockSinceText,
-		Args: pgx.NamedArgs{
-			"since": since.UTC(),
-			"limit": lmt,
-		},
-		Result: ch,
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, selectNetblockSinceText, pgx.NamedArgs{
+		"since": since.UTC(),
+		"limit": lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var a oamnet.Netblock
+			var cidrstr, attrsJSON string
+
+			if err := rows.Scan(&eid, &rid, &c, &u, &cidrstr, &attrsJSON); err != nil {
+				continue
+			}
+
+			cidr, err := netip.ParsePrefix(cidrstr)
+			if err != nil {
+				continue
+			}
+			a.CIDR = cidr
+
+			if ent, err := r.buildNetblockEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
+		}
+		return rows.Err()
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var a oamnet.Netblock
-		var cidrstr, attrsJSON string
-
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &cidrstr, &attrsJSON); err != nil {
-			continue
-		}
-
-		cidr, err := netip.ParsePrefix(cidrstr)
-		if err != nil {
-			return nil, err
-		}
-		a.CIDR = cidr
-
-		if ent, err := r.buildNetblockEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil

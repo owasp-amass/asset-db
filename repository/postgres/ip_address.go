@@ -71,47 +71,31 @@ func (r *PostgresRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAd
 		return 0, err
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.ip_address.upsert",
-		SQLText: upsertIPAddressText,
-		Args:    pgx.NamedArgs{"record": string(record)},
-		Result:  ch,
+	var id int64
+	j := NewRowJob(ctx, upsertIPAddressText, pgx.NamedArgs{
+		"record": string(record),
+	}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
+	r.pool.Submit(j)
+	return id, j.Wait()
 }
 
 func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "asset.ip_address.by_id",
-		SQLText: selectIPAddressByIDText,
-		Args:    pgx.NamedArgs{"row_id": rowID},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var rid int64
 	var c, u time.Time
 	var a oamnet.IPAddress
 	var addrstr, attrsJSON string
-	if err := result.Row.Scan(&rid, &c, &u, &addrstr, &attrsJSON); err != nil {
+
+	j := NewRowJob(ctx, selectIPAddressByIDText, pgx.NamedArgs{
+		"row_id": rowID,
+	}, func(row pgx.Row) error {
+		return row.Scan(&rid, &c, &u, &addrstr, &attrsJSON)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -147,48 +131,40 @@ func (r *PostgresRepository) findIPAddressesByContent(ctx context.Context, filte
 	if limit < 0 {
 		return nil, errors.New("invalid limit provided")
 	}
-
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.ip_address.find_by_content",
-		SQLText: selectIPAddressFindByContentText,
-		Args: pgx.NamedArgs{
-			"filters": string(filtersJSON),
-			"since":   ts,
-			"limit":   limit,
-		},
-		Result: ch,
-	})
-
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
+	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var a oamnet.IPAddress
-		var addrstr, attrsJSON string
+	j := NewRowsJob(ctx, selectIPAddressFindByContentText, pgx.NamedArgs{
+		"filters": string(filtersJSON),
+		"since":   ts,
+		"limit":   lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var a oamnet.IPAddress
+			var addrstr, attrsJSON string
 
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
-			continue
-		}
+			if err := rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
+				continue
+			}
 
-		addr, err := netip.ParseAddr(addrstr)
-		if err != nil {
-			continue
-		}
-		a.Address = addr
+			addr, err := netip.ParseAddr(addrstr)
+			if err != nil {
+				continue
+			}
+			a.Address = addr
 
-		if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
+			if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
 		}
+		return rows.Err()
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -203,46 +179,37 @@ func (r *PostgresRepository) getIPAddressesUpdatedSince(ctx context.Context, sin
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "asset.ip_address.updated_since",
-		SQLText: selectIPAddressSinceText,
-		Args: pgx.NamedArgs{
-			"since": since.UTC(),
-			"limit": lmt,
-		},
-		Result: ch,
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, selectIPAddressSinceText, pgx.NamedArgs{
+		"since": since.UTC(),
+		"limit": lmt,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var eid, rid int64
+			var c, u time.Time
+			var a oamnet.IPAddress
+			var addrstr, attrsJSON string
+
+			if err := rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
+				continue
+			}
+
+			addr, err := netip.ParseAddr(addrstr)
+			if err != nil {
+				continue
+			}
+			a.Address = addr
+
+			if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+				out = append(out, ent)
+			}
+		}
+		return rows.Err()
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Entity
-	for result.Rows.Next() {
-		var eid, rid int64
-		var c, u time.Time
-		var a oamnet.IPAddress
-		var addrstr, attrsJSON string
-
-		if err := result.Rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
-			continue
-		}
-
-		addr, err := netip.ParseAddr(addrstr)
-		if err != nil {
-			continue
-		}
-		a.Address = addr
-
-		if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
-			out = append(out, ent)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	return out, nil

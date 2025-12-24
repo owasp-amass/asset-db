@@ -140,7 +140,7 @@ func (r *PostgresRepository) findAutnumRecordsByContent(ctx context.Context, fil
 				out = append(out, ent)
 			}
 		}
-		return nil
+		return rows.Err()
 	})
 
 	r.pool.Submit(j)
@@ -180,7 +180,7 @@ func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, s
 				out = append(out, ent)
 			}
 		}
-		return nil
+		return rows.Err()
 	})
 
 	r.pool.Submit(j)
