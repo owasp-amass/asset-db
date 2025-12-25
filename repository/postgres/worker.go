@@ -157,8 +157,8 @@ func NewWorkerWithPool(ctx context.Context, pool *pgxpool.Pool, cfg WorkerConfig
 		cancel:   cancel,
 		flushSem: make(chan struct{}, cfg.FlushParallelism),
 	}
-	// Seed flush semaphore.
-	for i := 0; i < cap(w.flushSem); i++ {
+	// Seed flush semaphore
+	for range cfg.FlushParallelism {
 		w.flushSem <- struct{}{}
 	}
 
@@ -227,9 +227,9 @@ func (w *Worker) runAggregator(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			// Fail all outstanding items if shutting down
-			for _, it := range items {
-				it.Done() <- errors.New("worker pool shutting down")
-				close(it.Done())
+			for _, j := range items {
+				j.Done() <- errors.New("worker pool shutting down")
+				close(j.Done())
 			}
 			return
 		case <-w.flushSem:
@@ -246,12 +246,12 @@ func (w *Worker) runAggregator(ctx context.Context) {
 				if err == nil {
 					break
 				}
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(5 * time.Millisecond)
 			}
 			if err != nil {
-				for _, it := range items {
-					it.Done() <- err
-					close(it.Done())
+				for _, j := range items {
+					j.Done() <- err
+					close(j.Done())
 				}
 			}
 		}(items)
@@ -273,14 +273,12 @@ func (w *Worker) runAggregator(ctx context.Context) {
 		case <-ctx.Done():
 			// Drain channel until closed, then flush whatever remains.
 			w.queue.Process(func(element any) {
-				it, ok := element.(job)
-				if !ok {
-					return
-				}
-				batch = append(batch, it)
-				if len(batch) >= w.cfg.MaxBatchSize {
-					flush(batch)
-					batch = nil
+				if j, ok := element.(job); ok {
+					batch = append(batch, j)
+					if len(batch) >= w.cfg.MaxBatchSize {
+						flush(batch)
+						batch = nil
+					}
 				}
 			})
 			flush(batch)
@@ -290,25 +288,23 @@ func (w *Worker) runAggregator(ctx context.Context) {
 
 		select {
 		case <-w.queue.Signal():
-			element, ok := w.queue.Next()
-			if !ok {
-				continue
-			}
-			it, ok := element.(job)
-			if !ok {
-				continue
-			}
-			batch = append(batch, it)
-			if len(batch) == 1 {
-				// first item starts the timer window
-				resetTimer()
-			}
-			if len(batch) >= w.cfg.MaxBatchSize {
-				flush(batch)
-				batch = nil
-				resetTimer()
-			}
+			w.queue.Process(func(element any) {
+				j, ok := element.(job)
+				if !ok {
+					return
+				}
 
+				batch = append(batch, j)
+				if len(batch) == 1 {
+					// first item starts the timer window
+					resetTimer()
+				}
+				if len(batch) >= w.cfg.MaxBatchSize {
+					flush(batch)
+					batch = nil
+					resetTimer()
+				}
+			})
 		case <-timer.C:
 			flush(batch)
 			batch = nil
@@ -339,17 +335,17 @@ func (w *Worker) flushBatchWithQuerier(ctx context.Context, q batchSender, items
 	var b pgx.Batch
 
 	// Build batch
-	for _, it := range items {
-		it.Queue(&b)
+	for _, j := range items {
+		j.Queue(&b)
 	}
 
 	br := q.SendBatch(ctx, &b)
 	defer func() { _ = br.Close() }()
 
 	// Decode results in the exact enqueue order.
-	for _, it := range items {
-		it.Done() <- it.Decode(br)
-		close(it.Done())
+	for _, j := range items {
+		j.Done() <- j.Decode(br)
+		close(j.Done())
 	}
 	return nil
 }

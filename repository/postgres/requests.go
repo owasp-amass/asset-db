@@ -152,7 +152,7 @@ func (r *rowJob) Decode(br pgx.BatchResults) error {
 	if r.Callback != nil {
 		return r.Callback(row)
 	}
-	return nil
+	return row.Scan()
 }
 
 type rowsJob struct {
