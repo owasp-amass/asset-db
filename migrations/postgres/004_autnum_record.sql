@@ -5,7 +5,6 @@
 -- AutnumRecord Table native for asset type
 -- ============================================================================
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.autnumrecord (
   id           bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -334,7 +333,6 @@ END
 $fn$;
 -- +migrate StatementEnd
 
-COMMIT;
 
 -- +migrate Down
 

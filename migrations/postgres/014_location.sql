@@ -5,7 +5,6 @@
 -- Location Table native for asset type
 -- ============================================================================
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.location (
   id              bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -396,7 +395,6 @@ END
 $fn$;
 -- +migrate StatementEnd
 
-COMMIT;
 
 -- +migrate Down
 

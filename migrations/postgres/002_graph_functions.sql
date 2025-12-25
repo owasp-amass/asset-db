@@ -4,7 +4,6 @@
 -- OWASP Amass: Graph helper functions for edges and tags (PostgreSQL 13+)
 -- ============================================================================
 
-BEGIN;
 
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.null_safe_attrs(p jsonb)
@@ -597,7 +596,6 @@ AS $fn$
 $fn$;
 -- +migrate StatementEnd
 
-COMMIT;
 
 -- +migrate Down
 

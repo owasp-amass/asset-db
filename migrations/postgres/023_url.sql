@@ -5,7 +5,6 @@
 -- URL Table native for asset type
 -- ============================================================================
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.url (
   id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -278,7 +277,6 @@ END
 $fn$;
 -- +migrate StatementEnd
 
-COMMIT;
 
 -- +migrate Down
 

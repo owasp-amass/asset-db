@@ -8,8 +8,6 @@
 -- - Targeted composite/partial indexes
 -- ============================================================================
 
-BEGIN;
-
 -- --- Extensions --------------------------------------------------------------
 CREATE EXTENSION IF NOT EXISTS citext;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -146,7 +144,6 @@ CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_updated
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_id ON public.edge_tag_map(edge_id);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_map_tag_id ON public.edge_tag_map(tag_id);
 
-COMMIT;
 
 -- +migrate Down
 
