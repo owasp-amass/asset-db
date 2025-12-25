@@ -17,8 +17,8 @@ import (
 // Normalized Property Graph (NPG) implemented on PostgreSQL
 
 const (
-	Postgres        string = "postgres"
-	numberOfWorkers int    = 8
+	Postgres      string = "postgres"
+	numberOfConns int    = 8
 )
 
 // PostgresRepository is a repository implementation.
@@ -38,7 +38,7 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 
 	repo, err := postgresDatabase(dsn, WorkerConfig{
 		PoolMinConns:      2,
-		PoolMaxConns:      int32(numberOfWorkers),
+		PoolMaxConns:      int32(numberOfConns),
 		MaxConnLifetime:   30 * time.Minute,
 		MaxConnIdleTime:   5 * time.Minute,
 		HealthCheckPeriod: 1 * time.Minute,
@@ -61,9 +61,9 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 		return nil, err
 	}
 
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
-		pctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		pctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 		err = db.PingContext(pctx)
 		cancel()
@@ -78,9 +78,7 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-
+	db.SetMaxOpenConns(numberOfConns)
 	return &PostgresRepository{
 		DB:     db,
 		dsn:    dsn,
@@ -102,7 +100,7 @@ func (pr *PostgresRepository) Prepare(ctx context.Context) error {
 // Close implements the Repository interface.
 func (pr *PostgresRepository) Close() error {
 	if pr.pool != nil {
-		pr.pool.Shutdown(context.TODO())
+		_ = pr.pool.Shutdown(context.TODO())
 	}
 	if pr.DB != nil {
 		return pr.DB.Close()
@@ -111,6 +109,6 @@ func (pr *PostgresRepository) Close() error {
 }
 
 // GetDBType returns the type of the database.
-func (sql *PostgresRepository) GetDBType() string {
-	return sql.dbtype
+func (pr *PostgresRepository) GetDBType() string {
+	return pr.dbtype
 }

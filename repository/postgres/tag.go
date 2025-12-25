@@ -100,8 +100,7 @@ func (r *PostgresRepository) deleteTagByID(ctx context.Context, tagID int64, onl
 	})
 	r.pool.Submit(j)
 
-	j.Wait()
-	return nil
+	return j.Wait()
 }
 
 func extractOAMProperty(ttype string, content []byte) (oam.Property, error) {

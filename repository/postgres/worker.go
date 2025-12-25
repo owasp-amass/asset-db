@@ -73,10 +73,10 @@ func withDefaults(cfg WorkerConfig) WorkerConfig {
 		cfg.PoolMaxConns = 8
 	}
 	if cfg.MaxBatchSize == 0 {
-		cfg.MaxBatchSize = 256
+		cfg.MaxBatchSize = 100
 	}
 	if cfg.MaxBatchDelay == 0 {
-		cfg.MaxBatchDelay = 5 * time.Millisecond
+		cfg.MaxBatchDelay = time.Millisecond
 	}
 	if cfg.AcquireTimeout == 0 {
 		cfg.AcquireTimeout = 2 * time.Second

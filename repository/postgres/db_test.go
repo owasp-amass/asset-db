@@ -7,6 +7,7 @@ package postgres
 import (
 	"context"
 	"embed"
+	"log"
 	"time"
 
 	postgresmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
@@ -19,7 +20,6 @@ type PostgresRepoTestSuite struct {
 	suite.Suite
 	container *testhelpers.PostgresContainer
 	db        *PostgresRepository
-	ctx       context.Context
 }
 
 func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresRepository, error) {
@@ -38,7 +38,7 @@ func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresR
 		return nil, nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	if err := db.Prepare(ctx); err != nil {
@@ -55,4 +55,16 @@ func postgresMigrate(repo *PostgresRepository, fs embed.FS) error {
 
 	_, err := migrate.Exec(repo.DB, "postgres", migsrc, migrate.Up)
 	return err
+}
+
+func (suite *PostgresRepoTestSuite) LogDatabaseState() {
+	p := suite.db.pool.pool
+	st := p.Stat()
+	cfg := p.Config()
+	cc := cfg.ConnConfig
+
+	log.Printf("pool endpoint host=%q port=%d db=%q user=%q", cc.Host, cc.Port, cc.Database, cc.User)
+
+	log.Printf("pool stat: total=%d idle=%d acquired=%d constructing=%d max=%d",
+		st.TotalConns(), st.IdleConns(), st.AcquiredConns(), st.ConstructingConns(), st.MaxConns())
 }

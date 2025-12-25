@@ -6,6 +6,7 @@ package postgres
 
 import (
 	"context"
+	"io"
 	"log"
 	"strconv"
 	"testing"
@@ -23,7 +24,6 @@ type PostgresAccountTestSuite struct {
 	suite.Suite
 	container *testhelpers.PostgresContainer
 	db        *PostgresRepository
-	ctx       context.Context
 }
 
 func TestPostgresAccountTestSuite(t *testing.T) {
@@ -32,7 +32,6 @@ func TestPostgresAccountTestSuite(t *testing.T) {
 
 func (suite *PostgresAccountTestSuite) SetupSuite() {
 	var err error
-	suite.ctx = context.Background()
 	suite.container, suite.db, err = setupContainerAndPostgresRepo()
 	if err != nil {
 		log.Fatal(err)
@@ -40,7 +39,11 @@ func (suite *PostgresAccountTestSuite) SetupSuite() {
 }
 
 func (suite *PostgresAccountTestSuite) TearDownSuite() {
-	if err := suite.container.Terminate(suite.ctx); err != nil {
+	logs, _ := suite.container.Logs(context.Background())
+	b, _ := io.ReadAll(logs)
+	log.Printf("Postgres Container Logs:\n%s", string(b))
+
+	if err := suite.container.Terminate(context.Background()); err != nil {
 		log.Fatalf("error terminating postgres container: %s", err)
 	}
 }

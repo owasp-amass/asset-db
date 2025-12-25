@@ -6,7 +6,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,8 +14,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -86,29 +85,20 @@ func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*d
 		return nil, fmt.Errorf("failed to marshal edge relation to JSON: %v", err)
 	}
 
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "edge.upsert",
-		SQLText: edgeUpsertText,
-		Args: pgx.NamedArgs{
-			"etype":   string(rtype),
-			"label":   label,
-			"from":    fromID,
-			"to":      toID,
-			"content": string(content),
-		},
-		Result: ch,
+	var id int64
+	j := NewRowJob(ctx, edgeUpsertText, pgx.NamedArgs{
+		"etype":   string(rtype),
+		"label":   label,
+		"from":    fromID,
+		"to":      toID,
+		"content": string(content),
+	}, func(row pgx.Row) error {
+		return row.Scan(&id)
 	})
 
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var id int64
-	if err := result.Row.Scan(&id); err != nil {
-		return nil, err
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, fmt.Errorf("failed to upsert edge: %v", err)
 	}
 
 	return r.idToEdge(ctx, id)
@@ -124,27 +114,18 @@ func (r *PostgresRepository) FindEdgeById(ctx context.Context, id string) (*dbt.
 }
 
 func (r *PostgresRepository) idToEdge(ctx context.Context, id int64) (*dbt.Edge, error) {
-	ch := make(chan *rowResult, 1)
-	r.wpool.Submit(&rowJob{
-		Ctx:     ctx,
-		Name:    "edge.by_id",
-		SQLText: selectEdgeByIDText,
-		Args:    pgx.NamedArgs{"edge_id": id},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
 	var c, u time.Time
 	var etype, raw string
 	var rowid, fromid, toid int64
-	if err := result.Row.Scan(&rowid, &c, &u, &etype, &fromid, &toid, &raw); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("edge %d not found", id)
-		}
+
+	j := NewRowJob(ctx, selectEdgeByIDText, pgx.NamedArgs{
+		"edge_id": id,
+	}, func(row pgx.Row) error {
+		return row.Scan(&rowid, &c, &u, &etype, &fromid, &toid, &raw)
+	})
+
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -259,56 +240,47 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 		labels = nil
 	}
 
-	ch := make(chan *rowsResult, 1)
-	r.wpool.Submit(&rowsJob{
-		Ctx:     ctx,
-		Name:    "edge.for_entity",
-		SQLText: edgesForEntityText,
-		Args: pgx.NamedArgs{
-			"entity_id": eid,
-			"direction": dir,
-			"since":     ts,
-			"labels":    labels,
-		},
-		Result: ch,
+	var out []*dbt.Edge
+	j := NewRowsJob(ctx, edgesForEntityText, pgx.NamedArgs{
+		"entity_id": eid,
+		"direction": dir,
+		"since":     ts,
+		"labels":    labels,
+	}, func(rows pgx.Rows) error {
+		for rows.Next() {
+			var c, u time.Time
+			var etype, label, raw string
+			var rowid, fromid, toid int64
+
+			if err := rows.Scan(&rowid, &c, &u,
+				&etype, &fromid, &toid, &label, &raw); err != nil {
+				continue
+			}
+
+			rel, err := extractOAMRelation(etype, json.RawMessage(raw))
+			if err != nil {
+				continue
+			}
+
+			edge := &dbt.Edge{
+				ID:         strconv.FormatInt(rowid, 10),
+				CreatedAt:  c.In(time.UTC).Local(),
+				LastSeen:   u.In(time.UTC).Local(),
+				Relation:   rel,
+				FromEntity: &dbt.Entity{ID: strconv.FormatInt(fromid, 10)},
+				ToEntity:   &dbt.Entity{ID: strconv.FormatInt(toid, 10)},
+			}
+
+			if !edge.CreatedAt.IsZero() && !edge.LastSeen.IsZero() {
+				out = append(out, edge)
+			}
+		}
+		return rows.Err()
 	})
 
-	result := <-ch
-	if result.Rows != nil {
-		defer func() { _ = result.Rows.Close() }()
-	}
-	if result.Err != nil {
-		return nil, result.Err
-	}
-
-	var out []*dbt.Edge
-	for result.Rows.Next() {
-		var c, u time.Time
-		var etype, label, raw string
-		var rowid, fromid, toid int64
-
-		if err := result.Rows.Scan(&rowid, &c, &u,
-			&etype, &fromid, &toid, &label, &raw); err != nil {
-			return nil, err
-		}
-
-		rel, err := extractOAMRelation(etype, json.RawMessage(raw))
-		if err != nil {
-			continue
-		}
-
-		edge := &dbt.Edge{
-			ID:         strconv.FormatInt(rowid, 10),
-			CreatedAt:  c.In(time.UTC).Local(),
-			LastSeen:   u.In(time.UTC).Local(),
-			Relation:   rel,
-			FromEntity: &dbt.Entity{ID: strconv.FormatInt(fromid, 10)},
-			ToEntity:   &dbt.Entity{ID: strconv.FormatInt(toid, 10)},
-		}
-
-		if !edge.CreatedAt.IsZero() && !edge.LastSeen.IsZero() {
-			out = append(out, edge)
-		}
+	r.pool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
 	}
 
 	if len(out) == 0 {
@@ -319,15 +291,15 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 
 // deleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).
 func (r *PostgresRepository) deleteEdgeByID(ctx context.Context, id int64) error {
-	done := make(chan error, 1)
-
-	r.wpool.Submit(&execJob{
-		Ctx:     ctx,
-		Name:    "edge.del.by_id",
-		SQLText: `DELETE FROM edge WHERE edge_id = @edge_id`,
-		Args:    pgx.NamedArgs{"edge_id": id},
-		Result:  done,
+	j := NewExecJob(ctx, `DELETE FROM edge WHERE edge_id = @edge_id`, pgx.NamedArgs{
+		"edge_id": id,
+	}, func(tag pgconn.CommandTag) error {
+		if tag.RowsAffected() == 0 {
+			return errors.New("edge not found")
+		}
+		return nil
 	})
 
-	return <-done
+	r.pool.Submit(j)
+	return j.Wait()
 }
