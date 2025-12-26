@@ -97,42 +97,59 @@ DECLARE
     v_serial_number           text;
     v_subject_common_name     text;
     v_is_ca                   boolean;
-    v_tls_version             integer;
-    v_key_usage               text;
+    v_tls_version             text;
+    v_key_usage               text[];
     v_not_after               timestamp without time zone;
     v_not_before              timestamp without time zone;
-    v_ext_key_usage           text;
+    v_ext_key_usage           text[];
     v_subject_key_id          text;
     v_authority_key_id        text;
     v_issuer_common_name      text;
     v_signature_algorithm     text;
     v_public_key_algorithm    text;
-    v_crl_distribution_points text;
+    v_crl_distribution_points text[];
     v_attrs                   jsonb;
 BEGIN
     v_serial_number           := NULLIF(_rec->>'serial_number', '');
     v_subject_common_name     := NULLIF(_rec->>'subject_common_name', '');
+    v_tls_version             := NULLIF(_rec->>'version', '');
     v_not_after               := NULLIF(_rec->>'not_after', '')::timestamp;
     v_not_before              := NULLIF(_rec->>'not_before', '')::timestamp;
-    v_key_usage               := NULLIF(_rec->>'key_usage', '');
-    v_ext_key_usage           := NULLIF(_rec->>'ext_key_usage', '');
     v_subject_key_id          := NULLIF(_rec->>'subject_key_id', '');
     v_authority_key_id        := NULLIF(_rec->>'authority_key_id', '');
     v_issuer_common_name      := NULLIF(_rec->>'issuer_common_name', '');
     v_signature_algorithm     := NULLIF(_rec->>'signature_algorithm', '');
     v_public_key_algorithm    := NULLIF(_rec->>'public_key_algorithm', '');
-    v_crl_distribution_points := NULLIF(_rec->>'crl_distribution_points', '');
 
+     -- is_ca as boolean, if present
     IF _rec ? 'is_ca' THEN
         v_is_ca := (_rec->>'is_ca')::boolean;
     ELSE
         v_is_ca := NULL;
     END IF;
 
-    IF _rec ? 'version' THEN
-        v_tls_version := NULLIF(_rec->>'version', '')::integer;
+     -- key_usage as JSON array of text, if present
+    IF _rec ? 'key_usage' THEN
+        SELECT array_agg(elem::text) INTO v_key_usage
+        FROM jsonb_array_elements_text(_rec->'key_usage') AS elem;
     ELSE
-        v_tls_version := NULL;
+        v_key_usage := NULL;
+    END IF;
+
+     -- ext_key_usage as JSON array of text, if present
+    IF _rec ? 'ext_key_usage' THEN
+        SELECT array_agg(elem::text) INTO v_ext_key_usage
+        FROM jsonb_array_elements_text(_rec->'ext_key_usage') AS elem;
+    ELSE
+        v_ext_key_usage := NULL;
+    END IF;
+
+     -- crl_distribution_points as JSON array of text, if present
+    IF _rec ? 'crl_distribution_points' THEN
+        SELECT array_agg(elem::text) INTO v_crl_distribution_points
+        FROM jsonb_array_elements_text(_rec->'crl_distribution_points') AS elem;
+    ELSE
+        v_crl_distribution_points := NULL;
     END IF;
 
     -- Build attrs from the appropriate fields.

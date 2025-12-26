@@ -83,10 +83,10 @@ AS $fn$
 DECLARE
     v_name         text;
     v_attrs        jsonb;
-    v_release_date timestamp without time zone;
+    v_release_date date;
 BEGIN
     v_name         := NULLIF(_rec->>'name', '');
-    v_release_date := NULLIF(_rec->>'release_date', '')::timestamp;
+    v_release_date := NULLIF(_rec->>'release_date', '')::date;
 
     -- Build attrs from the appropriate fields.
     v_attrs := jsonb_strip_nulls(

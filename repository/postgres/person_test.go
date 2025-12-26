@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/people"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForPerson() {
+type PostgresPersonTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresPersonTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresPersonTestSuite))
+}
+
+func (suite *PostgresPersonTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresPersonTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresPersonTestSuite) TestCreateAssetForPerson() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -27,7 +55,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForPerson() {
 	firstName := "Fake First Name"
 	middleName := "Fake Middle Name"
 	familyName := "Fake Family Name"
-	birthdate := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	birthdate := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 	gender := "Unknown"
 
 	person, err := suite.db.CreateAsset(ctx, &people.Person{
@@ -75,7 +103,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForPerson() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Person")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForPerson() {
+func (suite *PostgresPersonTestSuite) TestFindEntitiesByContentForPerson() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

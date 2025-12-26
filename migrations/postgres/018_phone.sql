@@ -124,6 +124,20 @@ END
 $fn$;
 -- +migrate StatementEnd
 
+-- Return the full row by id
+-- +migrate StatementBegin
+CREATE OR REPLACE FUNCTION public.phone_get_by_id(_row_id bigint)
+RETURNS public.phone
+LANGUAGE sql
+STABLE
+AS $fn$
+    SELECT *
+    FROM public.phone
+    WHERE id = _row_id
+    LIMIT 1;
+$fn$;
+-- +migrate StatementEnd
+
 -- Rows matching the provided filters and since timestamp
 -- Supported keys in _filters: e164, country_code
 -- Requires at least one supported filter to be present.

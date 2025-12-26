@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS public.organization (
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
   updated_at      timestamp without time zone NOT NULL DEFAULT now(),
   unique_id       text NOT NULL UNIQUE,
-  org_name        text,
   legal_name      text NOT NULL,
+  org_name        text,
   jurisdiction    text,
   registration_id text,
   attrs           jsonb NOT NULL DEFAULT '{}'::jsonb
@@ -112,7 +112,7 @@ DECLARE
 BEGIN
     v_unique_id       := NULLIF(_rec->>'unique_id', '');
     v_legal_name      := NULLIF(_rec->>'legal_name', '');
-    v_org_name        := NULLIF(_rec->>'org_name', '');
+    v_org_name        := NULLIF(_rec->>'name', '');
     v_jurisdiction    := NULLIF(_rec->>'jurisdiction', '');
     v_registration_id := NULLIF(_rec->>'registration_id', '');
     v_founding_date   := NULLIF(_rec->>'founding_date', '')::timestamp;
@@ -192,8 +192,8 @@ CREATE OR REPLACE FUNCTION public.organization_find_by_content(
     created_at      timestamp without time zone,
     updated_at      timestamp without time zone,
     unique_id       text,
-    org_name        text,
     legal_name      text,
+    org_name        text,
     jurisdiction    text,
     registration_id text,
     attrs           jsonb
@@ -226,8 +226,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.org_name,
             a.legal_name,
+            a.org_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs
@@ -249,8 +249,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.org_name,
             a.legal_name,
+            a.org_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs
@@ -282,8 +282,8 @@ CREATE OR REPLACE FUNCTION public.organization_updated_since(
     created_at      timestamp without time zone,
     updated_at      timestamp without time zone,
     unique_id       text,
-    org_name        text,
     legal_name      text,
+    org_name        text,
     jurisdiction    text,
     registration_id text,
     attrs           jsonb
@@ -302,8 +302,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.org_name,
             a.legal_name,
+            a.org_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs
@@ -319,8 +319,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.org_name,
             a.legal_name,
+            a.org_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs

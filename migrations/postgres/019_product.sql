@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.product (
   updated_at   timestamp without time zone NOT NULL DEFAULT now(),
   unique_id    text NOT NULL UNIQUE,
   product_name text NOT NULL,
-  product_type text,
+  product_type text NOT NULL,
   attrs        jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_product_created_at ON public.product (created_at);
@@ -52,7 +52,7 @@ $fn$;
 CREATE OR REPLACE FUNCTION public.product_upsert(
     _unique_id    text,
     _product_name text,
-    _product_type text DEFAULT NULL,
+    _product_type text,
     _attrs        jsonb DEFAULT '{}'::jsonb
 ) RETURNS bigint
 LANGUAGE plpgsql
@@ -60,8 +60,8 @@ AS $fn$
 DECLARE
     v_id bigint;
 BEGIN
-    IF _unique_id IS NULL OR _product_name IS NULL THEN
-        RAISE EXCEPTION 'product_upsert requires non-NULL unique_id and product_name';
+    IF _unique_id IS NULL OR _product_name IS NULL OR _product_type IS NULL THEN
+        RAISE EXCEPTION 'product_upsert requires non-NULL unique_id, product_name, and product_type';
     END IF;
 
     INSERT INTO public.product (

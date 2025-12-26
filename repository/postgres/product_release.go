@@ -19,12 +19,12 @@ import (
 )
 
 // Params: @record::jsonb
-const upsertProductReleaseText = `SELECT public.product_release_upsert_entity_json(@record::jsonb);`
+const upsertProductReleaseText = `SELECT public.productrelease_upsert_entity_json(@record::jsonb);`
 
 // Param: @row_id::bigint
 const selectProductReleaseByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.release_name, a.attrs 
-FROM public.product_release_get_by_id(@row_id::bigint) AS a;`
+FROM public.productrelease_get_by_id(@row_id::bigint) AS a;`
 
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectProductReleaseFindByContentText = `

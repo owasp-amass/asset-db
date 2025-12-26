@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
@@ -75,16 +76,21 @@ func (r *PostgresRepository) fetchURLByRowID(ctx context.Context, eid, rowID int
 	var a oamurl.URL
 	var c, u time.Time
 	var attrsJSON string
+	var scheme pgtype.Text
 
 	j := NewRowJob(ctx, selectURLByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &a.Raw, &a.Scheme, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.Raw, &scheme, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+
+	if scheme.Valid {
+		a.Scheme = scheme.String
 	}
 
 	e, err := r.buildURLEntity(eid, rid, c, u, attrsJSON, &a)
@@ -125,9 +131,13 @@ func (r *PostgresRepository) findURLsByContent(ctx context.Context, filters dbt.
 			var eid, rid int64
 			var c, u time.Time
 			var attrsJSON string
+			var scheme pgtype.Text
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.Raw, &a.Scheme, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Raw, &scheme, &attrsJSON); err != nil {
 				continue
+			}
+			if scheme.Valid {
+				a.Scheme = scheme.String
 			}
 
 			if ent, err := r.buildURLEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -164,9 +174,13 @@ func (r *PostgresRepository) getURLsUpdatedSince(ctx context.Context, since time
 			var eid, rid int64
 			var c, u time.Time
 			var attrsJSON string
+			var scheme pgtype.Text
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.Raw, &a.Scheme, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Raw, &scheme, &attrsJSON); err != nil {
 				continue
+			}
+			if scheme.Valid {
+				a.Scheme = scheme.String
 			}
 
 			if ent, err := r.buildURLEntity(eid, rid, c, u, attrsJSON, &a); err == nil {

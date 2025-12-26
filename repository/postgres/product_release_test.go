@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForProductRelease() {
+type PostgresProductReleaseTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresProductReleaseTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresProductReleaseTestSuite))
+}
+
+func (suite *PostgresProductReleaseTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresProductReleaseTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresProductReleaseTestSuite) TestCreateAssetForProductRelease() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -60,7 +88,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForProductRelease() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the ProductRelease")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForProductRelease() {
+func (suite *PostgresProductReleaseTestSuite) TestFindEntitiesByContentForProductRelease() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

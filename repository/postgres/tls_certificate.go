@@ -19,12 +19,12 @@ import (
 )
 
 // Params: @record::jsonb
-const upsertTLSCertificateText = `SELECT public.tls_certificate_upsert_entity_json(@record::jsonb);`
+const upsertTLSCertificateText = `SELECT public.tlscertificate_upsert_entity_json(@record::jsonb);`
 
 // Param: @row_id::bigint
 const selectTLSCertificateByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.serial_number, a.subject_common_name, a.attrs
-FROM public.tls_certificate_get_by_id(@row_id::bigint) AS a;`
+FROM public.tlscertificate_get_by_id(@row_id::bigint) AS a;`
 
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectTLSCertificateFindByContentText = `

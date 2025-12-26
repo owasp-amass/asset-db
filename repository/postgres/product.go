@@ -88,6 +88,7 @@ func (r *PostgresRepository) fetchProductByRowID(ctx context.Context, eid, rowID
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
+
 	e, err := r.buildProductEntity(eid, rid, c, u, attrsJSON, &a)
 	if err != nil {
 		return nil, err

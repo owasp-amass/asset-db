@@ -6,17 +6,45 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"net/netip"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForNetblock() {
+type PostgresNetblockTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresNetblockTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresNetblockTestSuite))
+}
+
+func (suite *PostgresNetblockTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresNetblockTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresNetblockTestSuite) TestCreateAssetForNetblock() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -61,7 +89,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForNetblock() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Netblock")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForNetblock() {
+func (suite *PostgresNetblockTestSuite) TestFindEntitiesByContentForNetblock() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

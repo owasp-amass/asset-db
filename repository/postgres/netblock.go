@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/netip"
 	"strconv"
 	"time"
 
@@ -85,25 +84,19 @@ func (r *PostgresRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbl
 func (r *PostgresRepository) fetchNetblockByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	var rid int64
 	var c, u time.Time
+	var attrsJSON string
 	var a oamnet.Netblock
-	var cidrstr, attrsJSON string
 
 	j := NewRowJob(ctx, selectNetblockByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &cidrstr, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.CIDR, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
-
-	cidr, err := netip.ParsePrefix(cidrstr)
-	if err != nil {
-		return nil, err
-	}
-	a.CIDR = cidr
 
 	e, err := r.buildNetblockEntity(eid, rid, c, u, attrsJSON, &a)
 	if err != nil {
@@ -141,18 +134,12 @@ func (r *PostgresRepository) findNetblocksByContent(ctx context.Context, filters
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var attrsJSON string
 			var a oamnet.Netblock
-			var cidrstr, attrsJSON string
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &cidrstr, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.CIDR, &attrsJSON); err != nil {
 				continue
 			}
-
-			cidr, err := netip.ParsePrefix(cidrstr)
-			if err != nil {
-				continue
-			}
-			a.CIDR = cidr
 
 			if ent, err := r.buildNetblockEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)
@@ -186,18 +173,12 @@ func (r *PostgresRepository) getNetblocksUpdatedSince(ctx context.Context, since
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var attrsJSON string
 			var a oamnet.Netblock
-			var cidrstr, attrsJSON string
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &cidrstr, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.CIDR, &attrsJSON); err != nil {
 				continue
 			}
-
-			cidr, err := netip.ParsePrefix(cidrstr)
-			if err != nil {
-				continue
-			}
-			a.CIDR = cidr
 
 			if ent, err := r.buildNetblockEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)

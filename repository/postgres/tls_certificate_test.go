@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForTLSCertificate() {
+type PostgresTLSCertificateTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresTLSCertificateTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresTLSCertificateTestSuite))
+}
+
+func (suite *PostgresTLSCertificateTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresTLSCertificateTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresTLSCertificateTestSuite) TestCreateAssetForTLSCertificate() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -26,8 +54,8 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForTLSCertificate() {
 	serialNumber := "1234567890"
 	subcommonname := "www.fake-domain.com"
 	isscommonname := "Fake Issuer CA"
-	notbefore := time.Now().Add(-1 * time.Hour).Format("2006-01-02T15:04:05Z07:00")
-	notafter := time.Now().Add(365 * 24 * time.Hour).Format("2006-01-02T15:04:05Z07:00")
+	notbefore := time.Now().Add(-1 * time.Hour).Format("2006-01-02T15:04:05")
+	notafter := time.Now().Add(365 * 24 * time.Hour).Format("2006-01-02T15:04:05")
 	keyusages := []string{oamcert.KeyUsageDigitalSignature, oamcert.KeyUsageKeyEncipherment}
 	extkeyusages := []string{oamcert.ExtKeyUsageServerAuth, oamcert.ExtKeyUsageClientAuth}
 	sigalgorithm := "SHA256-RSA"
@@ -87,7 +115,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForTLSCertificate() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the TLSCertificate")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForTLSCertificate() {
+func (suite *PostgresTLSCertificateTestSuite) TestFindEntitiesByContentForTLSCertificate() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -98,8 +126,8 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForTLSCertificate()
 	serialNumber := "1234567890"
 	subcommonname := "www.fake-domain.com"
 	isscommonname := "Fake Issuer CA"
-	notbefore := time.Now().Add(-1 * time.Hour).Format("2006-01-02T15:04:05Z07:00")
-	notafter := time.Now().Add(365 * 24 * time.Hour).Format("2006-01-02T15:04:05Z07:00")
+	notbefore := time.Now().Add(-1 * time.Hour).Format("2006-01-02T15:04:05")
+	notafter := time.Now().Add(365 * 24 * time.Hour).Format("2006-01-02T15:04:05")
 	keyusages := []string{oamcert.KeyUsageDigitalSignature, oamcert.KeyUsageKeyEncipherment}
 	extkeyusages := []string{oamcert.ExtKeyUsageServerAuth, oamcert.ExtKeyUsageClientAuth}
 	sigalgorithm := "SHA256-RSA"

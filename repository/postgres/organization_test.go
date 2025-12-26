@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamorg "github.com/owasp-amass/open-asset-model/org"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForOrganization() {
+type PostgresOrganizationTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresOrganizationTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresOrganizationTestSuite))
+}
+
+func (suite *PostgresOrganizationTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresOrganizationTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresOrganizationTestSuite) TestCreateAssetForOrganization() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -26,7 +54,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForOrganization() {
 	uniqueID := "fake unique id"
 	name := "Fake Organization"
 	legalName := "Fake Organization LLC"
-	founding := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	founding := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02T15:04:05")
 	jurisdiction := "US-CA"
 	registrationID := "1234567890"
 	industry := "Technology"
@@ -88,7 +116,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForOrganization() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Organization")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForOrganization() {
+func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByContentForOrganization() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -99,7 +127,7 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForOrganization() {
 	uniqueID := "fake unique id"
 	name := "Fake Organization"
 	legalName := "Fake Organization LLC"
-	founding := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	founding := time.Date(2020, time.January, 15, 0, 0, 0, 0, time.UTC).Format("2006-01-02T15:04:05")
 	jurisdiction := "US-CA"
 	registrationID := "1234567890"
 	industry := "Technology"

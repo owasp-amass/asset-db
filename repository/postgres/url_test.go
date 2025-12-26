@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForURL() {
+type PostgresURLTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresURLTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresURLTestSuite))
+}
+
+func (suite *PostgresURLTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresURLTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresURLTestSuite) TestCreateAssetForURL() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -82,7 +110,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForURL() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the URL")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForURL() {
+func (suite *PostgresURLTestSuite) TestFindEntitiesByContentForURL() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

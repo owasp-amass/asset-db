@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -73,18 +74,22 @@ func (r *PostgresRepository) upsertPhone(ctx context.Context, a *contact.Phone) 
 func (r *PostgresRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	var rid int64
 	var c, u time.Time
+	var cc pgtype.Int4
 	var a contact.Phone
 	var attrsJSON string
 
 	j := NewRowJob(ctx, selectPhoneByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &a.E164, &a.CountryCode, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.E164, &cc, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+	if cc.Valid {
+		a.CountryCode = int(cc.Int32)
 	}
 
 	e, err := r.buildPhoneEntity(eid, rid, c, u, attrsJSON, &a)
@@ -123,11 +128,15 @@ func (r *PostgresRepository) findPhonesByContent(ctx context.Context, filters db
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var cc pgtype.Int4
 			var attrsJSON string
 			var a contact.Phone
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.E164, &a.CountryCode, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.E164, &cc, &attrsJSON); err != nil {
 				continue
+			}
+			if cc.Valid {
+				a.CountryCode = int(cc.Int32)
 			}
 
 			if ent, err := r.buildPhoneEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -162,11 +171,15 @@ func (r *PostgresRepository) getPhonesUpdatedSince(ctx context.Context, since ti
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var cc pgtype.Int4
 			var a contact.Phone
 			var attrsJSON string
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.E164, &a.CountryCode, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.E164, &cc, &attrsJSON); err != nil {
 				continue
+			}
+			if cc.Valid {
+				a.CountryCode = int(cc.Int32)
 			}
 
 			if ent, err := r.buildPhoneEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
