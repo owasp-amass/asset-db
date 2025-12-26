@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamacct "github.com/owasp-amass/open-asset-model/account"
@@ -28,7 +29,7 @@ FROM public.account_get_by_id(@row_id::bigint) AS a;`
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectAccountFindByContentText = `
 SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs 
-FROM public.account_get_by_filters(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+FROM public.account_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
 const selectAccountSinceText = `
@@ -73,14 +74,22 @@ func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID
 	var c, u time.Time
 	var attrsJSON string
 	var a oamacct.Account
+	var username, number pgtype.Text
 
 	j := NewRowJob(ctx, selectAccountByIDText, pgx.NamedArgs{"row_id": rowID}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &a.ID, &a.Type, &a.Username, &a.Number, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.ID, &a.Type, &username, &number, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+
+	if username.Valid {
+		a.Username = username.String
+	}
+	if number.Valid {
+		a.Number = number.String
 	}
 
 	e, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a)
@@ -121,10 +130,17 @@ func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters 
 			var c, u time.Time
 			var attrsJSON string
 			var a oamacct.Account
+			var username, number pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
-				&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
+				&a.Type, &username, &number, &attrsJSON); err != nil {
 				continue
+			}
+			if username.Valid {
+				a.Username = username.String
+			}
+			if number.Valid {
+				a.Number = number.String
 			}
 
 			if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -161,10 +177,17 @@ func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since 
 			var c, u time.Time
 			var attrsJSON string
 			var a oamacct.Account
+			var username, number pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
-				&a.Type, &a.Username, &a.Number, &attrsJSON); err != nil {
+				&a.Type, &username, &number, &attrsJSON); err != nil {
 				continue
+			}
+			if username.Valid {
+				a.Username = username.String
+			}
+			if number.Valid {
+				a.Number = number.String
 			}
 
 			if ent, err := r.buildAccountEntity(eid, rid, c, u, attrsJSON, &a); err == nil {

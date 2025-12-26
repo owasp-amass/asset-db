@@ -28,6 +28,7 @@ type PostgresRepository struct {
 	dsn    string
 	cfg    WorkerConfig
 	dbtype string
+	cancel context.CancelFunc
 }
 
 // New creates a new instance of the asset database repository.
@@ -88,17 +89,24 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 }
 
 func (pr *PostgresRepository) Prepare(ctx context.Context) error {
-	w, err := NewWorker(ctx, pr.dsn, pr.cfg)
+	wctx, cancel := context.WithCancel(context.Background())
+
+	w, err := NewWorker(wctx, pr.dsn, pr.cfg)
 	if err != nil {
+		cancel()
 		return err
 	}
 
 	pr.pool = w
+	pr.cancel = cancel
 	return nil
 }
 
 // Close implements the Repository interface.
 func (pr *PostgresRepository) Close() error {
+	if pr.cancel != nil {
+		pr.cancel()
+	}
 	if pr.pool != nil {
 		_ = pr.pool.Shutdown(context.TODO())
 	}

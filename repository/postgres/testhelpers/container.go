@@ -27,7 +27,7 @@ func CreatePostgresContainer(ctx context.Context) (*PostgresContainer, error) {
 	)
 
 	waitReady := wait.ForLog("database system is ready to accept connections").
-		WithOccurrence(1).
+		WithOccurrence(2).
 		WithStartupTimeout(90 * time.Second)
 
 	waitSQL := wait.ForSQL("5432/tcp", "pgx", func(host string, port nat.Port) string {

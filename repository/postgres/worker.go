@@ -62,10 +62,6 @@ type WorkerConfig struct {
 	// Each flush acquires a pooled connection (and can also use a TX).
 	// If 0, defaults to PoolMaxConns (or 8).
 	FlushParallelism int
-
-	// AcquireTimeout bounds how long a flush waits for a connection.
-	// If 0, defaults to 2s.
-	AcquireTimeout time.Duration
 }
 
 func withDefaults(cfg WorkerConfig) WorkerConfig {
@@ -77,9 +73,6 @@ func withDefaults(cfg WorkerConfig) WorkerConfig {
 	}
 	if cfg.MaxBatchDelay == 0 {
 		cfg.MaxBatchDelay = time.Millisecond
-	}
-	if cfg.AcquireTimeout == 0 {
-		cfg.AcquireTimeout = 2 * time.Second
 	}
 	if cfg.FlushParallelism == 0 {
 		// default: one flush goroutine per connection slot
@@ -152,11 +145,12 @@ func NewWorkerWithPool(ctx context.Context, pool *pgxpool.Pool, cfg WorkerConfig
 	wctx, cancel := context.WithCancel(ctx)
 	w := &Worker{
 		pool:     pool,
-		cfg:      cfg,
+		cfg:      withDefaults(cfg),
 		queue:    queue.NewQueue(),
 		cancel:   cancel,
 		flushSem: make(chan struct{}, cfg.FlushParallelism),
 	}
+
 	// Seed flush semaphore
 	for range cfg.FlushParallelism {
 		w.flushSem <- struct{}{}
@@ -314,38 +308,20 @@ func (w *Worker) runAggregator(ctx context.Context) {
 }
 
 func (w *Worker) flushBatch(ctx context.Context, items []job) error {
-	// Acquire with timeout so a stall doesn’t deadlock the worker under load
-	acqCtx, cancel := context.WithTimeout(ctx, w.cfg.AcquireTimeout)
-	defer cancel()
+	return w.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
+		var b pgx.Batch
 
-	conn, err := w.pool.Acquire(acqCtx)
-	if err != nil {
-		return fmt.Errorf("acquire conn: %w", err)
-	}
-	defer conn.Release()
+		for _, j := range items {
+			j.Queue(&b)
+		}
 
-	return w.flushBatchWithQuerier(ctx, conn, items)
-}
+		br := conn.SendBatch(ctx, &b)
+		defer func() { _ = br.Close() }()
 
-type batchSender interface {
-	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
-}
-
-func (w *Worker) flushBatchWithQuerier(ctx context.Context, q batchSender, items []job) error {
-	var b pgx.Batch
-
-	// Build batch
-	for _, j := range items {
-		j.Queue(&b)
-	}
-
-	br := q.SendBatch(ctx, &b)
-	defer func() { _ = br.Close() }()
-
-	// Decode results in the exact enqueue order.
-	for _, j := range items {
-		j.Done() <- j.Decode(br)
-		close(j.Done())
-	}
-	return nil
+		for _, j := range items {
+			j.Done() <- j.Decode(br)
+			close(j.Done())
+		}
+		return nil
+	})
 }
