@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -69,7 +70,9 @@ func (r *PostgresRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.A
 	}
 
 	var id int64
-	j := NewRowJob(ctx, upsertAutnumRecordText, pgx.NamedArgs{"record": string(record)}, func(row pgx.Row) error {
+	j := NewRowJob(ctx, upsertAutnumRecordText, pgx.NamedArgs{
+		"record": string(record),
+	}, func(row pgx.Row) error {
 		return row.Scan(&id)
 	})
 
@@ -82,14 +85,22 @@ func (r *PostgresRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, 
 	var c, u time.Time
 	var attrsJSON string
 	var a oamreg.AutnumRecord
+	var name, whois pgtype.Text
 
 	j := NewRowJob(ctx, selectAutnumByIDText, pgx.NamedArgs{"row_id": rowID}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &a.Handle, &a.Number, &a.Name, &a.WhoisServer, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.Handle, &a.Number, &name, &whois, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+
+	if name.Valid {
+		a.Name = name.String
+	}
+	if whois.Valid {
+		a.WhoisServer = whois.String
 	}
 
 	e, err := r.buildAutnumRecordEntity(eid, rid, c, u, attrsJSON, &a)
@@ -130,10 +141,17 @@ func (r *PostgresRepository) findAutnumRecordsByContent(ctx context.Context, fil
 			var c, u time.Time
 			var attrsJSON string
 			var a oamreg.AutnumRecord
+			var name, whois pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.Handle,
-				&a.Number, &a.Name, &a.WhoisServer, &attrsJSON); err != nil {
+				&a.Number, &name, &whois, &attrsJSON); err != nil {
 				continue
+			}
+			if name.Valid {
+				a.Name = name.String
+			}
+			if whois.Valid {
+				a.WhoisServer = whois.String
 			}
 
 			if ent, err := r.buildAutnumRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -170,10 +188,17 @@ func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, s
 			var c, u time.Time
 			var attrsJSON string
 			var a oamreg.AutnumRecord
+			var name, whois pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.Handle,
-				&a.Number, &a.Name, &a.WhoisServer, &attrsJSON); err != nil {
+				&a.Number, &name, &whois, &attrsJSON); err != nil {
 				continue
+			}
+			if name.Valid {
+				a.Name = name.String
+			}
+			if whois.Valid {
+				a.WhoisServer = whois.String
 			}
 
 			if ent, err := r.buildAutnumRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {

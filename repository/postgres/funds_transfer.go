@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamfin "github.com/owasp-amass/open-asset-model/financial"
@@ -29,7 +30,7 @@ FROM public.fundstransfer_get_by_id(@row_id::bigint) AS a;`
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectFundsTransferFindByContentText = `
 SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.amount, a.reference_number, a.attrs 
-FROM public.fundstransfer_get_by_filters(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+FROM public.fundstransfer_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
 const selectFundsTransferSinceText = `
@@ -80,17 +81,26 @@ func (r *PostgresRepository) fetchFundsTransferByRowID(ctx context.Context, eid,
 	var row_id int64
 	var c, u time.Time
 	var attrsJSON string
+	var refnum pgtype.Text
+	var amount pgtype.Float8
 	var a oamfin.FundsTransfer
 
 	j := NewRowJob(ctx, selectFundsTransferByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&row_id, &c, &u, &a.ID, &a.Amount, &a.ReferenceNumber, &attrsJSON)
+		return row.Scan(&row_id, &c, &u, &a.ID, &amount, &refnum, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+
+	if amount.Valid {
+		a.Amount = amount.Float64
+	}
+	if refnum.Valid {
+		a.ReferenceNumber = refnum.String
 	}
 
 	e, err := r.buildFundsTransferEntity(eid, row_id, c, u, attrsJSON, &a)
@@ -130,11 +140,19 @@ func (r *PostgresRepository) findFundsTransfersByContent(ctx context.Context, fi
 			var eid, rid int64
 			var c, u time.Time
 			var attrsJSON string
+			var refnum pgtype.Text
+			var amount pgtype.Float8
 			var a oamfin.FundsTransfer
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
-				&a.Amount, &a.ReferenceNumber, &attrsJSON); err != nil {
+				&amount, &refnum, &attrsJSON); err != nil {
 				continue
+			}
+			if amount.Valid {
+				a.Amount = amount.Float64
+			}
+			if refnum.Valid {
+				a.ReferenceNumber = refnum.String
 			}
 
 			if ent, err := r.buildFundsTransferEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -170,11 +188,19 @@ func (r *PostgresRepository) getFundsTransfersUpdatedSince(ctx context.Context, 
 			var eid, rid int64
 			var c, u time.Time
 			var attrsJSON string
+			var refnum pgtype.Text
+			var amount pgtype.Float8
 			var a oamfin.FundsTransfer
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
-				&a.Amount, &a.ReferenceNumber, &attrsJSON); err != nil {
+				&amount, &refnum, &attrsJSON); err != nil {
 				continue
+			}
+			if amount.Valid {
+				a.Amount = amount.Float64
+			}
+			if refnum.Valid {
+				a.ReferenceNumber = refnum.String
 			}
 
 			if ent, err := r.buildFundsTransferEntity(eid, rid, c, u, attrsJSON, &a); err == nil {

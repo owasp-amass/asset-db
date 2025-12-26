@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamfile "github.com/owasp-amass/open-asset-model/file"
@@ -28,7 +29,7 @@ FROM public.file_get_by_id(@row_id::bigint) AS a;`
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectFileFindByContentText = `
 SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.file_url, a.basename, a.file_type, a.attrs 
-FROM public.file_get_by_filters(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+FROM public.file_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
 const selectFileSinceText = `
@@ -64,16 +65,24 @@ func (r *PostgresRepository) fetchFileByRowID(ctx context.Context, eid, rowID in
 	var a oamfile.File
 	var c, u time.Time
 	var attrsJSON string
+	var name, fileType pgtype.Text
 
 	j := NewRowJob(ctx, selectFileByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &a.URL, &a.Name, &a.Type, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.URL, &name, &fileType, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+
+	if name.Valid {
+		a.Name = name.String
+	}
+	if fileType.Valid {
+		a.Type = fileType.String
 	}
 
 	e, err := r.buildFileEntity(eid, rid, c, u, attrsJSON, &a)
@@ -114,9 +123,17 @@ func (r *PostgresRepository) findFilesByContent(ctx context.Context, filters dbt
 			var c, u time.Time
 			var attrsJSON string
 			var a oamfile.File
+			var name, fileType pgtype.Text
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.URL, &a.Name, &a.Type, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u,
+				&a.URL, &name, &fileType, &attrsJSON); err != nil {
 				continue
+			}
+			if name.Valid {
+				a.Name = name.String
+			}
+			if fileType.Valid {
+				a.Type = fileType.String
 			}
 
 			if ent, err := r.buildFileEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -153,9 +170,17 @@ func (r *PostgresRepository) getFilesUpdatedSince(ctx context.Context, since tim
 			var c, u time.Time
 			var attrsJSON string
 			var a oamfile.File
+			var name, fileType pgtype.Text
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.URL, &a.Name, &a.Type, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u,
+				&a.URL, &name, &fileType, &attrsJSON); err != nil {
 				continue
+			}
+			if name.Valid {
+				a.Name = name.String
+			}
+			if fileType.Valid {
+				a.Type = fileType.String
 			}
 
 			if ent, err := r.buildFileEntity(eid, rid, c, u, attrsJSON, &a); err == nil {

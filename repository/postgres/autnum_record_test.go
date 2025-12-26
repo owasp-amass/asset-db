@@ -23,7 +23,6 @@ type PostgresAutnumRecordTestSuite struct {
 	suite.Suite
 	container *testhelpers.PostgresContainer
 	db        *PostgresRepository
-	ctx       context.Context
 }
 
 func TestPostgresAutnumRecordTestSuite(t *testing.T) {
@@ -32,7 +31,6 @@ func TestPostgresAutnumRecordTestSuite(t *testing.T) {
 
 func (suite *PostgresAutnumRecordTestSuite) SetupSuite() {
 	var err error
-	suite.ctx = context.Background()
 	suite.container, suite.db, err = setupContainerAndPostgresRepo()
 	if err != nil {
 		log.Fatal(err)
@@ -40,7 +38,7 @@ func (suite *PostgresAutnumRecordTestSuite) SetupSuite() {
 }
 
 func (suite *PostgresAutnumRecordTestSuite) TearDownSuite() {
-	if err := suite.container.Terminate(suite.ctx); err != nil {
+	if err := suite.container.Terminate(context.Background()); err != nil {
 		log.Fatalf("error terminating postgres container: %s", err)
 	}
 }
@@ -56,8 +54,8 @@ func (suite *PostgresAutnumRecordTestSuite) TestCreateAssetForAutnumRecord() {
 	handle := "AS-TEST"
 	recname := "Test Autnum Record"
 	server := "whois.test.net"
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	status := []string{"active"}
 
 	ar, err := suite.db.CreateAsset(ctx, &oamreg.AutnumRecord{
@@ -116,8 +114,8 @@ func (suite *PostgresAutnumRecordTestSuite) TestFindEntitiesByContentForAutnumRe
 	handle := "AS-TEST"
 	recname := "Test Autnum Record"
 	server := "whois.test.net"
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	status := []string{"active"}
 
 	ar, err := suite.db.CreateAsset(ctx, &oamreg.AutnumRecord{

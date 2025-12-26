@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -110,14 +111,16 @@ func (r *PostgresRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IP
 func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	var rid int64
 	var c, u time.Time
+	var attrsJSON string
 	var a oamreg.IPNetRecord
-	var cidrstr, start, end, attrsJSON string
+	var start, end *netip.Addr
+	var whois, parent pgtype.Text
 
 	j := NewRowJob(ctx, selectIPNetRecordByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &cidrstr, &a.Name, &a.Handle,
-			&a.WhoisServer, &a.ParentHandle, &start, &end, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.CIDR, &a.Name,
+			&a.Handle, &whois, &parent, &start, &end, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
@@ -125,23 +128,18 @@ func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, r
 		return nil, err
 	}
 
-	var err error
-	a.CIDR, err = netip.ParsePrefix(cidrstr)
-	if err != nil {
-		return nil, err
+	if whois.Valid {
+		a.WhoisServer = whois.String
 	}
-
-	startaddr, err := netip.ParseAddr(start)
-	if err != nil {
-		return nil, err
+	if parent.Valid {
+		a.ParentHandle = parent.String
 	}
-	a.StartAddress = startaddr
-
-	endaddr, err := netip.ParseAddr(end)
-	if err != nil {
-		return nil, err
+	if start != nil {
+		a.StartAddress = *start
 	}
-	a.EndAddress = endaddr
+	if end != nil {
+		a.EndAddress = *end
+	}
 
 	e, err := r.buildIPNetRecordEntity(eid, rid, c, u, attrsJSON, &a)
 	if err != nil {
@@ -179,31 +177,28 @@ func (r *PostgresRepository) findIPNetRecordsByContent(ctx context.Context, filt
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var attrsJSON string
 			var a oamreg.IPNetRecord
-			var cidrstr, start, end, attrsJSON string
+			var start, end *netip.Addr
+			var whois, parent pgtype.Text
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &cidrstr, &a.Name, &a.Handle,
-				&a.WhoisServer, &a.ParentHandle, &start, &end, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.CIDR, &a.Name,
+				&a.Handle, &whois, &parent, &start, &end, &attrsJSON); err != nil {
 				continue
 			}
 
-			var err error
-			a.CIDR, err = netip.ParsePrefix(cidrstr)
-			if err != nil {
-				continue
+			if whois.Valid {
+				a.WhoisServer = whois.String
 			}
-
-			startaddr, err := netip.ParseAddr(start)
-			if err != nil {
-				continue
+			if parent.Valid {
+				a.ParentHandle = parent.String
 			}
-			a.StartAddress = startaddr
-
-			endaddr, err := netip.ParseAddr(end)
-			if err != nil {
-				continue
+			if start != nil {
+				a.StartAddress = *start
 			}
-			a.EndAddress = endaddr
+			if end != nil {
+				a.EndAddress = *end
+			}
 
 			if ent, err := r.buildIPNetRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)
@@ -237,31 +232,28 @@ func (r *PostgresRepository) getIPNetRecordsUpdatedSince(ctx context.Context, si
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var attrsJSON string
 			var a oamreg.IPNetRecord
-			var cidrstr, start, end, attrsJSON string
+			var start, end *netip.Addr
+			var whois, parent pgtype.Text
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &cidrstr, &a.Name, &a.Handle,
-				&a.WhoisServer, &a.ParentHandle, &start, &end, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.CIDR, &a.Name,
+				&a.Handle, &whois, &parent, &start, &end, &attrsJSON); err != nil {
 				continue
 			}
 
-			var err error
-			a.CIDR, err = netip.ParsePrefix(cidrstr)
-			if err != nil {
-				continue
+			if whois.Valid {
+				a.WhoisServer = whois.String
 			}
-
-			startaddr, err := netip.ParseAddr(start)
-			if err != nil {
-				continue
+			if parent.Valid {
+				a.ParentHandle = parent.String
 			}
-			a.StartAddress = startaddr
-
-			endaddr, err := netip.ParseAddr(end)
-			if err != nil {
-				continue
+			if start != nil {
+				a.StartAddress = *start
 			}
-			a.EndAddress = endaddr
+			if end != nil {
+				a.EndAddress = *end
+			}
 
 			if ent, err := r.buildIPNetRecordEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)

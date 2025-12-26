@@ -23,23 +23,23 @@ const upsertIdentifierText = `SELECT public.identifier_upsert_entity_json(@recor
 
 // Param: @row_id::bigint
 const selectIdentifierByIDText = `
-SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.id_type, a.attrs
+SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.id_value, a.id_type, a.attrs
 FROM public.identifier_get_by_id(@row_id::bigint) AS a;`
 
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectIdentifierFindByContentText = `
-SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.id_type, a.attrs 
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.id_value, a.id_type, a.attrs 
 FROM public.identifier_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
 const selectIdentifierSinceText = `
-SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.id_type, a.attrs 
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.id_value, a.id_type, a.attrs 
 FROM public.identifier_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type identifierAttributes struct {
 	Status         string `json:"status,omitempty"`
-	CreatedDate    string `json:"created_date,omitempty"`
-	UpdatedDate    string `json:"updated_date,omitempty"`
+	CreatedDate    string `json:"creation_date,omitempty"`
+	UpdatedDate    string `json:"update_date,omitempty"`
 	ExpirationDate string `json:"expiration_date,omitempty"`
 }
 
@@ -79,7 +79,7 @@ func (r *PostgresRepository) fetchIdentifierByRowID(ctx context.Context, eid, ro
 	j := NewRowJob(ctx, selectIdentifierByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&row_id, &c, &u, &a.UniqueID, &a.Type, &attrsJSON)
+		return row.Scan(&row_id, &c, &u, &a.UniqueID, &a.ID, &a.Type, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
@@ -126,7 +126,8 @@ func (r *PostgresRepository) findIdentifiersByContent(ctx context.Context, filte
 			var attrsJSON string
 			var a oamgen.Identifier
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.UniqueID, &a.Type, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u,
+				&a.UniqueID, &a.ID, &a.Type, &attrsJSON); err != nil {
 				continue
 			}
 
@@ -165,7 +166,8 @@ func (r *PostgresRepository) getIdentifiersUpdatedSince(ctx context.Context, sin
 			var attrsJSON string
 			var a oamgen.Identifier
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.UniqueID, &a.Type, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u,
+				&a.UniqueID, &a.ID, &a.Type, &attrsJSON); err != nil {
 				continue
 			}
 
@@ -190,6 +192,9 @@ func (r *PostgresRepository) buildIdentifierEntity(eid, rid int64, createdAt, up
 	}
 	if a.UniqueID == "" {
 		return nil, errors.New("identifier unique ID is missing")
+	}
+	if a.ID == "" {
+		return nil, errors.New("identifier ID value is missing")
 	}
 	if a.Type == "" {
 		return nil, fmt.Errorf("identifier type is missing")

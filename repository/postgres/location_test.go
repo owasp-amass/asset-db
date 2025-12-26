@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForLocation() {
+type PostgresLocationTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresLocationTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresLocationTestSuite))
+}
+
+func (suite *PostgresLocationTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresLocationTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresLocationTestSuite) TestCreateAssetForLocation() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -91,7 +119,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForLocation() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Location")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForLocation() {
+func (suite *PostgresLocationTestSuite) TestFindEntitiesByContentForLocation() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -99,8 +127,8 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForLocation() {
 
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	address := "123 Main Street, Apt 4B, Anytown, CA 91911 US"
-	building := ""
+	address := "OWASP Building, 123 Main Street, Apt 4B, Anytown, CA 91911 US"
+	building := "OWASP Building"
 	buildingNum := "123"
 	streetName := "Main Street"
 	unit := "Apt 4B"
@@ -171,7 +199,7 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForLocation() {
 		"postal_code":     postalCode,
 	} {
 		ents, err := suite.db.FindEntitiesByContent(ctx, oam.Location, before, dbt.ContentFilters{k: v})
-		assert.NoError(t, err, "Failed to find entities by content for the Location")
+		assert.NoError(t, err, "Failed to find entities by content for the Location with filter %s=%s", k, v)
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Location")
 	}
 }

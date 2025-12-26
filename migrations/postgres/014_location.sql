@@ -10,10 +10,10 @@ CREATE TABLE IF NOT EXISTS public.location (
   id              bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
   updated_at      timestamp without time zone NOT NULL DEFAULT now(),
-  city            text NOT NULL,
-  unit            text,
   street_address  text NOT NULL UNIQUE,
+  city            text NOT NULL,
   country         text NOT NULL,
+  unit            text,
   building        text,
   province        text,
   locality        text,
@@ -131,7 +131,7 @@ DECLARE
     v_street_name     text;
     v_building_number text;
     v_po_box          text;
-    v_gln             text;
+    v_gln             integer;
     v_attrs           jsonb;
 BEGIN
     v_street_address  := NULLIF(_rec->>'address', '');

@@ -117,8 +117,8 @@ DECLARE
     v_attrs           jsonb;
 BEGIN
     v_domain          := NULLIF(_rec->>'domain', '');
-    v_record_name     := NULLIF(_rec->>'record_name', '');
-    v_raw_record      := NULLIF(_rec->>'raw_record', '');
+    v_record_name     := NULLIF(_rec->>'name', '');
+    v_raw_record      := NULLIF(_rec->>'raw', '');
     v_punycode        := (_rec->>'punycode');
     v_extension       := (_rec->>'extension');
     v_created_date    := NULLIF(_rec->>'created_date', '')::timestamp;
@@ -132,10 +132,10 @@ BEGIN
                             ELSE NULL
                          END;
 
-    -- record_status as JSON array of text, if present
-    IF _rec ? 'record_status' THEN
+    -- status as JSON array of text, if present
+    IF _rec ? 'status' THEN
         SELECT array_agg(elem::text) INTO v_record_status
-        FROM jsonb_array_elements_text(_rec->'record_status') AS elem;
+        FROM jsonb_array_elements_text(_rec->'status') AS elem;
     ELSE
         v_record_status := NULL;
     END IF;

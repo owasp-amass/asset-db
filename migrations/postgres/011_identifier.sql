@@ -103,16 +103,16 @@ BEGIN
     v_id_value        := NULLIF(_rec->>'id', '');
     v_id_type         := NULLIF(_rec->>'id_type', '');
     v_status          := NULLIF(_rec->>'status', '');
-    v_created_date    := NULLIF(_rec->>'created_date', '')::timestamp;
-    v_updated_date    := NULLIF(_rec->>'updated_date', '')::timestamp;
+    v_created_date    := NULLIF(_rec->>'creation_date', '')::timestamp;
+    v_updated_date    := NULLIF(_rec->>'update_date', '')::timestamp;
     v_expiration_date := NULLIF(_rec->>'expiration_date', '')::timestamp;
 
     -- Build attrs from the appropriate fields.
     v_attrs := jsonb_strip_nulls(
         jsonb_build_object(
             'status',          v_status,
-            'created_date',    v_created_date,
-            'updated_date',    v_updated_date,
+            'creation_date',    v_created_date,
+            'update_date',    v_updated_date,
             'expiration_date', v_expiration_date
         )
     ) || '{}'::jsonb;

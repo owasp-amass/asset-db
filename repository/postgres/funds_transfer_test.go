@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamfin "github.com/owasp-amass/open-asset-model/financial"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForFundsTransfer() {
+type PostgresFundsTransferTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresFundsTransferTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresFundsTransferTestSuite))
+}
+
+func (suite *PostgresFundsTransferTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresFundsTransferTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresFundsTransferTestSuite) TestCreateAssetForFundsTransfer() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -27,7 +55,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForFundsTransfer() {
 	refID := "test reference ID"
 	currency := "USD"
 	method := "wire transfer"
-	date := time.Now().Add(-72 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	date := time.Now().Add(-72 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	rate := 1.0
 
 	ft, err := suite.db.CreateAsset(ctx, &oamfin.FundsTransfer{
@@ -75,7 +103,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForFundsTransfer() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the FundsTransfer")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForFundsTransfer() {
+func (suite *PostgresFundsTransferTestSuite) TestFindEntitiesByContentForFundsTransfer() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -87,7 +115,7 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForFundsTransfer() 
 	refID := "test reference ID"
 	currency := "USD"
 	method := "wire transfer"
-	date := time.Now().Add(-72 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	date := time.Now().Add(-72 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	rate := 1.0
 
 	ft, err := suite.db.CreateAsset(ctx, &oamfin.FundsTransfer{
@@ -118,7 +146,7 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForFundsTransfer() 
 	ft2, ok := found.Asset.(*oamfin.FundsTransfer)
 	assert.True(t, ok, "FundsTransfer found by content is not of type *oamfin.FundsTransfer")
 	assert.Equal(t, found.ID, ft.ID, "FundsTransfer found by content does not have matching IDs")
-	assert.Equal(t, ft2.Amount, amount, "FundsTransfer found by ID does not have a matching Amount")
+	assert.Equal(t, ft2.Amount, amount, "FundsTransfer found by content does not have a matching Amount")
 	assert.Equal(t, ft2.ReferenceNumber, refID, "FundsTransfer found by ID does not have a matching ReferenceNumber")
 	assert.Equal(t, ft2.Currency, currency, "FundsTransfer found by ID does not have a matching Currency")
 	assert.Equal(t, ft2.Method, method, "FundsTransfer found by ID does not have a matching Method")

@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForDomainRecord() {
+type PostgresDomainRecordTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresDomainRecordTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresDomainRecordTestSuite))
+}
+
+func (suite *PostgresDomainRecordTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresDomainRecordTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresDomainRecordTestSuite) TestCreateAssetForDomainRecord() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -23,22 +51,22 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForDomainRecord() {
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	status := []string{"active"}
-	object_id := "test object ID"
-	raw_record := "test raw text"
-	record_name := "test record name"
+	objectID := "test object ID"
+	rawRecord := "test raw text"
+	recordName := "test record name"
 	domain := "test.com"
 	punycode := "test puny code"
 	extension := "com"
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	server := "whois.test.com"
 	dr, err := suite.db.CreateAsset(ctx, &oamreg.DomainRecord{
-		Raw:            raw_record,
-		ID:             object_id,
+		Raw:            rawRecord,
+		ID:             objectID,
 		Domain:         domain,
 		Punycode:       punycode,
-		Name:           record_name,
+		Name:           recordName,
 		Extension:      extension,
 		WhoisServer:    server,
 		CreatedDate:    created,
@@ -65,13 +93,13 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForDomainRecord() {
 	assert.Equal(t, dr.LastSeen, found.LastSeen, "Entity LastSeen found by ID for the DomainRecord does not match")
 
 	dr2, ok := found.Asset.(*oamreg.DomainRecord)
-	assert.True(t, ok, "Asset found by ID is not of type *oamnet.DomainRecord")
+	assert.True(t, ok, "Asset found by ID is not of type *oamreg.DomainRecord")
 	assert.Equal(t, found.ID, dr.ID, "DomainRecord found by Entity ID does not have matching IDs")
-	assert.Equal(t, dr2.Raw, raw_record, "DomainRecord found by ID does not have a matching Raw record")
-	assert.Equal(t, dr2.ID, object_id, "DomainRecord found by ID does not have a matching ID")
+	assert.Equal(t, dr2.Raw, rawRecord, "DomainRecord found by ID does not have a matching Raw record")
+	assert.Equal(t, dr2.ID, objectID, "DomainRecord found by ID does not have a matching ID")
 	assert.Equal(t, dr2.Domain, domain, "DomainRecord found by ID does not have a matching Domain")
 	assert.Equal(t, dr2.Punycode, punycode, "DomainRecord found by ID does not have a matching Punycode")
-	assert.Equal(t, dr2.Name, record_name, "DomainRecord found by ID does not have a matching Name")
+	assert.Equal(t, dr2.Name, recordName, "DomainRecord found by ID does not have a matching Name")
 	assert.Equal(t, dr2.Extension, extension, "DomainRecord found by ID does not have a matching Extension")
 	assert.Equal(t, dr2.WhoisServer, server, "DomainRecord found by ID does not have a matching WhoisServer")
 	assert.Equal(t, dr2.CreatedDate, created, "DomainRecord found by ID does not have a matching CreatedDate")
@@ -86,7 +114,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForDomainRecord() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the DomainRecord")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForDomainRecord() {
+func (suite *PostgresDomainRecordTestSuite) TestFindEntitiesByContentForDomainRecord() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -94,22 +122,22 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForDomainRecord() {
 	before := time.Now()
 	time.Sleep(100 * time.Millisecond)
 	status := []string{"active"}
-	object_id := "test object ID"
-	raw_record := "test raw text"
-	record_name := "test record name"
+	objectID := "test object ID"
+	rawRecord := "test raw text"
+	recordName := "test record name"
 	domain := "test.com"
 	punycode := "test puny code"
 	extension := "com"
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	expiration := time.Now().Add(48 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	server := "whois.test.com"
 	dr, err := suite.db.CreateAsset(ctx, &oamreg.DomainRecord{
-		Raw:            raw_record,
-		ID:             object_id,
+		Raw:            rawRecord,
+		ID:             objectID,
 		Domain:         domain,
 		Punycode:       punycode,
-		Name:           record_name,
+		Name:           recordName,
 		Extension:      extension,
 		WhoisServer:    server,
 		CreatedDate:    created,
@@ -136,11 +164,11 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForDomainRecord() {
 	dr2, ok := found.Asset.(*oamreg.DomainRecord)
 	assert.True(t, ok, "DomainRecord found by content is not of type *oamreg.DomainRecord")
 	assert.Equal(t, found.ID, dr.ID, "DomainRecord found by content does not have matching IDs")
-	assert.Equal(t, dr2.Raw, raw_record, "DomainRecord found by ID does not have a matching Raw record")
-	assert.Equal(t, dr2.ID, object_id, "DomainRecord found by ID does not have a matching ID")
+	assert.Equal(t, dr2.Raw, rawRecord, "DomainRecord found by ID does not have a matching Raw record")
+	assert.Equal(t, dr2.ID, objectID, "DomainRecord found by ID does not have a matching ID")
 	assert.Equal(t, dr2.Domain, domain, "DomainRecord found by ID does not have a matching Domain")
 	assert.Equal(t, dr2.Punycode, punycode, "DomainRecord found by ID does not have a matching Punycode")
-	assert.Equal(t, dr2.Name, record_name, "DomainRecord found by ID does not have a matching Name")
+	assert.Equal(t, dr2.Name, recordName, "DomainRecord found by ID does not have a matching Name")
 	assert.Equal(t, dr2.Extension, extension, "DomainRecord found by ID does not have a matching Extension")
 	assert.Equal(t, dr2.WhoisServer, server, "DomainRecord found by ID does not have a matching WhoisServer")
 	assert.Equal(t, dr2.CreatedDate, created, "DomainRecord found by ID does not have a matching CreatedDate")
@@ -149,7 +177,7 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForDomainRecord() {
 	assert.Equal(t, dr2.Status, status, "DomainRecord found by ID does not have a matching Status")
 
 	ents, err := suite.db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
-		"name": record_name,
+		"name": recordName,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
@@ -167,7 +195,7 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForDomainRecord() {
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
 	ents, err = suite.db.FindEntitiesByContent(ctx, oam.DomainRecord, time.Time{}, dbt.ContentFilters{
-		"id": object_id,
+		"id": objectID,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")

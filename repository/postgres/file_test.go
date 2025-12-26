@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamfile "github.com/owasp-amass/open-asset-model/file"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForFile() {
+type PostgresFileTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresFileTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresFileTestSuite))
+}
+
+func (suite *PostgresFileTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresFileTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresFileTestSuite) TestCreateAssetForFile() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -62,7 +90,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForFile() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the File")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForFile() {
+func (suite *PostgresFileTestSuite) TestFindEntitiesByContentForFile() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

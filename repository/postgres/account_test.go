@@ -6,7 +6,6 @@ package postgres
 
 import (
 	"context"
-	"io"
 	"log"
 	"strconv"
 	"testing"
@@ -39,9 +38,9 @@ func (suite *PostgresAccountTestSuite) SetupSuite() {
 }
 
 func (suite *PostgresAccountTestSuite) TearDownSuite() {
-	logs, _ := suite.container.Logs(context.Background())
-	b, _ := io.ReadAll(logs)
-	log.Printf("Postgres Container Logs:\n%s", string(b))
+	//logs, _ := suite.container.Logs(context.Background())
+	//b, _ := io.ReadAll(logs)
+	//log.Printf("Postgres Container Logs:\n%s", string(b))
 
 	if err := suite.container.Terminate(context.Background()); err != nil {
 		log.Fatalf("error terminating postgres container: %s", err)

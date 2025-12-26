@@ -6,16 +6,44 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForIdentifier() {
+type PostgresIdentifierTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresIdentifierTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresIdentifierTestSuite))
+}
+
+func (suite *PostgresIdentifierTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresIdentifierTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresIdentifierTestSuite) TestCreateAssetForIdentifier() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -25,9 +53,9 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForIdentifier() {
 	idvalue := "someone@owasp.org"
 	idtype := oamgen.EmailAddress
 	unique_id := idtype + ":" + idvalue
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	status := "active"
 	idasset, err := suite.db.CreateAsset(ctx, &oamgen.Identifier{
 		UniqueID:       unique_id,
@@ -74,7 +102,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForIdentifier() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Identifier")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForIdentifier() {
+func (suite *PostgresIdentifierTestSuite) TestFindEntitiesByContentForIdentifier() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -84,9 +112,9 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForIdentifier() {
 	idvalue := "someone@owasp.org"
 	idtype := oamgen.EmailAddress
 	unique_id := idtype + ":" + idvalue
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	expiration := time.Now().Add(24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	status := "active"
 	idasset, err := suite.db.CreateAsset(ctx, &oamgen.Identifier{
 		UniqueID:       unique_id,

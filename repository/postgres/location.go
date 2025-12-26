@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -22,7 +23,7 @@ const upsertLocationText = `SELECT public.location_upsert_entity_json(@record::j
 
 // Param: @row_id::bigint
 const selectLocationByIDText = `
-SELECT a.id, a.created_at, a.updated_at, a.city, a.unit, a.street_address, a.country, 
+SELECT a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit,
 	   a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
 FROM public.location_get_by_id(@row_id::bigint) AS a;`
 
@@ -51,6 +52,9 @@ func (r *PostgresRepository) upsertLocation(ctx context.Context, a *contact.Loca
 	if a.City == "" {
 		return 0, errors.New("location city cannot be empty")
 	}
+	if a.Country == "" {
+		return 0, errors.New("location country cannot be empty")
+	}
 
 	record, err := a.JSON()
 	if err != nil {
@@ -73,18 +77,41 @@ func (r *PostgresRepository) fetchLocationByRowID(ctx context.Context, eid, rowI
 	var c, u time.Time
 	var attrsJSON string
 	var a contact.Location
+	var unit, building, province, locality pgtype.Text
+	var postalCode, streetName, buildingNumber pgtype.Text
 
 	j := NewRowJob(ctx, selectLocationByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &a.City, &a.Unit,
-			&a.Address, &a.Country, &a.Building, &a.Province, &a.Locality,
-			&a.PostalCode, &a.StreetName, &a.BuildingNumber, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.Address, &a.City, &a.Country, &unit, &building,
+			&province, &locality, &postalCode, &streetName, &buildingNumber, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+
+	if unit.Valid {
+		a.Unit = unit.String
+	}
+	if building.Valid {
+		a.Building = building.String
+	}
+	if province.Valid {
+		a.Province = province.String
+	}
+	if locality.Valid {
+		a.Locality = locality.String
+	}
+	if postalCode.Valid {
+		a.PostalCode = postalCode.String
+	}
+	if streetName.Valid {
+		a.StreetName = streetName.String
+	}
+	if buildingNumber.Valid {
+		a.BuildingNumber = buildingNumber.String
 	}
 
 	e, err := r.buildLocationEntity(eid, rid, c, u, attrsJSON, &a)
@@ -125,11 +152,34 @@ func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters
 			var c, u time.Time
 			var attrsJSON string
 			var a contact.Location
+			var unit, building, province, locality pgtype.Text
+			var postalCode, streetName, buildingNumber pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.Address, &a.City,
-				&a.Country, &a.Unit, &a.Building, &a.Province, &a.Locality,
-				&a.PostalCode, &a.StreetName, &a.BuildingNumber, &attrsJSON); err != nil {
+				&a.Country, &unit, &building, &province, &locality,
+				&postalCode, &streetName, &buildingNumber, &attrsJSON); err != nil {
 				continue
+			}
+			if unit.Valid {
+				a.Unit = unit.String
+			}
+			if building.Valid {
+				a.Building = building.String
+			}
+			if province.Valid {
+				a.Province = province.String
+			}
+			if locality.Valid {
+				a.Locality = locality.String
+			}
+			if postalCode.Valid {
+				a.PostalCode = postalCode.String
+			}
+			if streetName.Valid {
+				a.StreetName = streetName.String
+			}
+			if buildingNumber.Valid {
+				a.BuildingNumber = buildingNumber.String
 			}
 
 			if ent, err := r.buildLocationEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -166,11 +216,34 @@ func (r *PostgresRepository) getLocationsUpdatedSince(ctx context.Context, since
 			var c, u time.Time
 			var attrsJSON string
 			var a contact.Location
+			var unit, building, province, locality pgtype.Text
+			var postalCode, streetName, buildingNumber pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.Address, &a.City,
-				&a.Country, &a.Unit, &a.Building, &a.Province, &a.Locality,
-				&a.PostalCode, &a.StreetName, &a.BuildingNumber, &attrsJSON); err != nil {
+				&a.Country, &unit, &building, &province, &locality,
+				&postalCode, &streetName, &buildingNumber, &attrsJSON); err != nil {
 				continue
+			}
+			if unit.Valid {
+				a.Unit = unit.String
+			}
+			if building.Valid {
+				a.Building = building.String
+			}
+			if province.Valid {
+				a.Province = province.String
+			}
+			if locality.Valid {
+				a.Locality = locality.String
+			}
+			if postalCode.Valid {
+				a.PostalCode = postalCode.String
+			}
+			if streetName.Valid {
+				a.StreetName = streetName.String
+			}
+			if buildingNumber.Valid {
+				a.BuildingNumber = buildingNumber.String
 			}
 
 			if ent, err := r.buildLocationEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
@@ -197,6 +270,9 @@ func (r *PostgresRepository) buildLocationEntity(eid, rid int64, createdAt, upda
 	}
 	if a.City == "" {
 		return nil, errors.New("location city is missing")
+	}
+	if a.Country == "" {
+		return nil, errors.New("location country is missing")
 	}
 
 	var attrs locationAttributes

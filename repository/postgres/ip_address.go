@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/netip"
 	"strconv"
 	"time"
 
@@ -85,25 +84,19 @@ func (r *PostgresRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAd
 func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	var rid int64
 	var c, u time.Time
+	var attrsJSON string
 	var a oamnet.IPAddress
-	var addrstr, attrsJSON string
 
 	j := NewRowJob(ctx, selectIPAddressByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &addrstr, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.Address, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
-
-	addr, err := netip.ParseAddr(addrstr)
-	if err != nil {
-		return nil, err
-	}
-	a.Address = addr
 
 	e, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a)
 	if err != nil {
@@ -142,18 +135,12 @@ func (r *PostgresRepository) findIPAddressesByContent(ctx context.Context, filte
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var attrsJSON string
 			var a oamnet.IPAddress
-			var addrstr, attrsJSON string
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Address, &attrsJSON); err != nil {
 				continue
 			}
-
-			addr, err := netip.ParseAddr(addrstr)
-			if err != nil {
-				continue
-			}
-			a.Address = addr
 
 			if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)
@@ -187,18 +174,12 @@ func (r *PostgresRepository) getIPAddressesUpdatedSince(ctx context.Context, sin
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
+			var attrsJSON string
 			var a oamnet.IPAddress
-			var addrstr, attrsJSON string
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &addrstr, &a.Type, &attrsJSON); err != nil {
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Address, &attrsJSON); err != nil {
 				continue
 			}
-
-			addr, err := netip.ParseAddr(addrstr)
-			if err != nil {
-				continue
-			}
-			a.Address = addr
 
 			if ent, err := r.buildIPAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)

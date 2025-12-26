@@ -6,17 +6,45 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"net/netip"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateAssetForIPNetRecord() {
+type PostgresIPNetRecordTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresIPNetRecordTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresIPNetRecordTestSuite))
+}
+
+func (suite *PostgresIPNetRecordTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresIPNetRecordTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresIPNetRecordTestSuite) TestCreateAssetForIPNetRecord() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -34,8 +62,8 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForIPNetRecord() {
 	country := "US"
 	phandle := "NET-PARENT"
 	server := "whois.test.net"
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	status := []string{"active"}
 
 	ipnet, err := suite.db.CreateAsset(ctx, &oamreg.IPNetRecord{
@@ -97,7 +125,7 @@ func (suite *PostgresRepoTestSuite) TestCreateAssetForIPNetRecord() {
 	assert.Error(t, err, "Expected error when finding deleted entity by ID for the IPNetRecord")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForIPNetRecord() {
+func (suite *PostgresIPNetRecordTestSuite) TestFindEntitiesByContentForIPNetRecord() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -115,8 +143,8 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByContentForIPNetRecord() {
 	country := "US"
 	phandle := "NET-PARENT"
 	server := "whois.test.net"
-	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
-	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05Z07:00")
+	created := time.Now().Add(-24 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
+	updated := time.Now().Add(-1 * time.Hour).In(time.UTC).Format("2006-01-02T15:04:05")
 	status := []string{"active"}
 
 	ipnet, err := suite.db.CreateAsset(ctx, &oamreg.IPNetRecord{

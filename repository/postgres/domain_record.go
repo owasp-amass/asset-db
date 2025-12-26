@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -29,7 +30,7 @@ FROM public.domainrecord_get_by_id(@row_id::bigint) AS a;`
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectDomainRecordFindByContentText = `
 SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.domain, a.record_name, a.punycode, a.extension, a.whois_server, a.object_id, a.attrs 
-FROM public.domainrecord_get_by_filters(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+FROM public.domainrecord_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
 const selectDomainRecordSinceText = `
@@ -92,17 +93,31 @@ func (r *PostgresRepository) fetchDomainRecordByRowID(ctx context.Context, eid, 
 	var c, u time.Time
 	var attrsJSON string
 	var a oamreg.DomainRecord
+	var puny, ext, whois, objectid pgtype.Text
 
 	j := NewRowJob(ctx, selectDomainRecordByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&rid, &c, &u, &a.Domain, &a.Name,
-			&a.Punycode, &a.Extension, &a.WhoisServer, &a.ID, &attrsJSON)
+		return row.Scan(&rid, &c, &u, &a.Domain,
+			&a.Name, &puny, &ext, &whois, &objectid, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
+	}
+
+	if puny.Valid {
+		a.Punycode = puny.String
+	}
+	if ext.Valid {
+		a.Extension = ext.String
+	}
+	if whois.Valid {
+		a.WhoisServer = whois.String
+	}
+	if objectid.Valid {
+		a.ID = objectid.String
 	}
 
 	e, err := r.buildDomainRecordEntity(eid, rid, c, u, attrsJSON, &a)
@@ -144,10 +159,23 @@ func (r *PostgresRepository) findDomainRecordsByContent(ctx context.Context, fil
 			var c, u time.Time
 			var attrsJSON string
 			var a oamreg.DomainRecord
+			var puny, ext, whois, objectid pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.Domain, &a.Name,
-				&a.Punycode, &a.Extension, &a.WhoisServer, &a.ID, &attrsJSON); err != nil {
+				&puny, &ext, &whois, &objectid, &attrsJSON); err != nil {
 				continue
+			}
+			if puny.Valid {
+				a.Punycode = puny.String
+			}
+			if ext.Valid {
+				a.Extension = ext.String
+			}
+			if whois.Valid {
+				a.WhoisServer = whois.String
+			}
+			if objectid.Valid {
+				a.ID = objectid.String
 			}
 
 			if ent, err := r.buildDomainRecordEntity(
@@ -185,10 +213,23 @@ func (r *PostgresRepository) getDomainRecordsUpdatedSince(ctx context.Context, s
 			var c, u time.Time
 			var attrsJSON string
 			var a oamreg.DomainRecord
+			var puny, ext, whois, objectid pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.Domain, &a.Name,
-				&a.Punycode, &a.Extension, &a.WhoisServer, &a.ID, &attrsJSON); err != nil {
+				&puny, &ext, &whois, &objectid, &attrsJSON); err != nil {
 				continue
+			}
+			if puny.Valid {
+				a.Punycode = puny.String
+			}
+			if ext.Valid {
+				a.Extension = ext.String
+			}
+			if whois.Valid {
+				a.WhoisServer = whois.String
+			}
+			if objectid.Valid {
+				a.ID = objectid.String
 			}
 
 			if ent, err := r.buildDomainRecordEntity(

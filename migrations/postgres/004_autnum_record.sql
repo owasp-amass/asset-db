@@ -138,7 +138,7 @@ DECLARE
     v_handle        text;
     v_asn           integer;
     v_record_name   text;
-    v_record_status text;
+    v_record_status text[];
     v_created_date  timestamp without time zone;
     v_updated_date  timestamp without time zone;
     v_whois_server  citext;
@@ -146,12 +146,19 @@ DECLARE
 BEGIN
     v_raw           := NULLIF(_rec->>'raw', '');
     v_handle        := NULLIF(_rec->>'handle', '');
-    v_asn           := NULLIF(_rec->>'asn', '')::integer;
+    v_asn           := NULLIF(_rec->>'number', '')::integer;
     v_record_name   := (_rec->>'name');
-    v_record_status := NULLIF(_rec->>'status', '');
     v_created_date  := NULLIF(_rec->>'created_date', '')::timestamp;
     v_updated_date  := NULLIF(_rec->>'updated_date', '')::timestamp;
     v_whois_server  := (_rec->>'whois_server')::citext;
+
+    -- status as JSON array of text, if present
+    IF _rec ? 'status' THEN
+        SELECT array_agg(elem::text) INTO v_record_status
+        FROM jsonb_array_elements_text(_rec->'status') AS elem;
+    ELSE
+        v_record_status := NULL;
+    END IF;
 
     -- Build attrs from the appropriate fields.
     v_attrs := jsonb_strip_nulls(
