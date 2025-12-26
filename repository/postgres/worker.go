@@ -114,7 +114,10 @@ func NewWorker(ctx context.Context, connString string, cfg WorkerConfig) (*Worke
 		pcfg.ConnConfig.RuntimeParams["application_name"] = cfg.ApplicationName
 	}
 
-	pool, err := pgxpool.NewWithConfig(ctx, pcfg)
+	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.NewWithConfig(pctx, pcfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pgxpool: %w", err)
 	}
@@ -122,10 +125,10 @@ func NewWorker(ctx context.Context, connString string, cfg WorkerConfig) (*Worke
 	// ---- Fail fast: verify connectivity now ----
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		pctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		pictx, picancel := context.WithTimeout(ctx, 2*time.Second)
 
-		err = pool.Ping(pctx)
-		cancel()
+		err = pool.Ping(pictx)
+		picancel()
 		if err == nil {
 			break
 		}
