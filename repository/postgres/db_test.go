@@ -13,14 +13,7 @@ import (
 	postgresmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	migrate "github.com/rubenv/sql-migrate"
-	"github.com/stretchr/testify/suite"
 )
-
-type PostgresRepoTestSuite struct {
-	suite.Suite
-	container *testhelpers.PostgresContainer
-	db        *PostgresRepository
-}
 
 func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresRepository, error) {
 	pgContainer, err := testhelpers.CreatePostgresContainer(context.Background())
@@ -57,8 +50,8 @@ func postgresMigrate(repo *PostgresRepository, fs embed.FS) error {
 	return err
 }
 
-func (suite *PostgresRepoTestSuite) LogDatabaseState() {
-	p := suite.db.pool.pool
+func LogDatabaseState(repo *PostgresRepository) {
+	p := repo.pool.pool
 	st := p.Stat()
 	cfg := p.Config()
 	cc := cfg.ConnConfig

@@ -6,18 +6,46 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"net/netip"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateEdgeProperty() {
+type PostgresEdgeTagTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresEdgeTagTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresEdgeTagTestSuite))
+}
+
+func (suite *PostgresEdgeTagTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresEdgeTagTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresEdgeTagTestSuite) TestCreateEdgeProperty() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -64,7 +92,7 @@ func (suite *PostgresRepoTestSuite) TestCreateEdgeProperty() {
 	found, err := suite.db.FindEdgeTagById(ctx, tag.ID)
 	assert.NoError(t, err, "Failed to find edge tag by ID for the FQDN")
 	assert.NotNil(t, found, "Edge tag found by ID for the FQDB should not be nil")
-	assert.Equal(t, tag.ID, tag.ID, "Edge tag found by ID does not have matching IDs")
+	assert.Equal(t, tag.ID, found.ID, "Edge tag found by ID does not have matching IDs")
 	assert.Equal(t, tag.CreatedAt, found.CreatedAt, "Edge CreatedAt found by ID for the DomainRecord does not match")
 	assert.Equal(t, tag.LastSeen, found.LastSeen, "Edge LastSeen found by ID for the DomainRecord does not match")
 
@@ -80,7 +108,7 @@ func (suite *PostgresRepoTestSuite) TestCreateEdgeProperty() {
 	assert.Error(t, err, "Expected error when finding edge tag removed by cascading deletion")
 }
 
-func (suite *PostgresRepoTestSuite) TestFindEdgeTags() {
+func (suite *PostgresEdgeTagTestSuite) TestFindEdgeTags() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

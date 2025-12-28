@@ -220,6 +220,10 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 		return nil, fmt.Errorf("unknown asset type %q", atype)
 	}
 
+	if since.IsZero() {
+		return nil, fmt.Errorf("since time must be provided")
+	}
+
 	switch etype {
 	case "account":
 		return r.getAccountsUpdatedSince(ctx, since, limit)

@@ -6,18 +6,46 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"net/netip"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/caffix/stringset"
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestFindEntitiesByType() {
+type PostgresEntityTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresEntityTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresEntityTestSuite))
+}
+
+func (suite *PostgresEntityTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresEntityTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresEntityTestSuite) TestFindEntitiesByType() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -72,7 +100,7 @@ func (suite *PostgresRepoTestSuite) TestFindEntitiesByType() {
 			atype:  oam.FQDN,
 			before: before1,
 			after:  after2,
-			since:  time.Time{},
+			since:  before1,
 			sets:   []*stringset.Set{set1, set2},
 			count:  6,
 		},

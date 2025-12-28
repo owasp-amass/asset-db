@@ -6,18 +6,46 @@ package postgres
 
 import (
 	"context"
+	"log"
 	"net/netip"
 	"strconv"
+	"testing"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestCreateEdge() {
+type PostgresEdgeTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresEdgeTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresEdgeTestSuite))
+}
+
+func (suite *PostgresEdgeTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresEdgeTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresEdgeTestSuite) TestCreateEdge() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -102,7 +130,7 @@ func (suite *PostgresRepoTestSuite) TestCreateEdge() {
 	assert.Error(t, err, "Expected error when finding edge removed by cascading deletion")
 }
 
-func (suite *PostgresRepoTestSuite) TestIncomingEdges() {
+func (suite *PostgresEdgeTestSuite) TestIncomingEdges() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -251,7 +279,7 @@ func (suite *PostgresRepoTestSuite) TestIncomingEdges() {
 	}
 }
 
-func (suite *PostgresRepoTestSuite) TestOutgoingEdges() {
+func (suite *PostgresEdgeTestSuite) TestOutgoingEdges() {
 	t := suite.T()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

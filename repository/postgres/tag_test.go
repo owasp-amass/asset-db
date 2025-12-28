@@ -6,14 +6,41 @@ package postgres
 
 import (
 	"context"
+	"log"
+	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func (suite *PostgresRepoTestSuite) TestUpsertAndDeleteTag() {
+type PostgresTagTestSuite struct {
+	suite.Suite
+	container *testhelpers.PostgresContainer
+	db        *PostgresRepository
+}
+
+func TestPostgresTagTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresTagTestSuite))
+}
+
+func (suite *PostgresTagTestSuite) SetupSuite() {
+	var err error
+	suite.container, suite.db, err = setupContainerAndPostgresRepo()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (suite *PostgresTagTestSuite) TearDownSuite() {
+	if err := suite.container.Terminate(context.Background()); err != nil {
+		log.Fatalf("error terminating postgres container: %s", err)
+	}
+}
+
+func (suite *PostgresTagTestSuite) TestUpsertAndDeleteTag() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

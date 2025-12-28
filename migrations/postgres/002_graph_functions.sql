@@ -145,7 +145,7 @@ BEGIN
 
     SELECT id INTO v_etype_id
     FROM public.edge_type_lu
-    WHERE name = _etype_name
+    WHERE name = lower(_etype_name)
     LIMIT 1;
 
     IF v_etype_id IS NULL THEN
@@ -282,7 +282,7 @@ BEGIN
 
     SELECT id INTO v_ttype_id
     FROM public.tag_type_lu
-    WHERE name = _ttype_name
+    WHERE name = lower(_ttype_name)
     LIMIT 1;
 
     IF v_ttype_id IS NULL THEN
@@ -324,7 +324,7 @@ AS $fn$
     FROM public.tag t
     JOIN public.tag_type_lu tt
         ON t.ttype_id = tt.id
-    WHERE tt.name          = _ttype_name
+    WHERE tt.name          = lower(_ttype_name)
       AND t.property_name  = _property_name
       AND t.property_value = _property_value
     LIMIT 1;
@@ -374,7 +374,7 @@ BEGIN
     END IF;
 
     v_tag_id := public.tag_upsert(
-        _ttype_name,
+        lower(_ttype_name),
         _property_name,
         _property_value,
         COALESCE(_content, '{}'::jsonb)
@@ -499,7 +499,7 @@ BEGIN
     END IF;
 
     v_tag_id := public.tag_upsert(
-        _ttype_name,
+        lower(_ttype_name),
         _property_name,
         _property_value,
         COALESCE(_content, '{}'::jsonb)
