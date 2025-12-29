@@ -19,13 +19,16 @@ import (
 )
 
 // Params: @entity_id, @ttype, @name, @value, @content(JSON)
-const tagEntityText = `SELECT public.entity_tag_map_upsert(@entity_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb);`
+const tagEntityText = `SELECT t.out_tag_id, t.out_map_id 
+FROM public.entity_tag_map_upsert(@entity_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb) as t;`
 
 // Param: @map_id
-const selectEntityTagMapByIDText = `SELECT public.get_entity_tag_map_by_id(@map_id::bigint);`
+const selectEntityTagMapByIDText = `SELECT t.tag_id, t.entity_id, t.created_at, t.updated_at, t.ttype_name, t.content 
+FROM public.get_entity_tag_map_by_id(@map_id::bigint) as t;`
 
 // Params: @entity_id, @since, @names
-const entityGetTagsText = `SELECT public.entity_get_tags(@entity_id::bigint, @since::timestamp, @names::text[]);`
+const entityGetTagsText = `SELECT t.tag_id, t.map_id, t.created_at, t.updated_at, t.ttype_name, t.content 
+FROM public.entity_get_tags(@entity_id::bigint, @since::timestamp, @names::text[]) as t;`
 
 // Param: @map_id
 const selectTagIDByEntityTagMapIDText = `SELECT public.entity_tag_map_get_tag_id(@map_id::bigint);`

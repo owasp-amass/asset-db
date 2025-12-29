@@ -33,7 +33,8 @@ FROM public.edge e
 JOIN public.edge_type_lu t ON t.id = e.etype_id
 WHERE e.edge_id = @edge_id;`
 
-const edgesForEntityText = `SELECT public.edges_for_entity(@entity_id::bigint, @direction::text, @since::timestamp, @labels::text[]);`
+const edgesForEntityText = `SELECT e.edge_id, e.created_at, e.updated_at, e.etype_name, e.from_entity_id, e.to_entity_id, e.label, e.content 
+FROM public.edges_for_entity(@entity_id::bigint, @direction::text, @since::timestamp, @labels::text[]) as e;`
 
 func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt.Edge, error) {
 	if edge == nil {

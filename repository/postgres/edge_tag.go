@@ -19,13 +19,16 @@ import (
 )
 
 // Params: @edge_id, @ttype, @name, @value, @content(JSON)
-const tagEdgeText = `SELECT public.edge_tag_map_upsert(@edge_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb);`
+const tagEdgeText = `SELECT t.out_tag_id, t.out_map_id 
+FROM public.edge_tag_map_upsert(@edge_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb) as t;`
 
 // Param: @map_id
-const selectEdgeTagMapByIDText = `SELECT public.get_edge_tag_map_by_id(@map_id::bigint);`
+const selectEdgeTagMapByIDText = `SELECT t.tag_id, t.edge_id, t.created_at, t.updated_at, t.ttype_name, t.content 
+FROM public.get_edge_tag_map_by_id(@map_id::bigint) as t;`
 
 // Params: @edge_id, @since, @names
-const edgeGetTagsText = `SELECT public.edge_get_tags(@edge_id::bigint, @since::timestamp, @names::text[]);`
+const edgeGetTagsText = `SELECT t.tag_id, t.map_id, t.created_at, t.updated_at, t.ttype_name, t.content 
+FROM public.edge_get_tags(@edge_id::bigint, @since::timestamp, @names::text[]) as t;`
 
 // Param: @map_id
 const selectTagIDByEdgeTagMapIDText = `SELECT public.edge_tag_map_get_tag_id(@map_id::bigint);`

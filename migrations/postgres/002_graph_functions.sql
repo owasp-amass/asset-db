@@ -361,8 +361,8 @@ CREATE OR REPLACE FUNCTION public.entity_tag_map_upsert(
     _property_value text,
     _content        jsonb DEFAULT '{}'::jsonb
 ) RETURNS TABLE (
-    tag_id bigint,
-    map_id bigint
+    out_tag_id bigint,
+    out_map_id bigint
 )
 LANGUAGE plpgsql
 AS $fn$
@@ -381,8 +381,12 @@ BEGIN
     );
 
     RETURN QUERY
-    INSERT INTO public.entity_tag_map AS m (entity_id, tag_id)
-    VALUES (_entity_id, v_tag_id)
+    INSERT INTO public.entity_tag_map AS m (
+        entity_id, tag_id
+    ) 
+    VALUES (
+        _entity_id, v_tag_id
+    ) 
     ON CONFLICT (entity_id, tag_id) DO UPDATE
       SET updated_at = now()
     RETURNING m.tag_id, m.map_id;
@@ -486,8 +490,8 @@ CREATE OR REPLACE FUNCTION public.edge_tag_map_upsert(
     _property_value text,
     _content        jsonb DEFAULT '{}'::jsonb
 ) RETURNS TABLE (
-    tag_id bigint,
-    map_id bigint
+    out_tag_id bigint,
+    out_map_id bigint
 )
 LANGUAGE plpgsql
 AS $fn$
@@ -506,8 +510,12 @@ BEGIN
     );
 
     RETURN QUERY
-    INSERT INTO public.edge_tag_map AS m (edge_id, tag_id)
-    VALUES (_edge_id, v_tag_id)
+    INSERT INTO public.edge_tag_map AS m (
+        edge_id, tag_id
+    )
+    VALUES (
+        _edge_id, v_tag_id
+    )
     ON CONFLICT (edge_id, tag_id) DO UPDATE
       SET updated_at = now()
     RETURNING m.tag_id, m.map_id;
