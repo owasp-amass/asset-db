@@ -6,7 +6,7 @@ package repository
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -59,5 +59,5 @@ func New(dbtype, dsn string) (Repository, error) {
 	case strings.ToLower(sqlite3.SQLiteMemory):
 		return sqlite3.New(dbtype, dsn)
 	}
-	return nil, errors.New("unknown DB type")
+	return nil, fmt.Errorf("unknown DB type: %s", dbtype)
 }
