@@ -7,8 +7,8 @@ require (
 	github.com/caffix/stringset v0.2.1-0.20251119025138-9044e6b53d5b
 	github.com/docker/go-connections v0.6.0
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.6
-	github.com/mattn/go-sqlite3 v1.14.32
+	github.com/jackc/pgx/v5 v5.8.0
+	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/owasp-amass/open-asset-model v0.15.0
 	github.com/rubenv/sql-migrate v1.8.1
@@ -63,7 +63,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/shirou/gopsutil/v4 v4.25.11 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.12 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
