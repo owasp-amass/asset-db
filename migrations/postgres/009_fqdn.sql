@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.fqdn (
 );
 CREATE INDEX IF NOT EXISTS idx_fqdn_created_at ON public.fqdn (created_at);
 CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at ON public.fqdn (updated_at);
+CREATE INDEX IF NOT EXISTS idx_fqdn_fqdn_trgm ON public.fqdn USING gin (fqdn gin_trgm_ops);
 
 -- Upsert an FQDN AND its corresponding Entity.
 -- Returns the entity_id.
@@ -229,6 +230,7 @@ DROP FUNCTION IF EXISTS public.fqdn_upsert_json(jsonb);
 DROP FUNCTION IF EXISTS public.fqdn_upsert(text, jsonb);
 DROP FUNCTION IF EXISTS public.fqdn_upsert_entity_json(jsonb);
 
+DROP INDEX IF EXISTS idx_fqdn_fqdn_trgm;
 DROP INDEX IF EXISTS idx_fqdn_updated_at;
 DROP INDEX IF EXISTS idx_fqdn_created_at;
 DROP TABLE IF EXISTS public.fqdn;
