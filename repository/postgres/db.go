@@ -18,7 +18,7 @@ import (
 
 const (
 	Postgres      string = "postgres"
-	numberOfConns int    = 8
+	numberOfConns int    = 4
 )
 
 // PostgresRepository is a repository implementation.
@@ -79,7 +79,7 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	db.SetMaxOpenConns(numberOfConns)
+	db.SetMaxOpenConns(1)
 	return &PostgresRepository{
 		DB:     db,
 		dsn:    dsn,
