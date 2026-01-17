@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -24,17 +24,17 @@ const upsertOrganizationText = `SELECT public.organization_upsert_entity_json(@r
 
 // Param: @row_id::bigint
 const selectOrganizationByIDText = `
-SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.legal_name, a.org_name, a.jurisdiction, a.registration_id, a.attrs
+SELECT a.id, a.created_at, a.updated_at, a.unique_id, a.org_name, a.legal_name, a.jurisdiction, a.registration_id, a.attrs
 FROM public.organization_get_by_id(@row_id::bigint) AS a;`
 
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
 const selectOrganizationFindByContentText = `
-SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.legal_name, a.org_name, a.jurisdiction, a.registration_id, a.attrs 
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.org_name, a.legal_name, a.jurisdiction, a.registration_id, a.attrs 
 FROM public.organization_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
 const selectOrganizationSinceText = `
-SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.legal_name, a.org_name, a.jurisdiction, a.registration_id, a.attrs 
+SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.org_name, a.legal_name, a.jurisdiction, a.registration_id, a.attrs 
 FROM public.organization_updated_since(@since::timestamp, @limit::integer) AS a;`
 
 type organizationAttributes struct {
@@ -53,8 +53,8 @@ func (r *PostgresRepository) upsertOrganization(ctx context.Context, a *oamorg.O
 	if a.ID == "" {
 		return 0, fmt.Errorf("the organization ID cannot be empty")
 	}
-	if a.LegalName == "" {
-		return 0, fmt.Errorf("the organization legal name cannot be empty")
+	if a.Name == "" {
+		return 0, fmt.Errorf("the organization name cannot be empty")
 	}
 
 	record, err := a.JSON()
@@ -78,12 +78,12 @@ func (r *PostgresRepository) fetchOrganizationByRowID(ctx context.Context, eid, 
 	var c, u time.Time
 	var attrsJSON string
 	var a oamorg.Organization
-	var name, jurisdiction, registration pgtype.Text
+	var legal, jurisdiction, registration pgtype.Text
 
 	j := NewRowJob(ctx, selectOrganizationByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
-		return row.Scan(&row_id, &c, &u, &a.ID, &a.LegalName, &name, &jurisdiction, &registration, &attrsJSON)
+		return row.Scan(&row_id, &c, &u, &a.ID, &a.Name, &legal, &jurisdiction, &registration, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
@@ -91,8 +91,8 @@ func (r *PostgresRepository) fetchOrganizationByRowID(ctx context.Context, eid, 
 		return nil, err
 	}
 
-	if name.Valid {
-		a.Name = name.String
+	if legal.Valid {
+		a.LegalName = legal.String
 	}
 	if jurisdiction.Valid {
 		a.Jurisdiction = jurisdiction.String
@@ -139,14 +139,14 @@ func (r *PostgresRepository) findOrganizationsByContent(ctx context.Context, fil
 			var c, u time.Time
 			var attrsJSON string
 			var a oamorg.Organization
-			var name, jurisdiction, registration pgtype.Text
+			var legal, jurisdiction, registration pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
-				&a.LegalName, &name, &jurisdiction, &registration, &attrsJSON); err != nil {
+				&a.Name, &legal, &jurisdiction, &registration, &attrsJSON); err != nil {
 				continue
 			}
-			if name.Valid {
-				a.Name = name.String
+			if legal.Valid {
+				a.LegalName = legal.String
 			}
 			if jurisdiction.Valid {
 				a.Jurisdiction = jurisdiction.String
@@ -189,14 +189,14 @@ func (r *PostgresRepository) getOrganizationsUpdatedSince(ctx context.Context, s
 			var c, u time.Time
 			var attrsJSON string
 			var a oamorg.Organization
-			var name, jurisdiction, registration pgtype.Text
+			var legal, jurisdiction, registration pgtype.Text
 
 			if err := rows.Scan(&eid, &rid, &c, &u, &a.ID,
-				&a.LegalName, &name, &jurisdiction, &registration, &attrsJSON); err != nil {
+				&a.Name, &legal, &jurisdiction, &registration, &attrsJSON); err != nil {
 				continue
 			}
-			if name.Valid {
-				a.Name = name.String
+			if legal.Valid {
+				a.LegalName = legal.String
 			}
 			if jurisdiction.Valid {
 				a.Jurisdiction = jurisdiction.String
@@ -224,8 +224,8 @@ func (r *PostgresRepository) buildOrganizationEntity(eid, rid int64, createdAt, 
 	if rid == 0 {
 		return nil, errors.New("no organization found")
 	}
-	if a.LegalName == "" {
-		return nil, errors.New("organization legal name is missing")
+	if a.Name == "" {
+		return nil, errors.New("organization name is missing")
 	}
 
 	var attrs organizationAttributes

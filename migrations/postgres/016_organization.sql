@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS public.organization (
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
   updated_at      timestamp without time zone NOT NULL DEFAULT now(),
   unique_id       text NOT NULL UNIQUE,
-  legal_name      text NOT NULL,
-  org_name        text,
+  org_name        text NOT NULL,
+  legal_name      text,
   jurisdiction    text,
   registration_id text,
   attrs           jsonb NOT NULL DEFAULT '{}'::jsonb
@@ -55,8 +55,8 @@ $fn$;
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.organization_upsert(
     _unique_id       text,
-    _legal_name      text,
-    _org_name        text DEFAULT NULL,
+    _org_name        text,
+    _legal_name      text DEFAULT NULL,
     _jurisdiction    text DEFAULT NULL,
     _registration_id text DEFAULT NULL,
     _attrs           jsonb DEFAULT '{}'::jsonb
@@ -66,8 +66,8 @@ AS $fn$
 DECLARE
     v_id bigint;
 BEGIN
-    IF _unique_id IS NULL OR _legal_name IS NULL THEN
-        RAISE EXCEPTION 'organization_upsert requires non-NULL unique_id and legal_name';
+    IF _unique_id IS NULL OR _org_name IS NULL THEN
+        RAISE EXCEPTION 'organization_upsert requires non-NULL unique_id and org_name';
     END IF;
 
     INSERT INTO public.organization (
@@ -98,8 +98,8 @@ LANGUAGE plpgsql
 AS $fn$
 DECLARE
     v_unique_id       text;
-    v_legal_name      text;
     v_org_name        text;
+    v_legal_name      text;
     v_active          boolean;
     v_jurisdiction    text;
     v_founding_date   timestamp without time zone;
@@ -111,8 +111,8 @@ DECLARE
     v_attrs           jsonb;
 BEGIN
     v_unique_id       := NULLIF(_rec->>'unique_id', '');
-    v_legal_name      := NULLIF(_rec->>'legal_name', '');
     v_org_name        := NULLIF(_rec->>'name', '');
+    v_legal_name      := NULLIF(_rec->>'legal_name', '');
     v_jurisdiction    := NULLIF(_rec->>'jurisdiction', '');
     v_registration_id := NULLIF(_rec->>'registration_id', '');
     v_founding_date   := NULLIF(_rec->>'founding_date', '')::timestamp;
@@ -153,8 +153,8 @@ BEGIN
 
     RETURN public.organization_upsert(
         v_unique_id,
-        v_legal_name,
         v_org_name,
+        v_legal_name,
         v_jurisdiction,
         v_registration_id,
         v_attrs
@@ -178,7 +178,7 @@ $fn$;
 -- +migrate StatementEnd
 
 -- Rows matching the provided filters and since timestamp
--- Supported keys in _filters: unique_id, legal_name, name (org_name), jurisdiction, registration_id
+-- Supported keys in _filters: unique_id, name (org_name), legal_name jurisdiction, registration_id
 -- Requires at least one supported filter to be present.
 -- _limit = NULL means unlimited (0 is treated as unlimited as well)
 -- +migrate StatementBegin
@@ -192,8 +192,8 @@ CREATE OR REPLACE FUNCTION public.organization_find_by_content(
     created_at      timestamp without time zone,
     updated_at      timestamp without time zone,
     unique_id       text,
-    legal_name      text,
     org_name        text,
+    legal_name      text,
     jurisdiction    text,
     registration_id text,
     attrs           jsonb
@@ -203,15 +203,15 @@ STABLE
 AS $fn$
 DECLARE
     v_unique_id       text    := NULLIF(_filters->>'unique_id', '');
-    v_legal_name      text    := NULLIF(_filters->>'legal_name', '');
     v_org_name        text    := NULLIF(_filters->>'name', '');
+    v_legal_name      text    := NULLIF(_filters->>'legal_name', '');
     v_jurisdiction    text    := NULLIF(_filters->>'jurisdiction', '');
     v_registration_id text    := NULLIF(_filters->>'registration_id', '');
     v_limit           integer := NULLIF(_limit, 0); -- treat 0 as unlimited
 BEGIN
     IF v_unique_id IS NULL
-       AND v_legal_name IS NULL
        AND v_org_name IS NULL
+       AND v_legal_name IS NULL
        AND v_jurisdiction IS NULL
        AND v_registration_id IS NULL
     THEN
@@ -226,8 +226,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.legal_name,
             a.org_name,
+            a.legal_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs
@@ -235,8 +235,8 @@ BEGIN
         JOIN public.entity e ON e.table_name = 'public.organization'::citext AND e.row_id = a.id
         WHERE
             (v_unique_id       IS NULL OR a.unique_id       = v_unique_id)
-        AND (v_legal_name      IS NULL OR a.legal_name      = v_legal_name)
         AND (v_org_name        IS NULL OR a.org_name        = v_org_name)
+        AND (v_legal_name      IS NULL OR a.legal_name      = v_legal_name)
         AND (v_jurisdiction    IS NULL OR a.jurisdiction    = v_jurisdiction)
         AND (v_registration_id IS NULL OR a.registration_id = v_registration_id)
         AND (_since            IS NULL OR a.updated_at      >= _since)
@@ -249,8 +249,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.legal_name,
             a.org_name,
+            a.legal_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs
@@ -258,8 +258,8 @@ BEGIN
         JOIN public.entity e ON e.table_name = 'public.organization'::citext AND e.row_id = a.id
         WHERE
             (v_unique_id       IS NULL OR a.unique_id       = v_unique_id)
-        AND (v_legal_name      IS NULL OR a.legal_name      = v_legal_name)
         AND (v_org_name        IS NULL OR a.org_name        = v_org_name)
+        AND (v_legal_name      IS NULL OR a.legal_name      = v_legal_name)
         AND (v_jurisdiction    IS NULL OR a.jurisdiction    = v_jurisdiction)
         AND (v_registration_id IS NULL OR a.registration_id = v_registration_id)
         AND (_since            IS NULL OR a.updated_at      >= _since)
@@ -282,8 +282,8 @@ CREATE OR REPLACE FUNCTION public.organization_updated_since(
     created_at      timestamp without time zone,
     updated_at      timestamp without time zone,
     unique_id       text,
-    legal_name      text,
     org_name        text,
+    legal_name      text,
     jurisdiction    text,
     registration_id text,
     attrs           jsonb
@@ -302,8 +302,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.legal_name,
             a.org_name,
+            a.legal_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs
@@ -319,8 +319,8 @@ BEGIN
             a.created_at,
             a.updated_at,
             a.unique_id,
-            a.legal_name,
             a.org_name,
+            a.legal_name,
             a.jurisdiction,
             a.registration_id,
             a.attrs
