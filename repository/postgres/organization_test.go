@@ -192,3 +192,66 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByContentForOrganiza
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Organization")
 	}
 }
+
+func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByTypeForOrganization() {
+	t := suite.T()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	before1 := time.Now()
+	time.Sleep(100 * time.Millisecond)
+	uniqueID1 := "fake unique id 1"
+	name1 := "Fake Organization 1"
+
+	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
+		ID:   uniqueID1,
+		Name: name1,
+	})
+	assert.NoError(t, err, "Failed to create asset for the first Organization")
+	assert.NotNil(t, org, "Entity for the first Organization should not be nil")
+	time.Sleep(100 * time.Millisecond)
+	after1 := time.Now()
+
+	time.Sleep(500 * time.Millisecond)
+
+	before23 := time.Now()
+	time.Sleep(100 * time.Millisecond)
+	uniqueID2 := "fake unique id 2"
+	name2 := "Fake Organization 2"
+
+	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
+		ID:   uniqueID2,
+		Name: name2,
+	})
+	assert.NoError(t, err, "Failed to create asset for the second Organization")
+	assert.NotNil(t, org, "Entity for the second Organization should not be nil")
+
+	uniqueID3 := "fake unique id 3"
+	name3 := "Fake Organization 3"
+
+	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
+		ID:   uniqueID3,
+		Name: name3,
+	})
+	assert.NoError(t, err, "Failed to create asset for the third Organization")
+	assert.NotNil(t, org, "Entity for the third Organization should not be nil")
+	time.Sleep(100 * time.Millisecond)
+	after23 := time.Now()
+
+	for k, v := range map[string]struct {
+		since    time.Time
+		limit    int
+		expected []string
+	}{
+		"test find all": {
+			since:    before1,
+			limit:    3,
+			expected: []string{"Fake Organization 3", "Fake Organization 2", "Fake Organization 1"},
+		},
+	} {
+		ents, err := suite.db.FindEntitiesByType(ctx, oam.Organization, v.since, v.limit)
+		assert.NoError(t, err, "Failed to find entities by content for the Organization")
+		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Organization")
+	}
+}
