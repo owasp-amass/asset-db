@@ -199,43 +199,41 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByTypeForOrganizatio
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	before1 := time.Now()
+	since1 := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	uniqueID1 := "fake unique id 1"
-	name1 := "Fake Organization 1"
 
+	key1 := "Fake1"
+	atype := oam.Organization
+	atypestr := "Organization"
 	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
-		ID:   uniqueID1,
-		Name: name1,
+		ID:   key1,
+		Name: "fake name 1",
 	})
-	assert.NoError(t, err, "Failed to create asset for the first Organization")
-	assert.NotNil(t, org, "Entity for the first Organization should not be nil")
+	assert.NoError(t, err, "Failed to create asset for the first %s", atypestr)
+	assert.NotNil(t, org, "Entity for the first %s should not be nil", atypestr)
+
 	time.Sleep(100 * time.Millisecond)
 	after1 := time.Now()
-
 	time.Sleep(500 * time.Millisecond)
-
-	before23 := time.Now()
+	since23 := time.Now()
 	time.Sleep(100 * time.Millisecond)
-	uniqueID2 := "fake unique id 2"
-	name2 := "Fake Organization 2"
 
-	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
-		ID:   uniqueID2,
-		Name: name2,
+	key2 := "Fake2"
+	org, err = suite.db.CreateAsset(ctx, &oamorg.Organization{
+		ID:   key2,
+		Name: "fake name 2",
 	})
-	assert.NoError(t, err, "Failed to create asset for the second Organization")
-	assert.NotNil(t, org, "Entity for the second Organization should not be nil")
+	assert.NoError(t, err, "Failed to create asset for the second %s", atypestr)
+	assert.NotNil(t, org, "Entity for the second %s should not be nil", atypestr)
 
-	uniqueID3 := "fake unique id 3"
-	name3 := "Fake Organization 3"
-
-	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
-		ID:   uniqueID3,
-		Name: name3,
+	key3 := "Fake3"
+	org, err = suite.db.CreateAsset(ctx, &oamorg.Organization{
+		ID:   key3,
+		Name: "fake name 3",
 	})
-	assert.NoError(t, err, "Failed to create asset for the third Organization")
-	assert.NotNil(t, org, "Entity for the third Organization should not be nil")
+	assert.NoError(t, err, "Failed to create asset for the third %s", atypestr)
+	assert.NotNil(t, org, "Entity for the third %s should not be nil", atypestr)
+
 	time.Sleep(100 * time.Millisecond)
 	after23 := time.Now()
 
@@ -244,14 +242,47 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByTypeForOrganizatio
 		limit    int
 		expected []string
 	}{
-		"test find all": {
-			since:    before1,
+		"find all since1": {
+			since:    since1,
 			limit:    3,
-			expected: []string{"Fake Organization 3", "Fake Organization 2", "Fake Organization 1"},
+			expected: []string{key3, key2, key1},
+		},
+		"one out of all": {
+			since:    since1,
+			limit:    1,
+			expected: []string{key3},
+		},
+		"two out of all": {
+			since:    since1,
+			limit:    2,
+			expected: []string{key3, key2},
+		},
+		"find all after1": {
+			since:    after1,
+			limit:    3,
+			expected: []string{key3, key2},
+		},
+		"one out of two and three": {
+			since:    since23,
+			limit:    1,
+			expected: []string{key3},
+		},
+		"zero entities after23": {
+			since:    after23,
+			limit:    3,
+			expected: []string{},
 		},
 	} {
-		ents, err := suite.db.FindEntitiesByType(ctx, oam.Organization, v.since, v.limit)
-		assert.NoError(t, err, "Failed to find entities by content for the Organization")
-		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Organization")
+		ents, err := suite.db.FindEntitiesByType(ctx, atype, v.since, v.limit)
+
+		var got []string
+		for _, ent := range ents {
+			got = append(got, ent.Asset.Key())
+		}
+
+		assert.NoError(t, err, "The %s test failed for %s: expected %v: got: %v", k, atypestr, v.expected, got)
+		assert.Len(t, ents, len(v.expected),
+			"The %s test expected to find exactly %d entities for %s: got: %d", k, v.limit, atypestr, len(ents),
+		)
 	}
 }
