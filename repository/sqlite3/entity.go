@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -29,10 +29,12 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
+// CreateEntity implements the Repository interface.
 func (r *SqliteRepository) CreateEntity(ctx context.Context, entity *dbt.Entity) (*dbt.Entity, error) {
 	return r.CreateAsset(ctx, entity.Asset)
 }
 
+// CreateAsset implements the Repository interface.
 func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*dbt.Entity, error) {
 	var eid int64
 	var err error
@@ -89,8 +91,6 @@ func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*d
 	}
 	return r.idToEntity(ctx, eid)
 }
-
-// ============================== Asset hydration ==============================
 
 func normalizeType(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
 

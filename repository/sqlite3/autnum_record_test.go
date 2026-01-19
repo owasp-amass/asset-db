@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -115,15 +115,16 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.AutnumRecord, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, after, 1, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.AutnumRecord, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.AutnumRecord, before, 1, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the AutnumRecord")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the AutnumRecord should not be nil")
 
 	ar2, ok := found.Asset.(*oamreg.AutnumRecord)
@@ -137,25 +138,25 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 	assert.Equal(t, ar2.UpdatedDate, updated, "AutnumRecord UpdatedDate found by content does not match")
 	assert.Equal(t, ar2.Status, status, "AutnumRecord Status found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.AutnumRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, before, 0, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, before, 0, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, time.Time{}, 0, dbt.ContentFilters{
 		"name": recname,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the AutnumRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutnumRecord, time.Time{}, 0, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutnumRecord")

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,9 +16,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-// CreateEntity creates a new entity in the database.
-// It takes an Entity as input and persists it in the database.
-// Returns the created entity as a types.Entity or an error if the creation fails.
+// CreateEntity implements the Repository interface.
 func (neo *NeoRepository) CreateEntity(ctx context.Context, input *types.Entity) (*types.Entity, error) {
 	if input == nil {
 		return nil, errors.New("the input entity is nil")
@@ -39,7 +37,7 @@ func (neo *NeoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 			LastSeen:  time.Now(),
 			Asset:     input.Asset,
 		}
-	} else if entities, err := neo.FindEntitiesByContent(ctx, input.Asset.AssetType(), time.Time{}, filter); err == nil && len(entities) > 0 {
+	} else if entities, err := neo.FindEntitiesByContent(ctx, input.Asset.AssetType(), time.Time{}, 1, filter); err == nil && len(entities) > 0 {
 		// ensure that duplicate entities are not entered into the database
 		entity = entities[0]
 		entity.LastSeen = time.Now()
@@ -134,10 +132,7 @@ func (neo *NeoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 	return entity, nil
 }
 
-// CreateAsset creates a new entity in the database.
-// It takes an oam.Asset as input and persists it in the database.
-// The asset is serialized to JSON and stored in the Content field of the Entity struct.
-// Returns the created entity as a types.Entity or an error if the creation fails.
+// CreateAsset implements the Repository interface.
 func (neo *NeoRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error) {
 	return neo.CreateEntity(ctx, &types.Entity{Asset: asset})
 }
@@ -154,9 +149,7 @@ func (neo *NeoRepository) uniqueEntityID() string {
 	}
 }
 
-// FindEntityById finds an entity in the database by the ID.
-// It takes a string representing the entity ID and retrieves the corresponding entity from the database.
-// Returns the found entity as a types.Entity or an error if the asset is not found.
+// FindEntityById implements the Repository interface.
 func (neo *NeoRepository) FindEntityById(ctx context.Context, id string) (*types.Entity, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -184,12 +177,8 @@ func (neo *NeoRepository) FindEntityById(ctx context.Context, id string) (*types
 	return nodeToEntity(node)
 }
 
-// FindOneEntityByContent finds an entity in the database that matches the provided filters and last seen after
-// the since parameter. It takes an oam.Asset as input and searches for an entity with matching content in the database.
-// If since.IsZero(), the parameter will be ignored.
-// The asset data is serialized to JSON and compared against the Content field of the Entity struct.
-// Returns a single matching entity as *types.Entity or an error if the search fails.
-func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) (*types.Entity, error) {
+// FindEntitiesByContent implements the Repository interface.
+func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, limit int, filters types.ContentFilters) ([]*types.Entity, error) {
 	var field, value string
 	for k, v := range filters {
 		field = k
@@ -198,12 +187,15 @@ func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, atype oam.
 	}
 
 	// Build the query node based on the asset type and filter
-	qnode := fmt.Sprintf("(%s:%s {%s: '%s'})", "a", string(atype), field, value)
-
-	query := "MATCH " + qnode + " RETURN a"
+	query := "MATCH " + fmt.Sprintf("(%s:%s {%s: '%s'})", "a", string(atype), field, value)
 	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH %s WHERE a.updated_at >= localDateTime('%s') RETURN a", qnode, timeToNeo4jTime(since))
+		query += fmt.Sprintf(" WHERE a.updated_at >= localDateTime('%s')", timeToNeo4jTime(since))
 	}
+	query += fmt.Sprintf(" ORDER BY a.updated_at DESC")
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	query += " RETURN a"
 
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -219,80 +211,39 @@ func (neo *NeoRepository) FindOneEntityByContent(ctx context.Context, atype oam.
 		return nil, errors.New("no entities found")
 	}
 
-	node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "a")
-	if err != nil {
-		return nil, err
-	}
-	if isnil {
-		return nil, errors.New("the record value for the node is nil")
+	var results []*types.Entity
+	for _, record := range result.Records {
+		node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](record, "a")
+		if err != nil {
+			return nil, err
+		}
+		if isnil {
+			return nil, errors.New("the record value for the node is nil")
+		}
+
+		e, err := nodeToEntity(node)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, e)
 	}
 
-	e, err := nodeToEntity(node)
-	if err != nil {
-		return nil, err
+	if len(results) == 0 {
+		return nil, errors.New("no entities successfully extracted")
 	}
-	return e, nil
+	return results, nil
 }
 
-// FindEntitiesByContent finds entities in the database that match the provided asset data and last seen after
-// the since parameter. It takes an oam.Asset as input and searches for entities with matching content in the database.
-// If since.IsZero(), the parameter will be ignored.
-// The asset data is serialized to JSON and compared against the Content field of the Entity struct.
-// Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) ([]*types.Entity, error) {
-	var field, value string
-	for k, v := range filters {
-		field = k
-		value = fmt.Sprintf("%v", v)
-		break
-	}
-
-	// Build the query node based on the asset type and filter
-	qnode := fmt.Sprintf("(%s:%s {%s: '%s'})", "a", string(atype), field, value)
-
-	query := "MATCH " + qnode + " RETURN a"
+func (neo *NeoRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time, limit int) ([]*types.Entity, error) {
+	query := fmt.Sprintf("MATCH (a:%s)", string(atype))
 	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH %s WHERE a.updated_at >= localDateTime('%s') RETURN a", qnode, timeToNeo4jTime(since))
+		query += fmt.Sprintf(" WHERE a.updated_at >= localDateTime('%s')", timeToNeo4jTime(since))
 	}
-
-	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
-		neo4jdb.EagerResultTransformer,
-		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
-	)
-	if err != nil {
-		return nil, err
+	query += fmt.Sprintf(" ORDER BY a.updated_at DESC")
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
-	if len(result.Records) == 0 {
-		return nil, errors.New("no entities found")
-	}
-
-	node, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Node](result.Records[0], "a")
-	if err != nil {
-		return nil, err
-	}
-	if isnil {
-		return nil, errors.New("the record value for the node is nil")
-	}
-
-	e, err := nodeToEntity(node)
-	if err != nil {
-		return nil, err
-	}
-	return []*types.Entity{e}, nil
-}
-
-// FindEntitiesByType finds all entities in the database of the provided asset type and last seen after the since parameter.
-// It takes an asset type and retrieves the corresponding entities from the database.
-// If since.IsZero(), the parameter will be ignored.
-// Returns a slice of matching entities as []*types.Entity or an error if the search fails.
-func (neo *NeoRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
-	query := fmt.Sprintf("MATCH (a:%s) RETURN a", string(atype))
-	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH (a:%s) WHERE a.updated_at >= localDateTime('%s') RETURN a", string(atype), timeToNeo4jTime(since))
-	}
+	query += " RETURN a"
 
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -331,9 +282,7 @@ func (neo *NeoRepository) FindEntitiesByType(ctx context.Context, atype oam.Asse
 	return results, nil
 }
 
-// DeleteEntity removes an entity in the database by its ID.
-// It takes a string representing the entity ID and removes the corresponding entity from the database.
-// Returns an error if the entity is not found.
+// DeleteEntity implements the Repository interface.
 func (neo *NeoRepository) DeleteEntity(ctx context.Context, id string) error {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -31,10 +31,12 @@ import (
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
+// CreateEntity implements the Repository interface.
 func (r *PostgresRepository) CreateEntity(ctx context.Context, entity *dbt.Entity) (*dbt.Entity, error) {
 	return r.CreateAsset(ctx, entity.Asset)
 }
 
+// CreateAsset implements the Repository interface.
 func (r *PostgresRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*dbt.Entity, error) {
 	var eid int64
 	var err error
@@ -106,8 +108,9 @@ func (r *PostgresRepository) idToEntity(ctx context.Context, eid int64) (*dbt.En
 	return r.fetchCompleteRepoEntity(ctx, eid)
 }
 
-func (r *PostgresRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
-	ents, err := r.findByContent(ctx, string(atype), since, filters, 0)
+// FindEntitiesByContent implements the Repository interface.
+func (r *PostgresRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, limit int, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
+	ents, err := r.findByContent(ctx, string(atype), since, filters, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -117,19 +120,9 @@ func (r *PostgresRepository) FindEntitiesByContent(ctx context.Context, atype oa
 	return ents, nil
 }
 
-func (r *PostgresRepository) FindOneEntityByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
-	ent, err := r.findOneByContent(ctx, string(atype), since, filters)
-	if err != nil {
-		return nil, err
-	}
-	if ent == nil {
-		return nil, errors.New("entity not found")
-	}
-	return ent, nil
-}
-
-func (r *PostgresRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*dbt.Entity, error) {
-	ents, err := r.findByType(ctx, string(atype), since, 0)
+// FindEntitiesByType implements the Repository interface.
+func (r *PostgresRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ents, err := r.findByType(ctx, string(atype), since, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -137,21 +130,6 @@ func (r *PostgresRepository) FindEntitiesByType(ctx context.Context, atype oam.A
 		return nil, errors.New("zero entities found")
 	}
 	return ents, nil
-}
-
-// findByContent builds the SQL WHERE from a registry of allowed columns per
-// asset type, and returns Entity+Asset. Supports multiple matches.
-
-// findOneByContent returns exactly one (first by updated_at desc)
-func (r *PostgresRepository) findOneByContent(ctx context.Context, atype string, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
-	ents, err := r.findByContent(ctx, atype, since, filters, 1)
-	if err != nil {
-		return nil, err
-	}
-	if len(ents) == 0 {
-		return nil, errors.New("zero entities found")
-	}
-	return ents[0], nil
 }
 
 // findByContent finds entities for asset type with given filters (on the asset table).
@@ -160,6 +138,9 @@ func (r *PostgresRepository) findByContent(ctx context.Context, atype string, si
 	etype := normalizeType(atype)
 	if etype == "" {
 		return nil, fmt.Errorf("unknown asset type %q", atype)
+	}
+	if limit < 0 {
+		return nil, errors.New("limit must be zero or greater")
 	}
 
 	switch etype {
@@ -219,9 +200,11 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 	if etype == "" {
 		return nil, fmt.Errorf("unknown asset type %q", atype)
 	}
-
 	if since.IsZero() {
 		return nil, fmt.Errorf("since time must be provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("limit must be zero or greater")
 	}
 
 	switch etype {
@@ -271,8 +254,6 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 
 	return nil, fmt.Errorf("type search not implemented for asset type %q", atype)
 }
-
-// ============================== Asset hydration ==============================
 
 func normalizeType(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
 
@@ -354,6 +335,7 @@ func (r *PostgresRepository) fetchEntityAssetByTableID(ctx context.Context, enti
 	return nil, fmt.Errorf("unhandled entity type %q", etype)
 }
 
+// DeleteEntity implements the Repository interface.
 func (r *PostgresRepository) DeleteEntity(ctx context.Context, id string) error {
 	eid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {

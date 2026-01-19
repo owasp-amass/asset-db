@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -151,15 +151,16 @@ func TestFindEntitiesByContentForIPNetRecord(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.IPNetRecord, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, after, 1, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, 1, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the IPNetRecord")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the IPNetRecord should not be nil")
 
 	ipnet2, ok := found.Asset.(*oamreg.IPNetRecord)
@@ -180,43 +181,43 @@ func TestFindEntitiesByContentForIPNetRecord(t *testing.T) {
 	assert.Equal(t, ipnet2.UpdatedDate, updated, "IPNetRecord UpdatedDate found by content does not match")
 	assert.Equal(t, ipnet2.Status, status, "IPNetRecord Status found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, 0, dbt.ContentFilters{
 		"cidr": cidr.String(),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, before, 0, dbt.ContentFilters{
 		"handle": handle,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, 0, dbt.ContentFilters{
 		"name": recname,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, 0, dbt.ContentFilters{
 		"start_address": start.String(),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, 0, dbt.ContentFilters{
 		"end_address": end.String(),
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, 0, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the IPNetRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPNetRecord, time.Time{}, 0, dbt.ContentFilters{
 		"parent_handle": phandle,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPNetRecord")

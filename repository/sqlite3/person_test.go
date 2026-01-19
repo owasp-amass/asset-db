@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -115,15 +115,16 @@ func TestFindEntitiesByContentForPerson(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.Person, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.Person, after, 1, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.Person, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.Person, before, 1, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Person")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the Person should not be nil")
 
 	person2, ok := found.Asset.(*people.Person)
@@ -143,7 +144,7 @@ func TestFindEntitiesByContentForPerson(t *testing.T) {
 		"first_name":  firstName,
 		"family_name": familyName,
 	} {
-		ents, err := db.FindEntitiesByContent(ctx, oam.Person, before, dbt.ContentFilters{k: v})
+		ents, err := db.FindEntitiesByContent(ctx, oam.Person, before, 0, dbt.ContentFilters{k: v})
 		assert.NoError(t, err, "Failed to find entities by content for the Person")
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Person")
 	}

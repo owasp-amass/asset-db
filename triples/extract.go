@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -213,11 +213,11 @@ func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, err
 		return nil, fmt.Errorf("failed to convert subject to asset: %v", err)
 	}
 
-	ent, err := db.FindOneEntityByContent(context.Background(), subject.Type, subject.Since, filter)
+	ents, err := db.FindEntitiesByContent(context.Background(), subject.Type, subject.Since, 1, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find the subject in the database: %v", err)
 	}
-	return ent, nil
+	return ents[0], nil
 }
 
 func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {

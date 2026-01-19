@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -113,15 +113,16 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.Identifier, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.Identifier, after, 1, dbt.ContentFilters{
 		"unique_id": unique_id,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.Identifier, before, 1, dbt.ContentFilters{
 		"unique_id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Identifier")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the Identifier should not be nil")
 
 	idasset2, ok := found.Asset.(*oamgen.Identifier)
@@ -135,13 +136,13 @@ func TestFindEntitiesByContentForIdentifier(t *testing.T) {
 	assert.Equal(t, idasset2.ExpirationDate, expiration, "Identifier found by Entity ID does not have a matching ExpirationDate")
 	assert.Equal(t, idasset2.Status, status, "Identifier found by Entity ID does not have a matching Status")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.Identifier, before, 0, dbt.ContentFilters{
 		"unique_id": unique_id,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the Identifier")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Identifier")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.Identifier, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.Identifier, before, 0, dbt.ContentFilters{
 		"id_type": idtype,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the Identifier")

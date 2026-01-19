@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -128,7 +128,7 @@ func TestFindEntitiesByType(t *testing.T) {
 	}
 
 	for tname, test := range tests {
-		entities, err := db.FindEntitiesByType(ctx, test.atype, test.since)
+		entities, err := db.FindEntitiesByType(ctx, test.atype, test.since, 0)
 		if test.count == 0 {
 			assert.Error(t, err, "Expected error for "+tname)
 			continue
@@ -214,7 +214,7 @@ func BenchmarkFindEntitiesByContent(b *testing.B) {
 	var i int64
 	idx := int64(rand.Intn(1000))
 	for b.Loop() {
-		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, time.Time{}, dbt.ContentFilters{
+		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, time.Time{}, 0, dbt.ContentFilters{
 			"name": names[idx],
 		})
 		i = (i + 1) % 1000
@@ -241,7 +241,7 @@ func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
 	var i int64
 	idx := int64(rand.Intn(1000))
 	for b.Loop() {
-		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, since, dbt.ContentFilters{
+		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, since, 0, dbt.ContentFilters{
 			"name": names[idx],
 		})
 		i = (i + 1) % 1000
@@ -269,6 +269,6 @@ func BenchmarkFindEntitiesByType(b *testing.B) {
 	}
 
 	for b.Loop() {
-		_, _ = db.FindEntitiesByType(context.Background(), oam.FQDN, since)
+		_, _ = db.FindEntitiesByType(context.Background(), oam.FQDN, since, 0)
 	}
 }

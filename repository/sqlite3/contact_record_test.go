@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -78,15 +78,16 @@ func TestFindEntitiesByContentForContactRecord(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.ContactRecord, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.ContactRecord, after, 1, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.ContactRecord, before, 1, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the ContactRecord")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the ContactRecord should not be nil")
 
 	cr2, ok := found.Asset.(*oamcon.ContactRecord)
@@ -94,7 +95,7 @@ func TestFindEntitiesByContentForContactRecord(t *testing.T) {
 	assert.Equal(t, found.ID, cr.ID, "ContactRecord found by content does not have matching IDs")
 	assert.Equal(t, cr2.DiscoveredAt, discovered, "ContactRecord DiscoveredAt found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.ContactRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.ContactRecord, before, 0, dbt.ContentFilters{
 		"discovered_at": discovered,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the ContactRecord")

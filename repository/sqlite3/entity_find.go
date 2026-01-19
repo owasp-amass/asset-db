@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -38,8 +38,9 @@ func (r *SqliteRepository) idToEntity(ctx context.Context, eid int64) (*dbt.Enti
 	return r.fetchCompleteRepoEntity(ctx, eid, etype)
 }
 
-func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
-	ents, err := r.findByContent(ctx, string(atype), since, filters, 0)
+// FindEntitiesByContent implements the Repository interface.
+func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, limit int, filters dbt.ContentFilters) ([]*dbt.Entity, error) {
+	ents, err := r.findByContent(ctx, string(atype), since, filters, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -49,19 +50,9 @@ func (r *SqliteRepository) FindEntitiesByContent(ctx context.Context, atype oam.
 	return ents, nil
 }
 
-func (r *SqliteRepository) FindOneEntityByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
-	ent, err := r.findOneByContent(ctx, string(atype), since, filters)
-	if err != nil {
-		return nil, err
-	}
-	if ent == nil {
-		return nil, errors.New("entity not found")
-	}
-	return ent, nil
-}
-
-func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*dbt.Entity, error) {
-	ents, err := r.findByType(ctx, string(atype), since, 0)
+// FindEntitiesByType implements the Repository interface.
+func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time, limit int) ([]*dbt.Entity, error) {
+	ents, err := r.findByType(ctx, string(atype), since, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -69,21 +60,6 @@ func (r *SqliteRepository) FindEntitiesByType(ctx context.Context, atype oam.Ass
 		return nil, errors.New("zero entities found")
 	}
 	return ents, nil
-}
-
-// findByContent builds the SQL WHERE from a registry of allowed columns per
-// asset type, and returns Entity+Asset. Supports multiple matches.
-
-// findOneByContent returns exactly one (first by updated_at desc)
-func (r *SqliteRepository) findOneByContent(ctx context.Context, atype string, since time.Time, filters dbt.ContentFilters) (*dbt.Entity, error) {
-	ents, err := r.findByContent(ctx, atype, since, filters, 1)
-	if err != nil {
-		return nil, err
-	}
-	if len(ents) == 0 {
-		return nil, errors.New("zero entities found")
-	}
-	return ents[0], nil
 }
 
 // findByContent finds entities for asset type with given filters (on the asset table).
@@ -206,7 +182,6 @@ func buildWhere(table string, reg regEntry, since time.Time, filters dbt.Content
 
 // findByType returns up to `limit` Entities of the given asset type,
 // ordered by most recently updated (DESC). Each Entity has its concrete Asset populated.
-//
 // If limit <= 0, it returns all (be careful on large datasets).
 func (r *SqliteRepository) findByType(ctx context.Context, atype string, since time.Time, limit int) ([]*dbt.Entity, error) {
 	table := normalizeType(atype)

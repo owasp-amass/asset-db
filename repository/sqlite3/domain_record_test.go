@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -133,15 +133,16 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.DomainRecord, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, after, 1, dbt.ContentFilters{
 		"domain": domain,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.DomainRecord, before, 1, dbt.ContentFilters{
 		"domain": domain,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the DomainRecord")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the DomainRecord should not be nil")
 
 	dr2, ok := found.Asset.(*oamreg.DomainRecord)
@@ -159,31 +160,31 @@ func TestFindEntitiesByContentForDomainRecord(t *testing.T) {
 	assert.Equal(t, dr2.ExpirationDate, expiration, "DomainRecord found by ID does not have a matching ExpirationDate")
 	assert.Equal(t, dr2.Status, status, "DomainRecord found by ID does not have a matching Status")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, 0, dbt.ContentFilters{
 		"name": record_name,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, 0, dbt.ContentFilters{
 		"extension": extension,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, 0, dbt.ContentFilters{
 		"punycode": punycode,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, time.Time{}, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, time.Time{}, 0, dbt.ContentFilters{
 		"id": object_id,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the DomainRecord")
 
-	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.DomainRecord, before, 0, dbt.ContentFilters{
 		"whois_server": server,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the DomainRecord")

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -79,15 +79,16 @@ func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.AutonomousSystem, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.AutonomousSystem, after, 1, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.AutonomousSystem, before, 1, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the AutonomousSystem")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the AutonomousSystem should not be nil")
 
 	asn2, ok := found.Asset.(*oamnet.AutonomousSystem)
@@ -95,7 +96,7 @@ func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
 	assert.Equal(t, found.ID, asn.ID, "AutonomousSystem found by content does not have matching IDs")
 	assert.Equal(t, asn2.Number, number, "AutonomousSystem Number found by content does not match")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.AutonomousSystem, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.AutonomousSystem, before, 0, dbt.ContentFilters{
 		"number": number,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the AutonomousSystem")

@@ -18,16 +18,45 @@ import (
 )
 
 // Repository defines the methods for interacting with the asset database.
-// It provides operations for creating, retrieving, tagging, and linking assets.
+// It provides operations for creating, retrieving, tagging, linking, and deleting assets.
 type Repository interface {
 	GetDBType() string
 	Prepare(ctx context.Context) error
+
+	// CreateEntity creates a new entity in the database.
+	// It takes an Entity as input and persists it in the database.
+	// Returns the created entity as a types.Entity or an error if the creation fails.
 	CreateEntity(ctx context.Context, entity *types.Entity) (*types.Entity, error)
+
+	// CreateAsset creates a new entity in the database.
+	// It takes an oam.Asset as input and persists it in the database.
+	// The asset is serialized to JSON and stored in the Content field of the Entity struct.
+	// Returns the created entity as a types.Entity or an error if the creation fails.
 	CreateAsset(ctx context.Context, asset oam.Asset) (*types.Entity, error)
+
+	// FindEntityById finds an entity in the database by the ID.
+	// It takes a string representing the entity ID and retrieves the corresponding entity from the database.
+	// Returns the found entity as a types.Entity or an error if the asset is not found.
 	FindEntityById(ctx context.Context, id string) (*types.Entity, error)
-	FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) ([]*types.Entity, error)
-	FindOneEntityByContent(ctx context.Context, atype oam.AssetType, since time.Time, filters types.ContentFilters) (*types.Entity, error)
-	FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time) ([]*types.Entity, error)
+
+	// FindOneEntityByContent finds an entity in the database that matches the provided filters, last seen after
+	// the since parameter, and most recent within the limit parameter. It takes an oam.Asset as input and searches
+	// for an entity with matching content in the database.
+	// If since.IsZero(), the parameter will be ignored.
+	// If limit == 0, the parameter with be ignored.
+	// Returns a single matching entity as *types.Entity or an error if the search fails.
+	FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, limit int, filters types.ContentFilters) ([]*types.Entity, error)
+
+	// FindEntitiesByType finds all entities in the database of the provided asset type, last seen
+	// after the since parameter, and most recent with the limit parameter.
+	// The since parameter is not optional.
+	// If limit == 0, the parameter with be ignored.
+	// Returns a slice of matching entities as []*types.Entity or an error if the search fails.
+	FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time, limit int) ([]*types.Entity, error)
+
+	// DeleteEntity removes an entity in the database by the ID.
+	// It takes a string representing the entity ID and removes the corresponding entity from the database.
+	// Returns an error if the entity is not found.
 	DeleteEntity(ctx context.Context, id string) error
 	CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error)
 	FindEdgeById(ctx context.Context, id string) (*types.Edge, error)

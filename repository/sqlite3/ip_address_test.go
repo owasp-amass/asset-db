@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -90,15 +90,16 @@ func TestFindEntitiesByContentForIPAddress(t *testing.T) {
 	after := time.Now()
 
 	ipstr := ip.String()
-	_, err = db.FindOneEntityByContent(ctx, oam.IPAddress, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.IPAddress, after, 1, dbt.ContentFilters{
 		"address": ipstr,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.IPAddress, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.IPAddress, before, 1, dbt.ContentFilters{
 		"address": ipstr,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the IPAddress")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the IPAddress should not be nil")
 
 	ip2, ok := found.Asset.(*oamnet.IPAddress)
@@ -107,7 +108,7 @@ func TestFindEntitiesByContentForIPAddress(t *testing.T) {
 	assert.Equal(t, ip2.Address, ip, "IPAddress found by ID does not have a matching Address")
 	assert.Equal(t, ip2.Type, iptype, "IPAddress found by ID does not have a matching Type")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.IPAddress, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.IPAddress, before, 0, dbt.ContentFilters{
 		"address": ipstr,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the IPAddress")

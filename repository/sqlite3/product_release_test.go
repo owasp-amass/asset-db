@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -90,15 +90,16 @@ func TestFindEntitiesByContentForProductRelease(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = db.FindOneEntityByContent(ctx, oam.ProductRelease, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.ProductRelease, after, 1, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.ProductRelease, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.ProductRelease, before, 1, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the ProductRelease")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the ProductRelease should not be nil")
 
 	release2, ok := found.Asset.(*oamplat.ProductRelease)
@@ -107,7 +108,7 @@ func TestFindEntitiesByContentForProductRelease(t *testing.T) {
 	assert.Equal(t, release2.Name, name, "ProductRelease found by content does not have matching name")
 	assert.Equal(t, release2.ReleaseDate, releaseDate, "ProductRelease found by content does not have matching release date")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.ProductRelease, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.ProductRelease, before, 0, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the ProductRelease")

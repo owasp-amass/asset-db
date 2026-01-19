@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,6 +13,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// DeleteEntity implements the Repository interface.
 func (r *SqliteRepository) DeleteEntity(ctx context.Context, id string) error {
 	eid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {

@@ -1,6 +1,6 @@
 //go:build integration
 
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -90,13 +90,13 @@ func TestFindEntityById(t *testing.T) {
 func TestFindEntitiesByContent(t *testing.T) {
 	fqdn := &dns.FQDN{Name: "findcontent.entity"}
 
-	_, err := store.FindEntitiesByContent(fqdn, time.Time{})
+	_, err := store.FindEntitiesByContent(fqdn, time.Time{}, 0)
 	assert.Error(t, err)
 
 	entity, err := store.CreateAsset(fqdn)
 	assert.NoError(t, err)
 
-	e, err := store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(-1*time.Second))
+	e, err := store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(-1*time.Second), 0)
 	assert.NoError(t, err)
 	same := e[0]
 	assert.Equal(t, entity.ID, same.ID)
@@ -109,7 +109,7 @@ func TestFindEntitiesByContent(t *testing.T) {
 		t.Errorf("Failed to return an entity with the correct name")
 	}
 
-	_, err = store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(250*time.Millisecond))
+	_, err = store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(250*time.Millisecond), 0)
 	assert.Error(t, err)
 }
 
@@ -127,7 +127,7 @@ func TestFindEntitiesByType(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	entities, err := store.FindEntitiesByType(oam.IPAddress, time.Time{})
+	entities, err := store.FindEntitiesByType(oam.IPAddress, time.Time{}, 0)
 	assert.NoError(t, err)
 
 	if len(entities) < 10 {
@@ -139,7 +139,7 @@ func TestFindEntitiesByType(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	entities, err = store.FindEntitiesByType(oam.Organization, now)
+	entities, err = store.FindEntitiesByType(oam.Organization, now, 0)
 	assert.NoError(t, err)
 
 	if len(entities) < 10 {

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -31,10 +31,12 @@ SELECT map_id FROM entity_tag_map
 WHERE entity_id = :entity_id AND tag_id = :tag_id 
 LIMIT 1`
 
+// CreateEntityTag implements the Repository interface.
 func (r *SqliteRepository) CreateEntityTag(ctx context.Context, entity *dbt.Entity, tag *dbt.EntityTag) (*dbt.EntityTag, error) {
 	return r.CreateEntityProperty(ctx, entity, tag.Property)
 }
 
+// CreateEntityProperty implements the Repository interface.
 func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *dbt.Entity, property oam.Property) (*dbt.EntityTag, error) {
 	content, err := property.JSON()
 	if err != nil {
@@ -60,6 +62,7 @@ func (r *SqliteRepository) CreateEntityProperty(ctx context.Context, entity *dbt
 	return r.FindEntityTagById(ctx, idstr)
 }
 
+// FindEntityTagById implements the Repository interface.
 func (r *SqliteRepository) FindEntityTagById(ctx context.Context, id string) (*dbt.EntityTag, error) {
 	mid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
@@ -119,6 +122,7 @@ LIMIT 1`
 	return tag, nil
 }
 
+// FindEntityTags implements the Repository interface.
 func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *dbt.Entity, since time.Time, names ...string) ([]*dbt.EntityTag, error) {
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
@@ -128,6 +132,7 @@ func (r *SqliteRepository) FindEntityTags(ctx context.Context, entity *dbt.Entit
 	return r.tagsForEntity(ctx, eid, since, names...)
 }
 
+// DeleteEntityTag implements the Repository interface.
 func (r *SqliteRepository) DeleteEntityTag(ctx context.Context, id string) error {
 	mid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {

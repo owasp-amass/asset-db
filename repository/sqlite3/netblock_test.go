@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -90,15 +90,16 @@ func TestFindEntitiesByContentForNetblock(t *testing.T) {
 	after := time.Now()
 
 	cidrstr := cidr.String()
-	_, err = db.FindOneEntityByContent(ctx, oam.Netblock, after, dbt.ContentFilters{
+	_, err = db.FindEntitiesByContent(ctx, oam.Netblock, after, 1, dbt.ContentFilters{
 		"cidr": cidrstr,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := db.FindOneEntityByContent(ctx, oam.Netblock, before, dbt.ContentFilters{
+	ents, err := db.FindEntitiesByContent(ctx, oam.Netblock, before, 1, dbt.ContentFilters{
 		"cidr": cidrstr,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Netblock")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the Netblock should not be nil")
 
 	netblock2, ok := found.Asset.(*oamnet.Netblock)
@@ -107,7 +108,7 @@ func TestFindEntitiesByContentForNetblock(t *testing.T) {
 	assert.Equal(t, netblock2.CIDR, cidr, "Netblock found by ID does not have a matching CIDR")
 	assert.Equal(t, netblock2.Type, iptype, "Netblock found by ID does not have a matching Type")
 
-	ents, err := db.FindEntitiesByContent(ctx, oam.Netblock, before, dbt.ContentFilters{
+	ents, err = db.FindEntitiesByContent(ctx, oam.Netblock, before, 0, dbt.ContentFilters{
 		"cidr": cidrstr,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the Netblock")
