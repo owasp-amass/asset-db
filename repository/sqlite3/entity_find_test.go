@@ -81,7 +81,7 @@ func TestFindEntitiesByType(t *testing.T) {
 			atype:  oam.FQDN,
 			before: before1,
 			after:  after2,
-			since:  time.Time{},
+			since:  before1,
 			sets:   []*stringset.Set{set1, set2},
 			count:  6,
 		},

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -53,11 +53,11 @@ func (r *SqliteRepository) upsertPerson(ctx context.Context, a *people.Person) (
 	if a == nil {
 		return 0, errors.New("invalid person provided")
 	}
+	if a.FullName == "" {
+		return 0, errors.New("the person does not have a full name")
+	}
 	if a.ID == "" {
 		return 0, fmt.Errorf("the person %s does not have a unique ID", a.FullName)
-	}
-	if a.FirstName == "" && a.FamilyName == "" {
-		return 0, fmt.Errorf("the person %s does not have a first or family name", a.FullName)
 	}
 
 	attrs := personAttributes{
@@ -138,9 +138,6 @@ func (r *SqliteRepository) fetchPersonByRowID(ctx context.Context, eid, rowID in
 	}
 	if a.FullName == "" {
 		return nil, errors.New("person full name is missing")
-	}
-	if a.FirstName == "" && a.FamilyName == "" {
-		return nil, errors.New("person first and family names are missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}

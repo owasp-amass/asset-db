@@ -185,26 +185,28 @@ func buildWhere(table string, reg regEntry, since time.Time, filters dbt.Content
 // If limit <= 0, it returns all (be careful on large datasets).
 func (r *SqliteRepository) findByType(ctx context.Context, atype string, since time.Time, limit int) ([]*dbt.Entity, error) {
 	table := normalizeType(atype)
-	// Build SQL (parameterized LIMIT only if > 0, to keep a stable prepared key)
-	base := `
-SELECT e.entity_id, e.natural_key
-FROM entity e
-JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ?`
-	key := "entity.by_type.base"
-	q := base
-	args := []any{table}
-
-	if !since.IsZero() {
-		key += ".since"
-		q += " WHERE e.updated_at >= ?"
-		args = append(args, since.UTC())
+	if table == "" {
+		return nil, fmt.Errorf("unknown asset type %s", atype)
+	}
+	if since.IsZero() {
+		return nil, fmt.Errorf("since time must be provided")
+	}
+	if limit < 0 {
+		return nil, errors.New("limit must be zero or greater")
 	}
 
-	q += " ORDER BY e.updated_at DESC, e.entity_id DESC"
+	q := `
+SELECT e.entity_id, e.natural_key
+FROM entity e
+JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ?
+WHERE e.updated_at >= ?
+ORDER BY e.updated_at DESC, e.entity_id DESC`
+	key := "entity.by_type"
+	args := []any{table, since.UTC()}
 
 	if limit > 0 {
 		key += fmt.Sprintf(".limit%d", limit)
-		q = base + " LIMIT ?"
+		q += " LIMIT ?"
 		args = append(args, limit)
 	}
 

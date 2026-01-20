@@ -30,7 +30,6 @@ func parseTimestamp(s string) (time.Time, error) {
 
 	// Try SQLite's default (YYYY-MM-DD HH:MM:SS.SSS) then RFC3339
 	layouts := []string{
-		"2006-01-02T15:04:05Z07:00",
 		"2006-01-02 15:04:05",
 		"2006-01-02 15:04:05.000",
 		time.RFC3339,
