@@ -191,7 +191,7 @@ func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, atype oam.A
 	if !since.IsZero() {
 		query += fmt.Sprintf(" WHERE a.updated_at >= localDateTime('%s')", timeToNeo4jTime(since))
 	}
-	query += fmt.Sprintf(" ORDER BY a.updated_at DESC")
+	query += " ORDER BY a.updated_at DESC"
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
@@ -239,7 +239,7 @@ func (neo *NeoRepository) FindEntitiesByType(ctx context.Context, atype oam.Asse
 	if !since.IsZero() {
 		query += fmt.Sprintf(" WHERE a.updated_at >= localDateTime('%s')", timeToNeo4jTime(since))
 	}
-	query += fmt.Sprintf(" ORDER BY a.updated_at DESC")
+	query += " ORDER BY a.updated_at DESC"
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
