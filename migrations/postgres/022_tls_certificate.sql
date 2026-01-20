@@ -5,7 +5,6 @@
 -- TLSCertificate Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.tlscertificate (
   id                  bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at          timestamp without time zone NOT NULL DEFAULT now(),
@@ -15,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.tlscertificate (
   attrs               jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_tlscertificate_created_at ON public.tlscertificate (created_at);
-CREATE INDEX IF NOT EXISTS idx_tlscertificate_updated_at ON public.tlscertificate (updated_at);
+CREATE INDEX IF NOT EXISTS idx_tlscertificate_updated_at_id_desc ON public.tlscertificate (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_tlscertificate_subject_common_name ON public.tlscertificate (subject_common_name);
 
 -- Upsert a TLSCertificate AND its corresponding Entity.
@@ -332,6 +331,6 @@ DROP FUNCTION IF EXISTS public.tlscertificate_upsert(text, text, jsonb);
 DROP FUNCTION IF EXISTS public.tlscertificate_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_tlscertificate_subject_common_name;
-DROP INDEX IF EXISTS idx_tlscertificate_updated_at;
+DROP INDEX IF EXISTS idx_tlscertificate_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_tlscertificate_created_at;
 DROP TABLE IF EXISTS public.tlscertificate;

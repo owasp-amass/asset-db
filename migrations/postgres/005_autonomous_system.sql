@@ -5,7 +5,6 @@
 -- AutonomousSystem Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.autonomoussystem (
   id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
@@ -14,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.autonomoussystem (
   attrs      jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_autonomoussystem_created_at ON public.autonomoussystem (created_at);
-CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at ON public.autonomoussystem (updated_at);
+CREATE INDEX IF NOT EXISTS idx_autonomoussystem_updated_at_id_desc ON public.autonomoussystem (updated_at DESC, id DESC);
 
 -- Upsert an AutonomousSystem AND its corresponding Entity.
 -- Returns the entity_id.
@@ -229,6 +228,6 @@ DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_json(jsonb);
 DROP FUNCTION IF EXISTS public.autonomoussystem_upsert(integer, jsonb);
 DROP FUNCTION IF EXISTS public.autonomoussystem_upsert_entity_json(jsonb);
 
-DROP INDEX IF EXISTS idx_autonomoussystem_updated_at;
+DROP INDEX IF EXISTS idx_autonomoussystem_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_autonomoussystem_created_at;
 DROP TABLE IF EXISTS public.autonomoussystem;

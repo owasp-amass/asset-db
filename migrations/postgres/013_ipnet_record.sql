@@ -5,7 +5,6 @@
 -- IPNetRecord Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.ipnetrecord (
   id            bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at    timestamp without time zone NOT NULL DEFAULT now(),
@@ -20,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.ipnetrecord (
   attrs         jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_created_at ON public.ipnetrecord (created_at);
-CREATE INDEX IF NOT EXISTS idx_ipnetrecord_updated_at ON public.ipnetrecord (updated_at);
+CREATE INDEX IF NOT EXISTS idx_ipnetrecord_updated_at_id_desc ON public.ipnetrecord (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_name ON public.ipnetrecord (record_name);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_start_address ON public.ipnetrecord (start_address);
 CREATE INDEX IF NOT EXISTS idx_ipnetrecord_end_address ON public.ipnetrecord (end_address);
@@ -429,6 +428,6 @@ DROP INDEX IF EXISTS idx_ipnetrecord_whois_server;
 DROP INDEX IF EXISTS idx_ipnetrecord_end_address;
 DROP INDEX IF EXISTS idx_ipnetrecord_start_address;
 DROP INDEX IF EXISTS idx_ipnetrecord_name;
-DROP INDEX IF EXISTS idx_ipnetrecord_updated_at;
+DROP INDEX IF EXISTS idx_ipnetrecord_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_ipnetrecord_created_at;
 DROP TABLE IF EXISTS public.ipnetrecord;

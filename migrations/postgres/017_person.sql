@@ -5,7 +5,6 @@
 -- Person Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.person (
   id          bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at  timestamp without time zone NOT NULL DEFAULT now(),
@@ -17,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.person (
   attrs       jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_person_created_at ON public.person (created_at);
-CREATE INDEX IF NOT EXISTS idx_person_updated_at ON public.person (updated_at);
+CREATE INDEX IF NOT EXISTS idx_person_updated_at_id_desc ON public.person (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_person_full_name ON public.person (full_name);
 CREATE INDEX IF NOT EXISTS idx_person_first_name ON public.person (first_name);
 CREATE INDEX IF NOT EXISTS idx_person_family_name ON public.person (family_name);
@@ -305,6 +304,6 @@ DROP FUNCTION IF EXISTS public.person_upsert_entity_json(jsonb);
 DROP INDEX IF EXISTS idx_person_family_name;
 DROP INDEX IF EXISTS idx_person_first_name;
 DROP INDEX IF EXISTS idx_person_full_name;
-DROP INDEX IF EXISTS idx_person_updated_at;
+DROP INDEX IF EXISTS idx_person_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_person_created_at;
 DROP TABLE IF EXISTS public.person;

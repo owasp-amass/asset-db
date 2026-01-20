@@ -5,17 +5,20 @@
 -- FQDN Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.fqdn (
-  id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  fqdn       citext NOT NULL UNIQUE,
-  attrs      jsonb NOT NULL DEFAULT '{}'::jsonb
+  id           bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  created_at   timestamp without time zone NOT NULL DEFAULT now(),
+  updated_at   timestamp without time zone NOT NULL DEFAULT now(),
+  fqdn         citext NOT NULL UNIQUE,
+  reverse_fqdn text COLLATE pg_catalog."default" GENERATED ALWAYS AS (reverse((fqdn)::text)) STORED,
+  attrs        jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_fqdn_created_at ON public.fqdn (created_at);
-CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at ON public.fqdn (updated_at);
-CREATE INDEX IF NOT EXISTS idx_fqdn_fqdn_trgm ON public.fqdn USING gin (fqdn gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_fqdn_updated_at_id_desc ON public.fqdn (updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_fqdn_reverse_fqdn ON public.fqdn USING btree
+  (reverse_fqdn COLLATE pg_catalog."default" text_pattern_ops ASC NULLS LAST)
+  WITH (fillfactor=100, deduplicate_items=True)
+  TABLESPACE pg_default;
 
 -- Upsert an FQDN AND its corresponding Entity.
 -- Returns the entity_id.
@@ -230,7 +233,7 @@ DROP FUNCTION IF EXISTS public.fqdn_upsert_json(jsonb);
 DROP FUNCTION IF EXISTS public.fqdn_upsert(text, jsonb);
 DROP FUNCTION IF EXISTS public.fqdn_upsert_entity_json(jsonb);
 
-DROP INDEX IF EXISTS idx_fqdn_fqdn_trgm;
-DROP INDEX IF EXISTS idx_fqdn_updated_at;
+DROP INDEX IF EXISTS idx_fqdn_reverse_fqdn;
+DROP INDEX IF EXISTS idx_fqdn_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_fqdn_created_at;
 DROP TABLE IF EXISTS public.fqdn;

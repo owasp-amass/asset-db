@@ -5,7 +5,6 @@
 -- Netblock Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.netblock (
   id            bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at    timestamp without time zone NOT NULL DEFAULT now(),
@@ -14,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.netblock (
   attrs         jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_netblock_created_at ON public.netblock (created_at);
-CREATE INDEX IF NOT EXISTS idx_netblock_updated_at ON public.netblock (updated_at);
+CREATE INDEX IF NOT EXISTS idx_netblock_updated_at_id_desc ON public.netblock (updated_at DESC, id DESC);
 
 -- Upsert a Netblock AND its corresponding Entity.
 -- Returns the entity_id.
@@ -243,6 +242,6 @@ DROP FUNCTION IF EXISTS public.netblock_upsert_json(jsonb);
 DROP FUNCTION IF EXISTS public.netblock_upsert(cidr, jsonb);
 DROP FUNCTION IF EXISTS public.netblock_upsert_entity_json(jsonb);
 
-DROP INDEX IF EXISTS idx_netblock_updated_at;
+DROP INDEX IF EXISTS idx_netblock_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_netblock_created_at;
 DROP TABLE IF EXISTS public.netblock;

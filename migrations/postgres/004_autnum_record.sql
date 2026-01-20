@@ -5,7 +5,6 @@
 -- AutnumRecord Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.autnumrecord (
   id           bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at   timestamp without time zone NOT NULL DEFAULT now(),
@@ -17,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.autnumrecord (
   attrs        jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_autnumrecord_created_at ON public.autnumrecord (created_at);
-CREATE INDEX IF NOT EXISTS idx_autnumrecord_updated_at ON public.autnumrecord (updated_at);
+CREATE INDEX IF NOT EXISTS idx_autnumrecord_updated_at_id_desc ON public.autnumrecord (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_autnumrecord_name ON public.autnumrecord (record_name);
 CREATE INDEX IF NOT EXISTS idx_autnumrecord_whois_server ON public.autnumrecord (whois_server);
 
@@ -353,6 +352,6 @@ DROP FUNCTION IF EXISTS public.autnumrecord_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_autnumrecord_whois_server;
 DROP INDEX IF EXISTS idx_autnumrecord_name;
-DROP INDEX IF EXISTS idx_autnumrecord_updated_at;
+DROP INDEX IF EXISTS idx_autnumrecord_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_autnumrecord_created_at;
 DROP TABLE IF EXISTS public.autnumrecord;

@@ -5,7 +5,6 @@
 -- URL Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.url (
   id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
@@ -15,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.url (
   attrs      jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_url_created_at ON public.url (created_at);
-CREATE INDEX IF NOT EXISTS idx_url_updated_at ON public.url (updated_at);
+CREATE INDEX IF NOT EXISTS idx_url_updated_at_id_desc ON public.url (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_url_scheme ON public.url (scheme);
 
 -- Upsert a URL AND its corresponding Entity.
@@ -289,6 +288,6 @@ DROP FUNCTION IF EXISTS public.url_upsert(text, text, jsonb);
 DROP FUNCTION IF EXISTS public.url_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_url_scheme;
-DROP INDEX IF EXISTS idx_url_updated_at;
+DROP INDEX IF EXISTS idx_url_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_url_created_at;
 DROP TABLE IF EXISTS public.url;

@@ -5,7 +5,6 @@
 -- Location Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.location (
   id              bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
@@ -23,7 +22,7 @@ CREATE TABLE IF NOT EXISTS public.location (
   attrs           jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_location_created_at ON public.location (created_at);
-CREATE INDEX IF NOT EXISTS idx_location_updated_at ON public.location (updated_at);
+CREATE INDEX IF NOT EXISTS idx_location_updated_at_id_desc ON public.location (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_location_building ON public.location (building);
 CREATE INDEX IF NOT EXISTS idx_location_building_number ON public.location (building_number);
 CREATE INDEX IF NOT EXISTS idx_location_province ON public.location (province);
@@ -417,6 +416,6 @@ DROP INDEX IF EXISTS idx_location_street_name;
 DROP INDEX IF EXISTS idx_location_province;
 DROP INDEX IF EXISTS idx_location_building_number;
 DROP INDEX IF EXISTS idx_location_building;
-DROP INDEX IF EXISTS idx_location_updated_at;
+DROP INDEX IF EXISTS idx_location_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_location_created_at;
 DROP TABLE IF EXISTS public.location;

@@ -5,7 +5,6 @@
 -- Account Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.account (
   id             bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at     timestamp without time zone NOT NULL DEFAULT now(),
@@ -17,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.account (
   attrs          jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_account_created_at ON public.account (created_at);
-CREATE INDEX IF NOT EXISTS idx_account_updated_at ON public.account (updated_at);
+CREATE INDEX IF NOT EXISTS idx_account_updated_at_id_desc ON public.account (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_account_account_type ON public.account (account_type);
 CREATE INDEX IF NOT EXISTS idx_account_username ON public.account (username);
 CREATE INDEX IF NOT EXISTS idx_account_account_number ON public.account (account_number);
@@ -301,6 +300,6 @@ DROP FUNCTION IF EXISTS public.account_upsert_entity_json(jsonb);
 DROP INDEX IF EXISTS idx_account_account_number;
 DROP INDEX IF EXISTS idx_account_username;
 DROP INDEX IF EXISTS idx_account_account_type;
-DROP INDEX IF EXISTS idx_account_updated_at;
+DROP INDEX IF EXISTS idx_account_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_account_created_at;
 DROP TABLE IF EXISTS public.account;

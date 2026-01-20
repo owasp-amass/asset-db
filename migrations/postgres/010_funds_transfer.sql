@@ -5,7 +5,6 @@
 -- FundsTransfer Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.fundstransfer (
   id               bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at       timestamp without time zone NOT NULL DEFAULT now(),
@@ -16,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.fundstransfer (
   attrs            jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_fundstransfer_created_at ON public.fundstransfer (created_at);
-CREATE INDEX IF NOT EXISTS idx_fundstransfer_updated_at ON public.fundstransfer (updated_at);
+CREATE INDEX IF NOT EXISTS idx_fundstransfer_updated_at_id_desc ON public.fundstransfer (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_fundstransfer_amount ON public.fundstransfer (amount);
 CREATE INDEX IF NOT EXISTS idx_fundstransfer_reference_number ON public.fundstransfer (reference_number);
 
@@ -306,6 +305,6 @@ DROP FUNCTION IF EXISTS public.fundstransfer_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_fundstransfer_reference_number;
 DROP INDEX IF EXISTS idx_fundstransfer_amount;
-DROP INDEX IF EXISTS idx_fundstransfer_updated_at;
+DROP INDEX IF EXISTS idx_fundstransfer_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_fundstransfer_created_at;
 DROP TABLE IF EXISTS public.fundstransfer;

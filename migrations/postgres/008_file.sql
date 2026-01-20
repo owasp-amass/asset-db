@@ -5,7 +5,6 @@
 -- File Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.file (
   id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
@@ -16,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.file (
   attrs      jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_file_created_at ON public.file (created_at);
-CREATE INDEX IF NOT EXISTS idx_file_updated_at ON public.file (updated_at);
+CREATE INDEX IF NOT EXISTS idx_file_updated_at_id_desc ON public.file (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_file_basename ON public.file (basename);
 CREATE INDEX IF NOT EXISTS idx_file_file_type ON public.file (file_type);
 
@@ -274,6 +273,6 @@ DROP FUNCTION IF EXISTS public.file_upsert_entity_json(jsonb);
 
 DROP INDEX IF EXISTS idx_file_file_type;
 DROP INDEX IF EXISTS idx_file_basename;
-DROP INDEX IF EXISTS idx_file_updated_at;
+DROP INDEX IF EXISTS idx_file_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_file_created_at;
 DROP TABLE IF EXISTS public.file;

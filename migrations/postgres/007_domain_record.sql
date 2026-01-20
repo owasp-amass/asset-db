@@ -5,7 +5,6 @@
 -- DomainRecord Table native for asset type
 -- ============================================================================
 
-
 CREATE TABLE IF NOT EXISTS public.domainrecord (
   id              bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
@@ -19,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.domainrecord (
   attrs           jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS idx_domainrecord_created_at ON public.domainrecord (created_at);
-CREATE INDEX IF NOT EXISTS idx_domainrecord_updated_at ON public.domainrecord (updated_at);
+CREATE INDEX IF NOT EXISTS idx_domainrecord_updated_at_id_desc ON public.domainrecord (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_domainrecord_name ON public.domainrecord (record_name);
 CREATE INDEX IF NOT EXISTS idx_domainrecord_extension ON public.domainrecord (extension);
 CREATE INDEX IF NOT EXISTS idx_domainrecord_punycode ON public.domainrecord (punycode);
@@ -373,6 +372,6 @@ DROP INDEX IF EXISTS idx_domainrecord_whois_server;
 DROP INDEX IF EXISTS idx_domainrecord_punycode;
 DROP INDEX IF EXISTS idx_domainrecord_extension;
 DROP INDEX IF EXISTS idx_domainrecord_name;
-DROP INDEX IF EXISTS idx_domainrecord_updated_at;
+DROP INDEX IF EXISTS idx_domainrecord_updated_at_id_desc;
 DROP INDEX IF EXISTS idx_domainrecord_created_at;
 DROP TABLE IF EXISTS public.domainrecord;
