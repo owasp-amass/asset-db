@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -47,11 +47,11 @@ func (r *PostgresRepository) upsertPerson(ctx context.Context, a *people.Person)
 	if a == nil {
 		return 0, errors.New("invalid person provided")
 	}
+	if a.FullName == "" {
+		return 0, errors.New("the person does not have a full name")
+	}
 	if a.ID == "" {
 		return 0, fmt.Errorf("the person %s does not have a unique ID", a.FullName)
-	}
-	if a.FullName == "" {
-		return 0, fmt.Errorf("the person %s does not have a full name", a.FullName)
 	}
 
 	record, err := a.JSON()
