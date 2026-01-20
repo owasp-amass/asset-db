@@ -62,6 +62,9 @@ func (r *PostgresRepository) upsertDomainRecord(ctx context.Context, a *oamreg.D
 	if a.Extension == "" {
 		return 0, errors.New("domain record extension cannot be empty")
 	}
+	if a.WhoisServer == "" {
+		return 0, errors.New("domain record whois server cannot be empty")
+	}
 	if _, err := parseTimestamp(a.CreatedDate); err != nil {
 		return 0, fmt.Errorf("domain record must have a valid created date: %v", err)
 	}
@@ -70,6 +73,10 @@ func (r *PostgresRepository) upsertDomainRecord(ctx context.Context, a *oamreg.D
 	}
 	if _, err := parseTimestamp(a.ExpirationDate); err != nil {
 		return 0, fmt.Errorf("domain record must have a valid expiration date: %v", err)
+	}
+
+	if a.Status == nil {
+		a.Status = []string{}
 	}
 
 	record, err := a.JSON()

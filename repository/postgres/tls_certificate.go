@@ -76,6 +76,16 @@ func (r *PostgresRepository) upsertTLSCertificate(ctx context.Context, a *oamcer
 		return 0, fmt.Errorf("the TLS certificate must have a valid NotAfter date: %v", err)
 	}
 
+	if a.KeyUsage == nil {
+		a.KeyUsage = []string{}
+	}
+	if a.ExtKeyUsage == nil {
+		a.ExtKeyUsage = []string{}
+	}
+	if a.CRLDistributionPoints == nil {
+		a.CRLDistributionPoints = []string{}
+	}
+
 	record, err := a.JSON()
 	if err != nil {
 		return 0, err

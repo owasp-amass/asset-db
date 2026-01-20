@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -107,15 +107,16 @@ func (suite *PostgresProductReleaseTestSuite) TestFindEntitiesByContentForProduc
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = suite.db.FindOneEntityByContent(ctx, oam.ProductRelease, after, dbt.ContentFilters{
+	_, err = suite.db.FindEntitiesByContent(ctx, oam.ProductRelease, after, 1, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := suite.db.FindOneEntityByContent(ctx, oam.ProductRelease, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.ProductRelease, before, 1, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the ProductRelease")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the ProductRelease should not be nil")
 
 	release2, ok := found.Asset.(*oamplat.ProductRelease)
@@ -124,9 +125,110 @@ func (suite *PostgresProductReleaseTestSuite) TestFindEntitiesByContentForProduc
 	assert.Equal(t, release2.Name, name, "ProductRelease found by content does not have matching name")
 	assert.Equal(t, release2.ReleaseDate, releaseDate, "ProductRelease found by content does not have matching release date")
 
-	ents, err := suite.db.FindEntitiesByContent(ctx, oam.ProductRelease, before, dbt.ContentFilters{
+	ents, err = suite.db.FindEntitiesByContent(ctx, oam.ProductRelease, before, 0, dbt.ContentFilters{
 		"name": name,
 	})
 	assert.NoError(t, err, "Failed to find entities by content for the ProductRelease")
 	assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the ProductRelease")
+}
+
+func (suite *PostgresProductReleaseTestSuite) TestFindEntitiesByTypeForProductRelease() {
+	t := suite.T()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	since1 := time.Now()
+	time.Sleep(100 * time.Millisecond)
+
+	key1 := "Fake1"
+	atype := oam.ProductRelease
+	atypestr := "ProductRelease"
+	ent, err := suite.db.CreateAsset(ctx, &oamplat.ProductRelease{
+		Name: key1,
+	})
+	assert.NoError(t, err, "Failed to create asset for the first %s", atypestr)
+	assert.NotNil(t, ent, "Entity for the first %s should not be nil", atypestr)
+
+	time.Sleep(100 * time.Millisecond)
+	after1 := time.Now()
+	time.Sleep(500 * time.Millisecond)
+	since23 := time.Now()
+	time.Sleep(100 * time.Millisecond)
+
+	key2 := "Fake2"
+	ent, err = suite.db.CreateAsset(ctx, &oamplat.ProductRelease{
+		Name: key2,
+	})
+	assert.NoError(t, err, "Failed to create asset for the second %s", atypestr)
+	assert.NotNil(t, ent, "Entity for the second %s should not be nil", atypestr)
+
+	key3 := "Fake3"
+	ent, err = suite.db.CreateAsset(ctx, &oamplat.ProductRelease{
+		Name: key3,
+	})
+	assert.NoError(t, err, "Failed to create asset for the third %s", atypestr)
+	assert.NotNil(t, ent, "Entity for the third %s should not be nil", atypestr)
+
+	time.Sleep(100 * time.Millisecond)
+	after23 := time.Now()
+
+	for k, v := range map[string]struct {
+		since    time.Time
+		limit    int
+		expected []string
+	}{
+		"find all since1": {
+			since:    since1,
+			limit:    3,
+			expected: []string{key3, key2, key1},
+		},
+		"one out of all": {
+			since:    since1,
+			limit:    1,
+			expected: []string{key3},
+		},
+		"two out of all": {
+			since:    since1,
+			limit:    2,
+			expected: []string{key3, key2},
+		},
+		"find all after1": {
+			since:    after1,
+			limit:    3,
+			expected: []string{key3, key2},
+		},
+		"one out of two and three": {
+			since:    since23,
+			limit:    1,
+			expected: []string{key3},
+		},
+		"zero entities after23": {
+			since:    after23,
+			limit:    3,
+			expected: []string{},
+		},
+		"no since returns error": {
+			since:    time.Time{},
+			limit:    0,
+			expected: []string{},
+		},
+	} {
+		ents, err := suite.db.FindEntitiesByType(ctx, atype, v.since, v.limit)
+
+		var got []string
+		for _, ent := range ents {
+			got = append(got, ent.Asset.Key())
+		}
+
+		if len(v.expected) > 0 {
+			assert.NoError(t, err, "The %s test failed for %s: expected %v: got: %v", k, atypestr, v.expected, got)
+		} else {
+			assert.Error(t, err, "The %s test failed for %s: zero findings should return an error", k, atypestr)
+		}
+
+		assert.Len(t, ents, len(v.expected),
+			"The %s test expected to find exactly %d entities for %s: got: %d", k, v.limit, atypestr, len(ents),
+		)
+	}
 }

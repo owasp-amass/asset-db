@@ -64,6 +64,10 @@ func (r *PostgresRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.A
 		return 0, fmt.Errorf("autnum record must have a valid updated date: %v", err)
 	}
 
+	if a.Status == nil {
+		a.Status = []string{}
+	}
+
 	record, err := a.JSON()
 	if err != nil {
 		return 0, err

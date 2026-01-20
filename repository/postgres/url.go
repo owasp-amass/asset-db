@@ -54,6 +54,12 @@ func (r *PostgresRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int6
 	if a.Raw == "" {
 		return 0, fmt.Errorf("the URL raw string cannot be empty")
 	}
+	if a.Scheme == "" {
+		return 0, fmt.Errorf("the scheme cannot be empty")
+	}
+	if a.Host == "" {
+		return 0, fmt.Errorf("the host cannot be empty")
+	}
 
 	record, err := a.JSON()
 	if err != nil {

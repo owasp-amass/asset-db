@@ -92,6 +92,10 @@ func (r *PostgresRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IP
 		return 0, errors.New("CIDR type must be either IPv4 or IPv6")
 	}
 
+	if a.Status == nil {
+		a.Status = []string{}
+	}
+
 	record, err := a.JSON()
 	if err != nil {
 		return 0, err

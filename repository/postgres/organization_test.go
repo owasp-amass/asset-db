@@ -154,15 +154,16 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByContentForOrganiza
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = suite.db.FindOneEntityByContent(ctx, oam.Organization, after, dbt.ContentFilters{
+	_, err = suite.db.FindEntitiesByContent(ctx, oam.Organization, after, 1, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	found, err := suite.db.FindOneEntityByContent(ctx, oam.Organization, before, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.Organization, before, 1, dbt.ContentFilters{
 		"unique_id": uniqueID,
 	})
 	assert.NoError(t, err, "Failed to find entity by content for the Organization")
+	found := ents[0]
 	assert.NotNil(t, found, "Entity found by content for the Organization should not be nil")
 
 	org2, ok := found.Asset.(*oamorg.Organization)
@@ -187,7 +188,7 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByContentForOrganiza
 		"jurisdiction":    jurisdiction,
 		"registration_id": registrationID,
 	} {
-		ents, err := suite.db.FindEntitiesByContent(ctx, oam.Organization, before, dbt.ContentFilters{k: v})
+		ents, err := suite.db.FindEntitiesByContent(ctx, oam.Organization, before, 0, dbt.ContentFilters{k: v})
 		assert.NoError(t, err, "Failed to find entities by content for the Organization")
 		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Organization")
 	}
@@ -205,12 +206,12 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByTypeForOrganizatio
 	key1 := "Fake1"
 	atype := oam.Organization
 	atypestr := "Organization"
-	org, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
+	ent, err := suite.db.CreateAsset(ctx, &oamorg.Organization{
 		ID:   key1,
 		Name: "fake name 1",
 	})
 	assert.NoError(t, err, "Failed to create asset for the first %s", atypestr)
-	assert.NotNil(t, org, "Entity for the first %s should not be nil", atypestr)
+	assert.NotNil(t, ent, "Entity for the first %s should not be nil", atypestr)
 
 	time.Sleep(100 * time.Millisecond)
 	after1 := time.Now()
@@ -219,20 +220,20 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByTypeForOrganizatio
 	time.Sleep(100 * time.Millisecond)
 
 	key2 := "Fake2"
-	org, err = suite.db.CreateAsset(ctx, &oamorg.Organization{
+	ent, err = suite.db.CreateAsset(ctx, &oamorg.Organization{
 		ID:   key2,
 		Name: "fake name 2",
 	})
 	assert.NoError(t, err, "Failed to create asset for the second %s", atypestr)
-	assert.NotNil(t, org, "Entity for the second %s should not be nil", atypestr)
+	assert.NotNil(t, ent, "Entity for the second %s should not be nil", atypestr)
 
 	key3 := "Fake3"
-	org, err = suite.db.CreateAsset(ctx, &oamorg.Organization{
+	ent, err = suite.db.CreateAsset(ctx, &oamorg.Organization{
 		ID:   key3,
 		Name: "fake name 3",
 	})
 	assert.NoError(t, err, "Failed to create asset for the third %s", atypestr)
-	assert.NotNil(t, org, "Entity for the third %s should not be nil", atypestr)
+	assert.NotNil(t, ent, "Entity for the third %s should not be nil", atypestr)
 
 	time.Sleep(100 * time.Millisecond)
 	after23 := time.Now()
@@ -272,6 +273,11 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByTypeForOrganizatio
 			limit:    3,
 			expected: []string{},
 		},
+		"no since returns error": {
+			since:    time.Time{},
+			limit:    0,
+			expected: []string{},
+		},
 	} {
 		ents, err := suite.db.FindEntitiesByType(ctx, atype, v.since, v.limit)
 
@@ -280,7 +286,12 @@ func (suite *PostgresOrganizationTestSuite) TestFindEntitiesByTypeForOrganizatio
 			got = append(got, ent.Asset.Key())
 		}
 
-		assert.NoError(t, err, "The %s test failed for %s: expected %v: got: %v", k, atypestr, v.expected, got)
+		if len(v.expected) > 0 {
+			assert.NoError(t, err, "The %s test failed for %s: expected %v: got: %v", k, atypestr, v.expected, got)
+		} else {
+			assert.Error(t, err, "The %s test failed for %s: zero findings should return an error", k, atypestr)
+		}
+
 		assert.Len(t, ents, len(v.expected),
 			"The %s test expected to find exactly %d entities for %s: got: %d", k, v.limit, atypestr, len(ents),
 		)
