@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,10 +16,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-// CreateEdgeTag creates a new edge tag in the database.
-// It takes an EdgeTag as input and persists it in the database.
-// The property is serialized to JSON and stored in the Content field of the EdgeTag struct.
-// Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
+// CreateEdgeTag implements the Repository interface.
 func (neo *NeoRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, input *types.EdgeTag) (*types.EdgeTag, error) {
 	if input == nil {
 		return nil, errors.New("the input edge tag is nil")
@@ -140,10 +137,7 @@ func (neo *NeoRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, i
 	return tag, nil
 }
 
-// CreateEdgeProperty creates a new edge tag in the database.
-// It takes an oam.Property as input and persists it in the database.
-// The property is serialized to JSON and stored in the Content field of the EdgeTag struct.
-// Returns the created edge tag as a types.EdgeTag or an error if the creation fails.
+// CreateEdgeProperty implements the Repository interface.
 func (neo *NeoRepository) CreateEdgeProperty(ctx context.Context, edge *types.Edge, prop oam.Property) (*types.EdgeTag, error) {
 	return neo.CreateEdgeTag(ctx, edge, &types.EdgeTag{Property: prop})
 }
@@ -160,9 +154,7 @@ func (neo *NeoRepository) uniqueEdgeTagID() string {
 	}
 }
 
-// FindEdgeTagById finds an edge tag in the database by the ID.
-// It takes a string representing the edge tag ID and retrieves the corresponding tag from the database.
-// Returns the discovered tag as a types.EdgeTag or an error if the asset is not found.
+// FindEdgeTagById implements the Repository interface.
 func (neo *NeoRepository) FindEdgeTagById(ctx context.Context, id string) (*types.EdgeTag, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -238,9 +230,7 @@ func (neo *NeoRepository) findEdgeTagsByContent(ctx context.Context, prop oam.Pr
 	return tags, nil
 }
 
-// FindEdgeTags finds all tags for the edge with the specified names and last seen after the since parameter.
-// If since.IsZero(), the parameter will be ignored.
-// If no names are specified, all tags for the specified edge are returned.
+// FindEdgeTags implements the Repository interface.
 func (neo *NeoRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
 	query := fmt.Sprintf("MATCH (p:EdgeTag {edge_id: '%s'}) RETURN p", edge.ID)
 	if !since.IsZero() {
@@ -300,9 +290,7 @@ func (neo *NeoRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, si
 	return results, nil
 }
 
-// DeleteEdgeTag removes an edge tag in the database by its ID.
-// It takes a string representing the edge tag ID and removes the corresponding tag from the database.
-// Returns an error if the tag is not found.
+// DeleteEdgeTag implements the Repository interface.
 func (neo *NeoRepository) DeleteEdgeTag(ctx context.Context, id string) error {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

@@ -58,14 +58,9 @@ func New(dbtype, dsn string) (*NeoRepository, error) {
 	}, driver.VerifyConnectivity(ctx)
 }
 
-// GetDBType returns the type of the database.
-func (neo *NeoRepository) GetDBType() string {
+// Type implements the Repository interface.
+func (neo *NeoRepository) Type() string {
 	return Neo4j
-}
-
-// Prepare prepares the repository for use.
-func (neo *NeoRepository) Prepare(ctx context.Context) error {
-	return nil
 }
 
 // Close implements the Repository interface.

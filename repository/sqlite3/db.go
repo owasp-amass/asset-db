@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -82,11 +82,12 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 	dbro.SetMaxIdleConns(numberOfReaderWorkers)
 	dbro.SetConnMaxLifetime(0)
 
-	return &SqliteRepository{
+	repo := &SqliteRepository{
 		DB:     db,
 		rodb:   dbro,
 		dbtype: SQLite,
-	}, nil
+	}
+	return repo, repo.prepareWorkers()
 }
 
 // sqliteMemoryDatabase creates a new in-memory SQLite database connection.
@@ -117,14 +118,15 @@ func sqliteMemoryDatabase() (*SqliteRepository, error) {
 	dbro.SetMaxIdleConns(numberOfReaderWorkers)
 	dbro.SetConnMaxLifetime(0)
 
-	return &SqliteRepository{
+	repo := &SqliteRepository{
 		DB:     db,
 		rodb:   dbro,
 		dbtype: SQLiteMemory,
-	}, nil
+	}
+	return repo, repo.prepareWorkers()
 }
 
-func (sql *SqliteRepository) Prepare(ctx context.Context) error {
+func (sql *SqliteRepository) prepareWorkers() error {
 	wworker, err := newWriteWorker(sql.DB, 20, 500*time.Microsecond)
 	if err != nil {
 		return err
@@ -153,7 +155,7 @@ func (sql *SqliteRepository) Close() error {
 	return errors.New("failed to obtain access to the database handle")
 }
 
-// GetDBType returns the type of the database.
-func (sql *SqliteRepository) GetDBType() string {
+// Type implements the Repository interface.
+func (sql *SqliteRepository) Type() string {
 	return sql.dbtype
 }

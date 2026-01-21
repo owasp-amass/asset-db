@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -17,9 +17,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-// CreateEdge creates an edge between two entities in the database.
-// The edge is established by creating a new Edge in the database, linking the two entities.
-// Returns the created edge as a types.Edge or an error if the link creation fails.
+// CreateEdge implements the Repository interface.
 func (neo *NeoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*types.Edge, error) {
 	if edge == nil || edge.Relation == nil || edge.FromEntity == nil ||
 		edge.FromEntity.Asset == nil || edge.ToEntity == nil || edge.ToEntity.Asset == nil {
@@ -128,6 +126,7 @@ func (neo *NeoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	return err
 }
 
+// FindEdgeById implements the Repository interface.
 func (neo *NeoRepository) FindEdgeById(ctx context.Context, id string) (*types.Edge, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -181,9 +180,7 @@ func (neo *NeoRepository) FindEdgeById(ctx context.Context, id string) (*types.E
 	return edge, err
 }
 
-// IncomingEdges finds all edges pointing to the entity of the specified labels and last seen after the since parameter.
-// If since.IsZero(), the parameter will be ignored.
-// If no labels are specified, all incoming eges are returned.
+// IncomingEdges implements the Repository interface.
 func (neo *NeoRepository) IncomingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -252,9 +249,7 @@ func (neo *NeoRepository) IncomingEdges(ctx context.Context, entity *types.Entit
 	return results, nil
 }
 
-// OutgoingEdges finds all edges from the entity of the specified labels and last seen after the since parameter.
-// If since.IsZero(), the parameter will be ignored.
-// If no labels are specified, all outgoing edges are returned.
+// OutgoingEdges implements the Repository interface.
 func (neo *NeoRepository) OutgoingEdges(ctx context.Context, entity *types.Entity, since time.Time, labels ...string) ([]*types.Edge, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -323,9 +318,7 @@ func (neo *NeoRepository) OutgoingEdges(ctx context.Context, entity *types.Entit
 	return results, nil
 }
 
-// DeleteEdge removes an edge in the database by its ID.
-// It takes a string representing the edge ID and removes the corresponding edge from the database.
-// Returns an error if the edge is not found.
+// DeleteEdge implements the Repository interface.
 func (neo *NeoRepository) DeleteEdge(ctx context.Context, id string) error {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

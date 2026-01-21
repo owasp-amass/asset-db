@@ -6,7 +6,9 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"math/rand"
 	"net/netip"
 	"strconv"
 	"testing"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
@@ -190,5 +193,113 @@ func (suite *PostgresEntityTestSuite) TestFindEntitiesByType() {
 				t.Errorf("Entity Asset has an unexpected type for %s", tname)
 			}
 		}
+	}
+}
+
+func BenchmarkCreateAsset(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	var i int64
+	for b.Loop() {
+		_, _ = db.CreateAsset(context.Background(), &oamdns.FQDN{Name: fmt.Sprintf("www%d.example.com", i)})
+		i++
+	}
+}
+
+func BenchmarkFindEntityByID(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	var ids []string
+	for i := range int64(1000) {
+		a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: fmt.Sprintf("www%d.example.com", i)})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		ids = append(ids, a.ID)
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntityById(context.Background(), ids[idx])
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntitiesByContent(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	var names []string
+	for i := range int64(1000) {
+		n := fmt.Sprintf("www%d.example.com", i)
+		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		names = append(names, n)
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, time.Time{}, 0, dbt.ContentFilters{
+			"name": names[idx],
+		})
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	var names []string
+	since := time.Now()
+	time.Sleep(100 * time.Millisecond)
+	for i := range int64(1000) {
+		n := fmt.Sprintf("www%d.example.com", i)
+		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+		names = append(names, n)
+	}
+
+	var i int64
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntitiesByContent(context.Background(), oam.FQDN, since, 0, dbt.ContentFilters{
+			"name": names[idx],
+		})
+		i = (i + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntitiesByType(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	var since time.Time
+	for i := range int64(1000) {
+		n := fmt.Sprintf("www%d.example.com", i)
+
+		_, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: n})
+		assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	for b.Loop() {
+		_, _ = db.FindEntitiesByType(context.Background(), oam.FQDN, since, 0)
 	}
 }

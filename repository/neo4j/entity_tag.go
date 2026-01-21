@@ -16,10 +16,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-// CreateEntityTag creates a new entity tag in the database.
-// It takes an EntityTag as input and persists it in the database.
-// The property is serialized to JSON and stored in the Content field of the EntityTag struct.
-// Returns the created entity tag as a types.EntityTag or an error if the creation fails.
+// CreateEntityTag implements the Repository interface.
 func (neo *NeoRepository) CreateEntityTag(ctx context.Context, entity *types.Entity, input *types.EntityTag) (*types.EntityTag, error) {
 	if input == nil {
 		return nil, errors.New("the input entity tag is nil")
@@ -140,10 +137,7 @@ func (neo *NeoRepository) CreateEntityTag(ctx context.Context, entity *types.Ent
 	return tag, nil
 }
 
-// CreateEntityProperty creates a new entity tag in the database.
-// It takes an oam.Property as input and persists it in the database.
-// The property is serialized to JSON and stored in the Content field of the EntityTag struct.
-// Returns the created entity tag as a types.EntityTag or an error if the creation fails.
+// CreateEntityProperty implements the Repository interface.
 func (neo *NeoRepository) CreateEntityProperty(ctx context.Context, entity *types.Entity, prop oam.Property) (*types.EntityTag, error) {
 	return neo.CreateEntityTag(ctx, entity, &types.EntityTag{Property: prop})
 }
@@ -160,9 +154,7 @@ func (neo *NeoRepository) uniqueEntityTagID() string {
 	}
 }
 
-// FindEntityTagById finds an entity tag in the database by the ID.
-// It takes a string representing the entity tag ID and retrieves the corresponding tag from the database.
-// Returns the discovered tag as a types.EntityTag or an error if the asset is not found.
+// FindEntityTagById implements the Repository interface.
 func (neo *NeoRepository) FindEntityTagById(ctx context.Context, id string) (*types.EntityTag, error) {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -238,9 +230,7 @@ func (neo *NeoRepository) findEntityTagsByContent(ctx context.Context, prop oam.
 	return tags, nil
 }
 
-// FindEntityTags finds all tags for the entity with the specified names and last seen after the since parameter.
-// If since.IsZero(), the parameter will be ignored.
-// If no names are specified, all tags for the specified entity are returned.
+// FindEntityTags implements the Repository interface.
 func (neo *NeoRepository) FindEntityTags(ctx context.Context, entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
 	query := fmt.Sprintf("MATCH (p:EntityTag {entity_id: '%s'}) RETURN p", entity.ID)
 	if !since.IsZero() {
@@ -300,9 +290,7 @@ func (neo *NeoRepository) FindEntityTags(ctx context.Context, entity *types.Enti
 	return results, nil
 }
 
-// DeleteEntityTag removes an entity tag in the database by its ID.
-// It takes a string representing the entity tag ID and removes the corresponding tag from the database.
-// Returns an error if the tag is not found.
+// DeleteEntityTag implements the Repository interface.
 func (neo *NeoRepository) DeleteEntityTag(ctx context.Context, id string) error {
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

@@ -6,7 +6,9 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"math/rand"
 	"net/netip"
 	"strconv"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -425,5 +428,197 @@ func (suite *PostgresEdgeTestSuite) TestOutgoingEdges() {
 
 		_, err = suite.db.FindEdgeById(ctx, e.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
+	}
+}
+
+func BenchmarkFindEdgeByID(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
+		ID:   "fake unique service id",
+		Type: "fake service type",
+	})
+	assert.NoError(b, err, "Failed to create the Service asset")
+
+	var ids []string
+	for i := range int64(1000) {
+		edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
+			Relation: &oamgen.PortRelation{
+				Name:       fmt.Sprintf("tcp_port_%d", i),
+				PortNumber: int(i),
+				Protocol:   "TCP",
+			},
+			FromEntity: fqdn,
+			ToEntity:   serv,
+		})
+		assert.NoError(b, err, "Failed to create the edge")
+		assert.NotNil(b, edge, "Edge should not be nil")
+		ids = append(ids, edge.ID)
+	}
+
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEdgeById(context.Background(), ids[idx])
+		idx = (idx + 1) % 1000
+	}
+}
+
+func BenchmarkIncomingEdges(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
+		ID:   "fake unique service id",
+		Type: "fake service type",
+	})
+	assert.NoError(b, err, "Failed to create the Service asset")
+
+	var labels []string
+	for i := range int64(1000) {
+		label := fmt.Sprintf("tcp_port_%d", i)
+		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
+			Relation: &oamgen.PortRelation{
+				Name:       label,
+				PortNumber: int(i),
+				Protocol:   "TCP",
+			},
+			FromEntity: fqdn,
+			ToEntity:   serv,
+		})
+		assert.NoError(b, err, "Failed to create the edge")
+		labels = append(labels, label)
+	}
+
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.IncomingEdges(context.Background(), serv, time.Time{}, labels[idx])
+		idx = (idx + 1) % 1000
+	}
+}
+
+func BenchmarkIncomingEdgesWithSince(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
+		ID:   "fake unique service id",
+		Type: "fake service type",
+	})
+	assert.NoError(b, err, "Failed to create the Service asset")
+
+	var since time.Time
+	for i := range int64(1000) {
+		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
+			Relation: &oamgen.PortRelation{
+				Name:       fmt.Sprintf("tcp_port_%d", i),
+				PortNumber: int(i),
+				Protocol:   "TCP",
+			},
+			FromEntity: fqdn,
+			ToEntity:   serv,
+		})
+		assert.NoError(b, err, "Failed to create the edge")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	for b.Loop() {
+		_, _ = db.IncomingEdges(context.Background(), serv, since)
+	}
+}
+
+func BenchmarkOutgoingEdges(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
+		ID:   "fake unique service id",
+		Type: "fake service type",
+	})
+	assert.NoError(b, err, "Failed to create the Service asset")
+
+	var labels []string
+	for i := range int64(1000) {
+		label := fmt.Sprintf("tcp_port_%d", i)
+		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
+			Relation: &oamgen.PortRelation{
+				Name:       label,
+				PortNumber: int(i),
+				Protocol:   "TCP",
+			},
+			FromEntity: fqdn,
+			ToEntity:   serv,
+		})
+		assert.NoError(b, err, "Failed to create the edge")
+		labels = append(labels, label)
+	}
+
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.OutgoingEdges(context.Background(), fqdn, time.Time{}, labels[idx])
+		idx = (idx + 1) % 1000
+	}
+}
+
+func BenchmarkOutgoingEdgesWithSince(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	serv, err := db.CreateAsset(context.Background(), &oamplat.Service{
+		ID:   "fake unique service id",
+		Type: "fake service type",
+	})
+	assert.NoError(b, err, "Failed to create the Service asset")
+
+	var since time.Time
+	for i := range int64(1000) {
+		_, err := db.CreateEdge(context.Background(), &dbt.Edge{
+			Relation: &oamgen.PortRelation{
+				Name:       fmt.Sprintf("tcp_port_%d", i),
+				PortNumber: int(i),
+				Protocol:   "TCP",
+			},
+			FromEntity: fqdn,
+			ToEntity:   serv,
+		})
+		assert.NoError(b, err, "Failed to create the edge")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	for b.Loop() {
+		_, _ = db.OutgoingEdges(context.Background(), fqdn, since)
 	}
 }

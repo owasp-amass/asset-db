@@ -6,7 +6,9 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"math/rand"
 	"net/netip"
 	"strconv"
 	"testing"
@@ -263,5 +265,115 @@ func (suite *PostgresEdgeTagTestSuite) TestFindEdgeTags() {
 
 		_, err = suite.db.FindEdgeTagById(ctx, tag.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
+	}
+}
+
+func BenchmarkFindEdgeTagByID(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the first FQDN asset")
+
+	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the second FQDN asset")
+
+	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
+		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
+		FromEntity: a1,
+		ToEntity:   a2,
+	})
+	assert.NoError(b, err, "Failed to create the edge")
+
+	var ids []string
+	for i := range int64(1000) {
+		prop, err := db.CreateEdgeProperty(context.Background(), edge, &oamgen.SimpleProperty{
+			PropertyName:  "prop",
+			PropertyValue: fmt.Sprintf("value%d", i),
+		})
+		assert.NoError(b, err, "Failed to create the edge property")
+		ids = append(ids, prop.ID)
+	}
+
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEdgeTagById(context.Background(), ids[idx])
+		idx = (idx + 1) % 1000
+	}
+}
+
+func BenchmarkFindEdgeTags(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the first FQDN asset")
+
+	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the second FQDN asset")
+
+	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
+		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
+		FromEntity: a1,
+		ToEntity:   a2,
+	})
+	assert.NoError(b, err, "Failed to create the edge")
+
+	var names []string
+	for i := range int64(1000) {
+		tag, err := db.CreateEdgeProperty(context.Background(), edge, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the edge property")
+		names = append(names, tag.Property.Name())
+	}
+
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEdgeTags(context.Background(), edge, time.Time{}, names[idx])
+		idx = (idx + 1) % 1000
+	}
+}
+
+func BenchmarkFindEdgeTagsWithSince(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the first FQDN asset")
+
+	a2, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
+	assert.NoError(b, err, "Failed to create the second FQDN asset")
+
+	edge, err := db.CreateEdge(context.Background(), &dbt.Edge{
+		Relation:   &oamdns.BasicDNSRelation{Name: "dns_record"},
+		FromEntity: a1,
+		ToEntity:   a2,
+	})
+	assert.NoError(b, err, "Failed to create the edge")
+
+	var since time.Time
+	for i := range int64(1000) {
+		_, err := db.CreateEdgeProperty(context.Background(), edge, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the edge property")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	for b.Loop() {
+		_, _ = db.FindEdgeTags(context.Background(), edge, since)
 	}
 }

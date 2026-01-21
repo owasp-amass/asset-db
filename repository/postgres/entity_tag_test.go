@@ -6,7 +6,9 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -231,5 +233,85 @@ func (suite *PostgresEntityTagTestSuite) TestFindEntityTags() {
 
 		_, err = suite.db.FindEntityTagById(ctx, tag.ID)
 		assert.Error(t, err, "Expected error when finding "+name+" removed by deletion")
+	}
+}
+
+func BenchmarkFindEntityTagByID(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	var ids []string
+	for i := range int64(1000) {
+		prop, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
+			PropertyName:  "prop",
+			PropertyValue: fmt.Sprintf("value%d", i),
+		})
+		assert.NoError(b, err, "Failed to create the entity property")
+		ids = append(ids, prop.ID)
+	}
+
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntityTagById(context.Background(), ids[idx])
+		idx = (idx + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntityTags(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	var names []string
+	for i := range int64(1000) {
+		tag, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the entity property")
+		names = append(names, tag.Property.Name())
+	}
+
+	idx := int64(rand.Intn(1000))
+	for b.Loop() {
+		_, _ = db.FindEntityTags(context.Background(), a, time.Time{}, names[idx])
+		idx = (idx + 1) % 1000
+	}
+}
+
+func BenchmarkFindEntityTagsWithSince(b *testing.B) {
+	c, db, err := setupContainerAndPostgresRepo()
+	assert.NoError(b, err, "Failed to create the PostgreSQL database")
+	assert.NotNil(b, db, "Asset database should not be nil")
+	defer func() { _ = c.Terminate(context.Background()) }()
+
+	a, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
+	assert.NoError(b, err, "Failed to create the FQDN asset")
+
+	var since time.Time
+	for i := range int64(1000) {
+		_, err := db.CreateEntityProperty(context.Background(), a, &oamgen.SimpleProperty{
+			PropertyName:  fmt.Sprintf("prop%d", i),
+			PropertyValue: "blahblah",
+		})
+		assert.NoError(b, err, "Failed to create the entity property")
+
+		if i == 950 {
+			since = time.Now()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	for b.Loop() {
+		_, _ = db.FindEntityTags(context.Background(), a, since)
 	}
 }

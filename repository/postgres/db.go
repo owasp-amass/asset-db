@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -80,26 +80,23 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 	}
 
 	db.SetMaxOpenConns(1)
-	return &PostgresRepository{
+	repo := &PostgresRepository{
 		DB:     db,
 		dsn:    dsn,
 		cfg:    withDefaults(cfg),
 		dbtype: Postgres,
-	}, nil
-}
-
-func (pr *PostgresRepository) Prepare(ctx context.Context) error {
-	wctx, cancel := context.WithCancel(context.Background())
-
-	w, err := NewWorker(wctx, pr.dsn, pr.cfg)
-	if err != nil {
-		cancel()
-		return err
 	}
 
-	pr.pool = w
-	pr.cancel = cancel
-	return nil
+	ctx, cancel := context.WithCancel(context.Background())
+	w, err := NewWorker(ctx, repo.dsn, repo.cfg)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	repo.pool = w
+	repo.cancel = cancel
+	return repo, nil
 }
 
 // Close implements the Repository interface.
@@ -116,7 +113,7 @@ func (pr *PostgresRepository) Close() error {
 	return errors.New("failed to obtain access to the database handle")
 }
 
-// GetDBType returns the type of the database.
-func (pr *PostgresRepository) GetDBType() string {
+// Type implements the Repository interface.
+func (pr *PostgresRepository) Type() string {
 	return pr.dbtype
 }

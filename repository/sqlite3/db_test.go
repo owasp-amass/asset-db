@@ -5,9 +5,7 @@
 package sqlite3
 
 import (
-	"context"
 	"embed"
-	"time"
 
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
@@ -23,12 +21,6 @@ func setupTestDB(dbtype, dsn string) (*SqliteRepository, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := db.Prepare(ctx); err != nil {
-		return nil, err
-	}
 	return db, nil
 }
 

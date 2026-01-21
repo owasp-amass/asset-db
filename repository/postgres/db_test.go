@@ -8,7 +8,6 @@ import (
 	"context"
 	"embed"
 	"log"
-	"time"
 
 	postgresmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
@@ -28,13 +27,6 @@ func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresR
 
 	db := repository
 	if err := postgresMigrate(db, postgresmigrations.Migrations()); err != nil {
-		return nil, nil, err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	if err := db.Prepare(ctx); err != nil {
 		return nil, nil, err
 	}
 	return pgContainer, db, nil
