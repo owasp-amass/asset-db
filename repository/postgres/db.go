@@ -12,6 +12,8 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	postgresmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
+	migrate "github.com/rubenv/sql-migrate"
 )
 
 // Normalized Property Graph (NPG) implemented on PostgreSQL
@@ -87,6 +89,10 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 		dbtype: Postgres,
 	}
 
+	if err := repo.migrate(); err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	w, err := NewWorker(ctx, repo.dsn, repo.cfg)
 	if err != nil {
@@ -97,6 +103,17 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 	repo.pool = w
 	repo.cancel = cancel
 	return repo, nil
+}
+
+func (pr *PostgresRepository) migrate() error {
+	fs := postgresmigrations.Migrations()
+	migsrc := migrate.EmbedFileSystemMigrationSource{
+		FileSystem: fs,
+		Root:       "/",
+	}
+
+	_, err := migrate.Exec(pr.DB, "postgres", migsrc, migrate.Up)
+	return err
 }
 
 // Close implements the Repository interface.

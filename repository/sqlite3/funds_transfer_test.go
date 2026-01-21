@@ -17,8 +17,7 @@ import (
 )
 
 func TestCreateAssetForFundsTransfer(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -82,8 +81,7 @@ func TestCreateAssetForFundsTransfer(t *testing.T) {
 }
 
 func TestFindEntitiesByContentForFundsTransfer(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -157,8 +155,7 @@ func TestFindEntitiesByContentForFundsTransfer(t *testing.T) {
 }
 
 func TestFindEntitiesByTypeForFundsTransfer(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()

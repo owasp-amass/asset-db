@@ -17,8 +17,7 @@ import (
 )
 
 func TestCreateAssetForAutonomousSystem(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -61,8 +60,7 @@ func TestCreateAssetForAutonomousSystem(t *testing.T) {
 }
 
 func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -104,8 +102,7 @@ func TestFindEntitiesByContentForAutonomousSystem(t *testing.T) {
 }
 
 func TestFindEntitiesByTypeForAutonomousSystem(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()

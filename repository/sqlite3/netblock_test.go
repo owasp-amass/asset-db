@@ -18,8 +18,7 @@ import (
 )
 
 func TestCreateAssetForNetblock(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -67,8 +66,7 @@ func TestCreateAssetForNetblock(t *testing.T) {
 }
 
 func TestFindEntitiesByContentForNetblock(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -116,8 +114,7 @@ func TestFindEntitiesByContentForNetblock(t *testing.T) {
 }
 
 func TestFindEntitiesByTypeForNetblock(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()

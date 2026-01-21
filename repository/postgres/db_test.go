@@ -6,12 +6,9 @@ package postgres
 
 import (
 	"context"
-	"embed"
 	"log"
 
-	postgresmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	"github.com/owasp-amass/asset-db/repository/postgres/testhelpers"
-	migrate "github.com/rubenv/sql-migrate"
 )
 
 func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresRepository, error) {
@@ -25,21 +22,7 @@ func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresR
 		return nil, nil, err
 	}
 
-	db := repository
-	if err := postgresMigrate(db, postgresmigrations.Migrations()); err != nil {
-		return nil, nil, err
-	}
-	return pgContainer, db, nil
-}
-
-func postgresMigrate(repo *PostgresRepository, fs embed.FS) error {
-	migsrc := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: fs,
-		Root:       "/",
-	}
-
-	_, err := migrate.Exec(repo.DB, "postgres", migsrc, migrate.Up)
-	return err
+	return pgContainer, repository, nil
 }
 
 func LogDatabaseState(repo *PostgresRepository) {

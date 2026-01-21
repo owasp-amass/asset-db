@@ -13,6 +13,8 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
+	migrate "github.com/rubenv/sql-migrate"
 )
 
 // Normalized Property Graph (NPG) implemented on SQLite
@@ -87,6 +89,10 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 		rodb:   dbro,
 		dbtype: SQLite,
 	}
+
+	if err := repo.migrate(); err != nil {
+		return nil, err
+	}
 	return repo, repo.prepareWorkers()
 }
 
@@ -123,39 +129,54 @@ func sqliteMemoryDatabase() (*SqliteRepository, error) {
 		rodb:   dbro,
 		dbtype: SQLiteMemory,
 	}
+
+	if err := repo.migrate(); err != nil {
+		return nil, err
+	}
 	return repo, repo.prepareWorkers()
 }
 
-func (sql *SqliteRepository) prepareWorkers() error {
-	wworker, err := newWriteWorker(sql.DB, 20, 500*time.Microsecond)
-	if err != nil {
-		return err
+func (r *SqliteRepository) migrate() error {
+	fs := sqlitemigrations.Migrations()
+	migsrc := migrate.EmbedFileSystemMigrationSource{
+		FileSystem: fs,
+		Root:       "/",
 	}
-	sql.ww = wworker
 
-	rpool, err := newReaderWorkerPool(sql.rodb, numberOfReaderWorkers)
+	_, err := migrate.Exec(r.DB, "sqlite3", migsrc, migrate.Up)
+	return err
+}
+
+func (r *SqliteRepository) prepareWorkers() error {
+	wworker, err := newWriteWorker(r.DB, 20, 500*time.Microsecond)
 	if err != nil {
 		return err
 	}
-	sql.rpool = rpool
+	r.ww = wworker
+
+	rpool, err := newReaderWorkerPool(r.rodb, numberOfReaderWorkers)
+	if err != nil {
+		return err
+	}
+	r.rpool = rpool
 	return nil
 }
 
 // Close implements the Repository interface.
-func (sql *SqliteRepository) Close() error {
-	if sql.rpool != nil {
-		sql.rpool.Close()
+func (r *SqliteRepository) Close() error {
+	if r.rpool != nil {
+		r.rpool.Close()
 	}
-	if sql.ww != nil {
-		sql.ww.Close()
+	if r.ww != nil {
+		r.ww.Close()
 	}
-	if sql.DB != nil {
-		return sql.DB.Close()
+	if r.DB != nil {
+		return r.DB.Close()
 	}
 	return errors.New("failed to obtain access to the database handle")
 }
 
 // Type implements the Repository interface.
-func (sql *SqliteRepository) Type() string {
-	return sql.dbtype
+func (r *SqliteRepository) Type() string {
+	return r.dbtype
 }

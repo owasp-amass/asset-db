@@ -22,8 +22,7 @@ import (
 )
 
 func TestCreateEdge(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -112,8 +111,7 @@ func TestCreateEdge(t *testing.T) {
 }
 
 func TestIncomingEdges(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -266,8 +264,7 @@ func TestIncomingEdges(t *testing.T) {
 }
 
 func TestOutgoingEdges(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -420,8 +417,7 @@ func TestOutgoingEdges(t *testing.T) {
 }
 
 func BenchmarkFindEdgeByID(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -459,8 +455,7 @@ func BenchmarkFindEdgeByID(b *testing.B) {
 }
 
 func BenchmarkIncomingEdges(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -498,8 +493,7 @@ func BenchmarkIncomingEdges(b *testing.B) {
 }
 
 func BenchmarkIncomingEdgesWithSince(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -538,8 +532,7 @@ func BenchmarkIncomingEdgesWithSince(b *testing.B) {
 }
 
 func BenchmarkOutgoingEdges(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -577,8 +570,7 @@ func BenchmarkOutgoingEdges(b *testing.B) {
 }
 
 func BenchmarkOutgoingEdgesWithSince(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()

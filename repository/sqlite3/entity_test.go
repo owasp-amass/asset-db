@@ -14,8 +14,7 @@ import (
 )
 
 func BenchmarkCreateAsset(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()

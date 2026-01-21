@@ -22,8 +22,7 @@ import (
 )
 
 func TestFindEntitiesByType(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -175,8 +174,7 @@ func TestFindEntitiesByType(t *testing.T) {
 }
 
 func BenchmarkFindEntityByID(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -197,8 +195,7 @@ func BenchmarkFindEntityByID(b *testing.B) {
 }
 
 func BenchmarkFindEntitiesByContent(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -222,8 +219,7 @@ func BenchmarkFindEntitiesByContent(b *testing.B) {
 }
 
 func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
@@ -249,8 +245,7 @@ func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
 }
 
 func BenchmarkFindEntitiesByType(b *testing.B) {
-	// create a new in-memory SQLite database for testing
-	db, err := setupTestDB(SQLiteMemory, "")
+	db, err := New(SQLiteMemory, "")
 	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
 	defer func() { _ = db.Close() }()
