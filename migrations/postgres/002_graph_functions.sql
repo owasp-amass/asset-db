@@ -59,8 +59,7 @@ BEGIN
 
     SELECT id INTO v_etype_id
     FROM public.entity_type_lu
-    WHERE name = _etype_name::text
-    LIMIT 1;
+    WHERE name = _etype_name::text;
 
     IF v_etype_id IS NULL THEN
         RAISE EXCEPTION 'entity_type_lu has no entry for name=%', _etype_name;
@@ -145,8 +144,7 @@ BEGIN
 
     SELECT id INTO v_etype_id
     FROM public.edge_type_lu
-    WHERE name = lower(_etype_name)
-    LIMIT 1;
+    WHERE name = lower(_etype_name);
 
     IF v_etype_id IS NULL THEN
         RAISE EXCEPTION 'edge_type_lu has no entry for name=%', _etype_name;
@@ -282,8 +280,7 @@ BEGIN
 
     SELECT id INTO v_ttype_id
     FROM public.tag_type_lu
-    WHERE name = lower(_ttype_name)
-    LIMIT 1;
+    WHERE name = lower(_ttype_name);
 
     IF v_ttype_id IS NULL THEN
         RAISE EXCEPTION 'tag_type_lu has no entry for name=%', _ttype_name;
