@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,7 +9,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -69,15 +68,6 @@ func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.Dom
 	}
 	if a.Extension == "" {
 		return 0, errors.New("domain record extension cannot be empty")
-	}
-	if _, err := parseTimestamp(a.CreatedDate); err != nil {
-		return 0, fmt.Errorf("domain record must have a valid created date: %v", err)
-	}
-	if _, err := parseTimestamp(a.UpdatedDate); err != nil {
-		return 0, fmt.Errorf("domain record must have a valid updated date: %v", err)
-	}
-	if _, err := parseTimestamp(a.ExpirationDate); err != nil {
-		return 0, fmt.Errorf("domain record must have a valid expiration date: %v", err)
 	}
 
 	attrs := domainRecordAttributes{
@@ -199,16 +189,6 @@ func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, ro
 	a.UpdatedDate = attrs.UpdatedDate
 	a.ExpirationDate = attrs.ExpirationDate
 	a.DNSSEC = attrs.DNSSEC
-
-	if _, err := parseTimestamp(a.CreatedDate); err != nil {
-		return nil, fmt.Errorf("domain record created date is missing or invalid: %v", err)
-	}
-	if _, err := parseTimestamp(a.UpdatedDate); err != nil {
-		return nil, fmt.Errorf("domain record updated date is missing or invalid: %v", err)
-	}
-	if _, err := parseTimestamp(a.ExpirationDate); err != nil {
-		return nil, fmt.Errorf("domain record expiration date is missing or invalid: %v", err)
-	}
 
 	return e, nil
 }
