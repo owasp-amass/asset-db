@@ -21,7 +21,7 @@ import (
 // Params: @entity_id, @ttype, @name, @value, @content(JSON)
 const tagEntityText = `SELECT public.entity_tag_upsert(@entity_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb);`
 
-// Param: @map_id
+// Param: @tag_id
 const selectEntityTagByIDText = `SELECT t.tag_id, t.entity_id, t.created_at, t.updated_at, t.ttype_name, t.content 
 FROM public.get_entity_tag_by_id(@tag_id::bigint) as t;`
 
@@ -176,7 +176,7 @@ func (r *PostgresRepository) tagsForEntity(ctx context.Context, eid int64, since
 	return out, nil
 }
 
-// removeEntityTag deletes a specific tag mapping from an entity.
+// removeEntityTag deletes a specific tag from an entity.
 func (r *PostgresRepository) removeEntityTag(ctx context.Context, tid int64) (int64, error) {
 	j := NewExecJob(ctx, `DELETE FROM public.entity_tag WHERE tag_id = @tag_id`, pgx.NamedArgs{
 		"tag_id": tid,

@@ -21,7 +21,7 @@ import (
 // Params: @edge_id, @ttype, @name, @value, @content(JSON)
 const tagEdgeText = `SELECT public.edge_tag_upsert(@edge_id::bigint, @ttype::text, @name::text, @value::text, @content::jsonb);`
 
-// Param: @map_id
+// Param: @tag_id
 const selectEdgeTagByIDText = `SELECT t.tag_id, t.edge_id, t.created_at, t.updated_at, t.ttype_name, t.content 
 FROM public.get_edge_tag_by_id(@tag_id::bigint) as t;`
 
@@ -178,7 +178,7 @@ func (r *PostgresRepository) tagsForEdge(ctx context.Context, eid int64, since t
 	return out, nil
 }
 
-// removeEdgeTag deletes a specific tag mapping from an edge.
+// removeEdgeTag deletes a specific tag from an edge.
 func (r *PostgresRepository) removeEdgeTag(ctx context.Context, tid int64) (int64, error) {
 	j := NewExecJob(ctx, `DELETE FROM public.edge_tag WHERE tag_id = @tag_id`, pgx.NamedArgs{
 		"tag_id": tid,
