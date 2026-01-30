@@ -52,18 +52,6 @@ func (r *PostgresRepository) upsertDomainRecord(ctx context.Context, a *oamreg.D
 	if a.Domain == "" {
 		return 0, errors.New("domain record domain cannot be empty")
 	}
-	if a.Name == "" {
-		return 0, errors.New("domain record name cannot be empty")
-	}
-	if a.Punycode == "" {
-		return 0, errors.New("domain record punycode cannot be empty")
-	}
-	if a.Extension == "" {
-		return 0, errors.New("domain record extension cannot be empty")
-	}
-	if a.WhoisServer == "" {
-		return 0, errors.New("domain record whois server cannot be empty")
-	}
 
 	if a.Status == nil {
 		a.Status = []string{}
@@ -90,13 +78,13 @@ func (r *PostgresRepository) fetchDomainRecordByRowID(ctx context.Context, eid, 
 	var c, u time.Time
 	var attrsJSON string
 	var a oamreg.DomainRecord
-	var puny, ext, whois, objectid pgtype.Text
+	var name, puny, ext, whois, objectid pgtype.Text
 
 	j := NewRowJob(ctx, selectDomainRecordByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
 		return row.Scan(&rid, &c, &u, &a.Domain,
-			&a.Name, &puny, &ext, &whois, &objectid, &attrsJSON)
+			&name, &puny, &ext, &whois, &objectid, &attrsJSON)
 	})
 
 	r.pool.Submit(j)
@@ -104,6 +92,9 @@ func (r *PostgresRepository) fetchDomainRecordByRowID(ctx context.Context, eid, 
 		return nil, err
 	}
 
+	if name.Valid {
+		a.Name = name.String
+	}
 	if puny.Valid {
 		a.Punycode = puny.String
 	}
@@ -210,11 +201,14 @@ func (r *PostgresRepository) getDomainRecordsUpdatedSince(ctx context.Context, s
 			var c, u time.Time
 			var attrsJSON string
 			var a oamreg.DomainRecord
-			var puny, ext, whois, objectid pgtype.Text
+			var name, puny, ext, whois, objectid pgtype.Text
 
-			if err := rows.Scan(&eid, &rid, &c, &u, &a.Domain, &a.Name,
+			if err := rows.Scan(&eid, &rid, &c, &u, &a.Domain, &name,
 				&puny, &ext, &whois, &objectid, &attrsJSON); err != nil {
 				continue
+			}
+			if name.Valid {
+				a.Name = name.String
 			}
 			if puny.Valid {
 				a.Punycode = puny.String
@@ -251,18 +245,6 @@ func (r *PostgresRepository) buildDomainRecordEntity(eid, rid int64, createdAt, 
 	}
 	if a.Domain == "" {
 		return nil, errors.New("domain record domain is missing")
-	}
-	if a.Name == "" {
-		return nil, errors.New("domain record name is missing")
-	}
-	if a.Punycode == "" {
-		return nil, errors.New("domain record punycode is missing")
-	}
-	if a.Extension == "" {
-		return nil, errors.New("domain record extension is missing")
-	}
-	if a.WhoisServer == "" {
-		return nil, errors.New("domain record whois server is missing")
 	}
 
 	var attrs domainRecordAttributes

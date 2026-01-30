@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.domainrecord (
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
   updated_at      timestamp without time zone NOT NULL DEFAULT now(),
   domain          citext NOT NULL UNIQUE,
-  record_name     text NOT NULL,
+  record_name     text,
   punycode        text,
   extension       text,
   whois_server    citext,
@@ -68,8 +68,8 @@ AS $fn$
 DECLARE
     v_id bigint;
 BEGIN
-    IF _domain IS NULL OR _record_name IS NULL THEN
-        RAISE EXCEPTION 'domainrecord_upsert requires non-NULL domain and record_name';
+    IF _domain IS NULL THEN
+        RAISE EXCEPTION 'domainrecord_upsert requires non-NULL domain';
     END IF;
 
     INSERT INTO public.domainrecord (
