@@ -107,7 +107,6 @@ CREATE TABLE IF NOT EXISTS public.entity_tag (
   property_name   TEXT NOT NULL,
   property_value  TEXT NOT NULL,
   content         jsonb NOT NULL DEFAULT '{}'::jsonb,
-  UNIQUE (ttype_id, property_name, property_value),
   UNIQUE (entity_id, ttype_id, property_name, property_value)
 );
 CREATE INDEX IF NOT EXISTS idx_entity_tag_created_at ON public.entity_tag (created_at);
@@ -120,6 +119,8 @@ CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name ON public.entity_tag (pr
 CREATE INDEX IF NOT EXISTS idx_entity_tag_tt_name ON public.entity_tag (ttype_id, property_name);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name_value
   ON public.entity_tag (property_name, property_value);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_ttype_name_value 
+  ON public.entity_tag (ttype_id, property_name, property_value);
 CREATE INDEX IF NOT EXISTS gin_entity_tag_content ON public.entity_tag USING gin (content jsonb_path_ops);
 
 CREATE TABLE IF NOT EXISTS public.edge_tag (
@@ -131,7 +132,6 @@ CREATE TABLE IF NOT EXISTS public.edge_tag (
   property_name   TEXT NOT NULL,
   property_value  TEXT NOT NULL,
   content         jsonb NOT NULL DEFAULT '{}'::jsonb,
-  UNIQUE (ttype_id, property_name, property_value),
   UNIQUE (edge_id, ttype_id, property_name, property_value)
 );
 CREATE INDEX IF NOT EXISTS idx_edge_tag_created_at ON public.edge_tag (created_at);
@@ -143,12 +143,15 @@ CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name ON public.edge_tag (proper
 CREATE INDEX IF NOT EXISTS idx_edge_tag_tt_name ON public.edge_tag (ttype_id, property_name);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name_value
   ON public.edge_tag (property_name, property_value);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_ttype_name_value 
+  ON public.edge_tag (ttype_id, property_name, property_value);
 CREATE INDEX IF NOT EXISTS gin_edge_tag_content ON public.edge_tag USING gin (content jsonb_path_ops);
 
 
 -- +migrate Down
 
 DROP INDEX IF EXISTS gin_edge_tag_content;
+DROP INDEX IF EXISTS idx_edge_tag_ttype_name_value;
 DROP INDEX IF EXISTS idx_edge_tag_property_name_value;
 DROP INDEX IF EXISTS idx_edge_tag_tt_name;
 DROP INDEX IF EXISTS idx_edge_tag_property_name;
@@ -160,6 +163,7 @@ DROP INDEX IF EXISTS idx_edge_tag_created_at;
 DROP TABLE IF EXISTS public.edge_tag;
 
 DROP INDEX IF EXISTS gin_entity_tag_content;
+DROP INDEX IF EXISTS idx_entity_tag_ttype_name_value;
 DROP INDEX IF EXISTS idx_entity_tag_property_name_value;
 DROP INDEX IF EXISTS idx_entity_tag_tt_name;
 DROP INDEX IF EXISTS idx_entity_tag_property_name;
