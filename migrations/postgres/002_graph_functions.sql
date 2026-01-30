@@ -113,8 +113,8 @@ $fn$;
 -- EDGE UPSERT + HELPERS
 -- ---------------------------------------------------------------------------
 
--- Upsert an edge by edge-type-name, from/to entity IDs, and label.
--- Returns edge_id.
+-- Upsert an edge by edge-type-name, from/to entity IDs, and label
+-- Returns edge_id
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.edge_upsert(
     _etype_name     text,
@@ -256,8 +256,8 @@ $fn$;
 -- ENTITY TAG HELPERS
 -- ---------------------------------------------------------------------------
 
--- Upsert an entity tag (by entity_id / tag-type-name / property_name / property_value).
--- Returns tag_id.
+-- Upsert an entity tag (by entity_id / tag-type-name / property_name / property_value)
+-- Returns tag_id
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.entity_tag_upsert(
     _entity_id      bigint,
@@ -315,22 +315,22 @@ $fn$;
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.get_entity_tag_by_id(_tag_id bigint)
 RETURNS TABLE (
-    tag_id     bigint,
-    entity_id  bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    ttype_name text,
-    content    jsonb
+    tag_id      bigint,
+    entity_id   bigint,
+    created_at  timestamp without time zone,
+    updated_at  timestamp without time zone,
+    ttype_name  text,
+    content     jsonb
 )
 LANGUAGE sql
 STABLE
 AS $fn$
     SELECT 
-        et.tag_id, 
-        et.entity_id, 
-        et.created_at, 
-        et.updated_at, 
-        tt.name AS ttype_name, 
+        et.tag_id,
+        et.entity_id,
+        et.created_at,
+        et.updated_at,
+        tt.name AS ttype_name,
         et.content
     FROM public.entity_tag et
     JOIN public.tag_type_lu tt ON tt.id = et.ttype_id
@@ -346,11 +346,11 @@ CREATE OR REPLACE FUNCTION public.entity_get_tags(
     _since     timestamp without time zone DEFAULT NULL,
     _names     text[] DEFAULT NULL
 ) RETURNS TABLE (
-    tag_id     bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    ttype_name text,
-    content    jsonb
+    tag_id      bigint,
+    created_at  timestamp without time zone,
+    updated_at  timestamp without time zone,
+    ttype_name  text,
+    content     jsonb
 )
 LANGUAGE sql
 STABLE
@@ -375,8 +375,8 @@ $fn$;
 -- EDGE TAG HELPERS
 -- ---------------------------------------------------------------------------
 
--- Upsert an entity tag (by entity_id / tag-type-name / property_name / property_value).
--- Returns tag_id.
+-- Upsert an entity tag (by entity_id / tag-type-name / property_name / property_value)
+-- Returns tag_id
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.edge_tag_upsert(
     _edge_id        bigint,
@@ -434,12 +434,12 @@ $fn$;
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.get_edge_tag_by_id(_tag_id bigint)
 RETURNS TABLE (
-    tag_id     bigint,
-    edge_id    bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    ttype_name text,
-    content    jsonb
+    tag_id      bigint,
+    edge_id     bigint,
+    created_at  timestamp without time zone,
+    updated_at  timestamp without time zone,
+    ttype_name  text,
+    content     jsonb
 )
 LANGUAGE sql
 STABLE
@@ -465,11 +465,11 @@ CREATE OR REPLACE FUNCTION public.edge_get_tags(
     _since   timestamp without time zone DEFAULT NULL,
     _names   text[] DEFAULT NULL
 ) RETURNS TABLE (
-    tag_id     bigint,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone,
-    ttype_name text,
-    content    jsonb
+    tag_id      bigint,
+    created_at  timestamp without time zone,
+    updated_at  timestamp without time zone,
+    ttype_name  text,
+    content     jsonb
 )
 LANGUAGE sql
 STABLE

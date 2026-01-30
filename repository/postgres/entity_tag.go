@@ -154,13 +154,10 @@ func (r *PostgresRepository) tagsForEntity(ctx context.Context, eid int64, since
 				Entity:    &dbt.Entity{ID: strconv.FormatInt(eid, 10)},
 			}
 
-			prop, err := extractOAMProperty(ttype, json.RawMessage(content))
-			if err != nil {
-				continue
+			if prop, err := extractOAMProperty(ttype, json.RawMessage(content)); err == nil {
+				tag.Property = prop
+				out = append(out, tag)
 			}
-			tag.Property = prop
-
-			out = append(out, tag)
 		}
 		return rows.Err()
 	})

@@ -110,14 +110,14 @@ CREATE TABLE IF NOT EXISTS public.entity_tag (
   UNIQUE (ttype_id, property_name, property_value),
   UNIQUE (entity_id, ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_entity_tag_created_at ON public.entity_tag(created_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_updated_at ON public.entity_tag(updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_created_at ON public.entity_tag (created_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_updated_at ON public.entity_tag (updated_at);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_updated
   ON public.entity_tag (entity_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_id ON public.entity_tag(entity_id);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_ttype_id ON public.entity_tag(ttype_id);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name ON public.entity_tag(property_name);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_tt_name ON public.entity_tag(ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_id ON public.entity_tag (entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_ttype_id ON public.entity_tag (ttype_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name ON public.entity_tag (property_name);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_tt_name ON public.entity_tag (ttype_id, property_name);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name_value
   ON public.entity_tag (property_name, property_value);
 CREATE INDEX IF NOT EXISTS gin_entity_tag_content ON public.entity_tag USING gin (content jsonb_path_ops);
@@ -134,13 +134,13 @@ CREATE TABLE IF NOT EXISTS public.edge_tag (
   UNIQUE (ttype_id, property_name, property_value),
   UNIQUE (edge_id, ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_edge_tag_created_at ON public.edge_tag(created_at);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_updated_at ON public.edge_tag(updated_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_created_at ON public.edge_tag (created_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_updated_at ON public.edge_tag (updated_at);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_edge_updated ON public.edge_tag (edge_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_edge_id ON public.edge_tag(edge_id);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_ttype_id ON public.edge_tag(ttype_id);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name ON public.edge_tag(property_name);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_tt_name ON public.edge_tag(ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_edge_id ON public.edge_tag (edge_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_ttype_id ON public.edge_tag (ttype_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name ON public.edge_tag (property_name);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_tt_name ON public.edge_tag (ttype_id, property_name);
 CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name_value
   ON public.edge_tag (property_name, property_value);
 CREATE INDEX IF NOT EXISTS gin_edge_tag_content ON public.edge_tag USING gin (content jsonb_path_ops);
