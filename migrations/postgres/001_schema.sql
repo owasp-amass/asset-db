@@ -98,80 +98,77 @@ CREATE INDEX IF NOT EXISTS idx_edge_to   ON public.edge (to_entity_id, etype_id,
 -- -----------------------------
 -- Graph tags
 -- -----------------------------
-CREATE TABLE IF NOT EXISTS public.tag (
+CREATE TABLE IF NOT EXISTS public.entity_tag (
   tag_id          bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   created_at      timestamp without time zone NOT NULL DEFAULT now(),
   updated_at      timestamp without time zone NOT NULL DEFAULT now(),
+  entity_id       bigint NOT NULL REFERENCES public.entity(entity_id) ON DELETE CASCADE,
   ttype_id        smallint NOT NULL REFERENCES public.tag_type_lu(id),
   property_name   TEXT NOT NULL,
   property_value  TEXT NOT NULL,
   content         jsonb NOT NULL DEFAULT '{}'::jsonb,
-  UNIQUE (ttype_id, property_name, property_value)
+  UNIQUE (ttype_id, property_name, property_value),
+  UNIQUE (entity_id, ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_tag_created_at ON public.tag(created_at);
-CREATE INDEX IF NOT EXISTS idx_tag_updated_at ON public.tag(updated_at);
-CREATE INDEX IF NOT EXISTS idx_tag_ttype_id ON public.tag(ttype_id);
-CREATE INDEX IF NOT EXISTS idx_tag_property_name ON public.tag(property_name);
-CREATE INDEX IF NOT EXISTS idx_tag_tt_name ON public.tag(ttype_id, property_name);
-CREATE INDEX IF NOT EXISTS idx_tag_property_name_value
-  ON public.tag (property_name, property_value);
-CREATE INDEX IF NOT EXISTS gin_tag_content ON public.tag USING gin (content jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_created_at ON public.entity_tag(created_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_updated_at ON public.entity_tag(updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_updated
+  ON public.entity_tag (entity_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_id ON public.entity_tag(entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_ttype_id ON public.entity_tag(ttype_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name ON public.entity_tag(property_name);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_tt_name ON public.entity_tag(ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name_value
+  ON public.entity_tag (property_name, property_value);
+CREATE INDEX IF NOT EXISTS gin_entity_tag_content ON public.entity_tag USING gin (content jsonb_path_ops);
 
-CREATE TABLE IF NOT EXISTS public.entity_tag_map (
-  map_id         bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at     timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at     timestamp without time zone NOT NULL DEFAULT now(),
-  entity_id      bigint NOT NULL REFERENCES public.entity(entity_id) ON DELETE CASCADE,
-  tag_id         bigint NOT NULL REFERENCES public.tag(tag_id) ON DELETE CASCADE,
-  UNIQUE (entity_id, tag_id)
+CREATE TABLE IF NOT EXISTS public.edge_tag (
+  tag_id          bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  created_at      timestamp without time zone NOT NULL DEFAULT now(),
+  updated_at      timestamp without time zone NOT NULL DEFAULT now(),
+  edge_id         bigint NOT NULL REFERENCES public.edge(edge_id) ON DELETE CASCADE,
+  ttype_id        smallint NOT NULL REFERENCES public.tag_type_lu(id),
+  property_name   TEXT NOT NULL,
+  property_value  TEXT NOT NULL,
+  content         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  UNIQUE (ttype_id, property_name, property_value),
+  UNIQUE (edge_id, ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_created_at ON public.entity_tag_map(created_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_updated_at ON public.entity_tag_map(updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_updated
-  ON public.entity_tag_map (entity_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_id ON public.entity_tag_map(entity_id);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_tag_id ON public.entity_tag_map(tag_id);
-
-CREATE TABLE IF NOT EXISTS public.edge_tag_map (
-  map_id     bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  created_at timestamp without time zone NOT NULL DEFAULT now(),
-  updated_at timestamp without time zone NOT NULL DEFAULT now(),
-  edge_id    bigint NOT NULL REFERENCES public.edge(edge_id) ON DELETE CASCADE,
-  tag_id     bigint NOT NULL REFERENCES public.tag(tag_id) ON DELETE CASCADE,
-  UNIQUE (edge_id, tag_id)
-);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_created_at ON public.edge_tag_map(created_at);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_updated_at ON public.edge_tag_map(updated_at);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_updated
-  ON public.edge_tag_map (edge_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_id ON public.edge_tag_map(edge_id);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_tag_id ON public.edge_tag_map(tag_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_created_at ON public.edge_tag(created_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_updated_at ON public.edge_tag(updated_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_edge_updated ON public.edge_tag (edge_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_edge_id ON public.edge_tag(edge_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_ttype_id ON public.edge_tag(ttype_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name ON public.edge_tag(property_name);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_tt_name ON public.edge_tag(ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name_value
+  ON public.edge_tag (property_name, property_value);
+CREATE INDEX IF NOT EXISTS gin_edge_tag_content ON public.edge_tag USING gin (content jsonb_path_ops);
 
 
 -- +migrate Down
 
-DROP INDEX IF EXISTS idx_edge_tag_map_tag_id;
-DROP INDEX IF EXISTS idx_edge_tag_map_edge_id;
-DROP INDEX IF EXISTS idx_edge_tag_map_edge_updated;
-DROP INDEX IF EXISTS idx_edge_tag_map_updated_at;
-DROP INDEX IF EXISTS idx_edge_tag_map_created_at;
-DROP TABLE IF EXISTS public.edge_tag_map;
+DROP INDEX IF EXISTS gin_edge_tag_content;
+DROP INDEX IF EXISTS idx_edge_tag_property_name_value;
+DROP INDEX IF EXISTS idx_edge_tag_tt_name;
+DROP INDEX IF EXISTS idx_edge_tag_property_name;
+DROP INDEX IF EXISTS idx_edge_tag_ttype_id;
+DROP INDEX IF EXISTS idx_edge_tag_edge_id;
+DROP INDEX IF EXISTS idx_edge_tag_edge_updated;
+DROP INDEX IF EXISTS idx_edge_tag_updated_at;
+DROP INDEX IF EXISTS idx_edge_tag_created_at;
+DROP TABLE IF EXISTS public.edge_tag;
 
-DROP INDEX IF EXISTS idx_entity_tag_map_tag_id;
-DROP INDEX IF EXISTS idx_entity_tag_map_entity_id;
-DROP INDEX IF EXISTS idx_entity_tag_map_entity_updated;
-DROP INDEX IF EXISTS idx_entity_tag_map_updated_at;
-DROP INDEX IF EXISTS idx_entity_tag_map_created_at;
-DROP TABLE IF EXISTS public.entity_tag_map;
-
-DROP INDEX IF EXISTS gin_tag_content;
-DROP INDEX IF EXISTS idx_tag_property_name_value;
-DROP INDEX IF EXISTS idx_tag_tt_name;
-DROP INDEX IF EXISTS idx_tag_property_name;
-DROP INDEX IF EXISTS idx_tag_ttype_id;
-DROP INDEX IF EXISTS idx_tag_updated_at;
-DROP INDEX IF EXISTS idx_tag_created_at;
-DROP TABLE IF EXISTS public.tag;
+DROP INDEX IF EXISTS gin_entity_tag_content;
+DROP INDEX IF EXISTS idx_entity_tag_property_name_value;
+DROP INDEX IF EXISTS idx_entity_tag_tt_name;
+DROP INDEX IF EXISTS idx_entity_tag_property_name;
+DROP INDEX IF EXISTS idx_entity_tag_ttype_id;
+DROP INDEX IF EXISTS idx_entity_tag_entity_id;
+DROP INDEX IF EXISTS idx_entity_tag_entity_updated;
+DROP INDEX IF EXISTS idx_entity_tag_updated_at;
+DROP INDEX IF EXISTS idx_entity_tag_created_at;
+DROP TABLE IF EXISTS public.entity_tag;
 
 DROP INDEX IF EXISTS idx_edge_from;
 DROP INDEX IF EXISTS idx_edge_to;

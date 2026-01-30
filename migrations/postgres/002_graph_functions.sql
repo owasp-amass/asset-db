@@ -253,13 +253,14 @@ $fn$;
 
 
 -- ---------------------------------------------------------------------------
--- TAG UPSERT + HELPERS
+-- ENTITY TAG HELPERS
 -- ---------------------------------------------------------------------------
 
--- Upsert a tag (by tag-type-name / property_name / property_value).
+-- Upsert an entity tag (by entity_id / tag-type-name / property_name / property_value).
 -- Returns tag_id.
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.tag_upsert(
+CREATE OR REPLACE FUNCTION public.entity_tag_upsert(
+    _entity_id      bigint,
     _ttype_name     text,
     _property_name  text,
     _property_value text,
@@ -271,11 +272,14 @@ DECLARE
     v_ttype_id smallint;
     v_tag_id   bigint;
 BEGIN
+    IF _entity_id IS NULL THEN
+        RAISE EXCEPTION 'entity_tag_upsert requires non-NULL entity_id';
+    END IF;
     IF _ttype_name IS NULL OR btrim(_ttype_name) = '' THEN
-        RAISE EXCEPTION 'tag_upsert requires non-NULL ttype_name';
+        RAISE EXCEPTION 'entity_tag_upsert requires non-NULL ttype_name';
     END IF;
     IF _property_name IS NULL OR _property_value IS NULL THEN
-        RAISE EXCEPTION 'tag_upsert requires non-NULL property_name and property_value';
+        RAISE EXCEPTION 'entity_tag_upsert requires non-NULL property_name and property_value';
     END IF;
 
     SELECT id INTO v_ttype_id
@@ -286,18 +290,18 @@ BEGIN
         RAISE EXCEPTION 'tag_type_lu has no entry for name=%', _ttype_name;
     END IF;
 
-    INSERT INTO public.tag (
-        ttype_id, property_name, property_value, content
+    INSERT INTO public.entity_tag (
+        entity_id, ttype_id, property_name, property_value, content
     )
     VALUES (
-        v_ttype_id, _property_name, _property_value, COALESCE(_content, '{}'::jsonb)
+        _entity_id, v_ttype_id, _property_name, _property_value, COALESCE(_content, '{}'::jsonb)
     )
-    ON CONFLICT (ttype_id, property_name, property_value) DO UPDATE
+    ON CONFLICT (entity_id, ttype_id, property_name, property_value) DO UPDATE
     SET
         content    = CASE
-                       WHEN public.tag.content IS DISTINCT FROM COALESCE(EXCLUDED.content, '{}'::jsonb)
-                         THEN public.tag.content || EXCLUDED.content
-                       ELSE public.tag.content
+                       WHEN public.entity_tag.content IS DISTINCT FROM COALESCE(EXCLUDED.content, '{}'::jsonb)
+                         THEN public.entity_tag.content || EXCLUDED.content
+                       ELSE public.entity_tag.content
                      END,
         updated_at = now()
     RETURNING tag_id INTO v_tag_id;
@@ -307,93 +311,9 @@ END
 $fn$;
 -- +migrate StatementEnd
 
--- Get an existing tag_id by tag-type-name and property (NULL if missing)
+-- Get entity tag by tag ID
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.tag_get_id(
-    _ttype_name     text,
-    _property_name  text,
-    _property_value text
-) RETURNS bigint
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT t.tag_id
-    FROM public.tag t
-    JOIN public.tag_type_lu tt
-        ON t.ttype_id = tt.id
-    WHERE tt.name          = lower(_ttype_name)
-      AND t.property_name  = _property_name
-      AND t.property_value = _property_value
-    LIMIT 1;
-$fn$;
--- +migrate StatementEnd
-
--- Tags updated since a given timestamp
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.tag_updated_since(
-    _since timestamp without time zone
-) RETURNS SETOF public.tag
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT *
-    FROM public.tag
-    WHERE updated_at >= _since
-    ORDER BY updated_at DESC, tag_id ASC;
-$fn$;
--- +migrate StatementEnd
-
-
--- ---------------------------------------------------------------------------
--- ENTITY ↔ TAG MAPPING HELPERS
--- ---------------------------------------------------------------------------
-
--- Ensure a tag exists and map it to an entity.
--- Returns (tag_id, map_id).
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.entity_tag_map_upsert(
-    _entity_id      bigint,
-    _ttype_name     text,
-    _property_name  text,
-    _property_value text,
-    _content        jsonb DEFAULT '{}'::jsonb
-) RETURNS TABLE (
-    out_tag_id bigint,
-    out_map_id bigint
-)
-LANGUAGE plpgsql
-AS $fn$
-DECLARE
-    v_tag_id bigint;
-BEGIN
-    IF _entity_id IS NULL THEN
-        RAISE EXCEPTION 'entity_tag_map_upsert requires non-NULL entity_id';
-    END IF;
-
-    v_tag_id := public.tag_upsert(
-        lower(_ttype_name),
-        _property_name,
-        _property_value,
-        COALESCE(_content, '{}'::jsonb)
-    );
-
-    RETURN QUERY
-    INSERT INTO public.entity_tag_map AS m (
-        entity_id, tag_id
-    ) 
-    VALUES (
-        _entity_id, v_tag_id
-    ) 
-    ON CONFLICT (entity_id, tag_id) DO UPDATE
-      SET updated_at = now()
-    RETURNING m.tag_id, m.map_id;
-END
-$fn$;
--- +migrate StatementEnd
-
--- Get entity tag mapping by mapping ID
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.get_entity_tag_map_by_id(_map_id bigint)
+CREATE OR REPLACE FUNCTION public.get_entity_tag_by_id(_tag_id bigint)
 RETURNS TABLE (
     tag_id     bigint,
     entity_id  bigint,
@@ -406,21 +326,20 @@ LANGUAGE sql
 STABLE
 AS $fn$
     SELECT 
-        tg.tag_id, 
-        m.entity_id, 
-        m.created_at, 
-        m.updated_at, 
+        et.tag_id, 
+        et.entity_id, 
+        et.created_at, 
+        et.updated_at, 
         tt.name AS ttype_name, 
-        tg.content
-    FROM public.entity_tag_map m
-    JOIN public.tag tg ON tg.tag_id = m.tag_id
-    JOIN public.tag_type_lu tt ON tt.id = tg.ttype_id
-    WHERE m.map_id = _map_id
+        et.content
+    FROM public.entity_tag et
+    JOIN public.tag_type_lu tt ON tt.id = et.ttype_id
+    WHERE et.tag_id = _tag_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
--- Get tag mappings for an entity with optional updated-since and property_name filters
+-- Get tags for an entity with optional updated-since and property_name filters
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.entity_get_tags(
     _entity_id bigint,
@@ -428,7 +347,6 @@ CREATE OR REPLACE FUNCTION public.entity_get_tags(
     _names     text[] DEFAULT NULL
 ) RETURNS TABLE (
     tag_id     bigint,
-    map_id     bigint,
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
     ttype_name text,
@@ -438,91 +356,83 @@ LANGUAGE sql
 STABLE
 AS $fn$
     SELECT
-        tg.tag_id,
-        m.map_id,
-        m.created_at,
-        m.updated_at,
+        et.tag_id,
+        et.created_at,
+        et.updated_at,
         tt.name AS ttype_name,
-        tg.content
-    FROM public.entity_tag_map m
-    JOIN public.tag tg
-      ON tg.tag_id = m.tag_id
-    JOIN public.tag_type_lu tt
-      ON tt.id = tg.ttype_id
-    WHERE m.entity_id = _entity_id
-      AND (_since IS NULL OR m.updated_at >= _since)
-      AND (_names IS NULL OR tg.property_name = ANY(_names))
-    ORDER BY m.updated_at DESC, m.map_id DESC;
-$fn$;
--- +migrate StatementEnd
-
--- Get the tag ID for the provided entity map ID
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.entity_tag_map_get_tag_id(_map_id bigint)
-RETURNS bigint
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT tg.tag_id
-    FROM public.entity_tag_map m
-    JOIN public.tag tg ON tg.tag_id = m.tag_id
-    WHERE m.map_id = _map_id
-    ORDER BY m.updated_at DESC, m.map_id DESC
-    LIMIT 1;
+        et.content
+    FROM public.entity_tag et
+    JOIN public.tag_type_lu tt ON tt.id = et.ttype_id
+    WHERE et.entity_id = _entity_id
+      AND (_since IS NULL OR et.updated_at >= _since)
+      AND (_names IS NULL OR et.property_name = ANY(_names))
+    ORDER BY et.updated_at DESC;
 $fn$;
 -- +migrate StatementEnd
 
 
 -- ---------------------------------------------------------------------------
--- EDGE ↔ TAG MAPPING HELPERS
+-- EDGE TAG HELPERS
 -- ---------------------------------------------------------------------------
 
--- Ensure a tag exists and map it to an edge.
--- Returns (tag_id, map_id).
+-- Upsert an entity tag (by entity_id / tag-type-name / property_name / property_value).
+-- Returns tag_id.
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.edge_tag_map_upsert(
+CREATE OR REPLACE FUNCTION public.edge_tag_upsert(
     _edge_id        bigint,
     _ttype_name     text,
     _property_name  text,
     _property_value text,
     _content        jsonb DEFAULT '{}'::jsonb
-) RETURNS TABLE (
-    out_tag_id bigint,
-    out_map_id bigint
-)
+) RETURNS bigint
 LANGUAGE plpgsql
 AS $fn$
 DECLARE
-    v_tag_id bigint;
+    v_ttype_id smallint;
+    v_tag_id   bigint;
 BEGIN
     IF _edge_id IS NULL THEN
-        RAISE EXCEPTION 'edge_tag_map_upsert requires non-NULL edge_id';
+        RAISE EXCEPTION 'edge_tag_upsert requires non-NULL edge_id';
+    END IF;
+   IF _ttype_name IS NULL OR btrim(_ttype_name) = '' THEN
+        RAISE EXCEPTION 'edge_tag_upsert requires non-NULL ttype_name';
+    END IF;
+    IF _property_name IS NULL OR _property_value IS NULL THEN
+        RAISE EXCEPTION 'edge_tag_upsert requires non-NULL property_name and property_value';
     END IF;
 
-    v_tag_id := public.tag_upsert(
-        lower(_ttype_name),
-        _property_name,
-        _property_value,
-        COALESCE(_content, '{}'::jsonb)
-    );
+    SELECT id INTO v_ttype_id
+    FROM public.tag_type_lu
+    WHERE name = lower(_ttype_name);
 
-    RETURN QUERY
-    INSERT INTO public.edge_tag_map AS m (
-        edge_id, tag_id
+    IF v_ttype_id IS NULL THEN
+        RAISE EXCEPTION 'tag_type_lu has no entry for name=%', _ttype_name;
+    END IF;
+
+    INSERT INTO public.edge_tag (
+        edge_id, ttype_id, property_name, property_value, content
     )
     VALUES (
-        _edge_id, v_tag_id
+        _edge_id, v_ttype_id, _property_name, _property_value, COALESCE(_content, '{}'::jsonb)
     )
-    ON CONFLICT (edge_id, tag_id) DO UPDATE
-      SET updated_at = now()
-    RETURNING m.tag_id, m.map_id;
+    ON CONFLICT (edge_id, ttype_id, property_name, property_value) DO UPDATE
+    SET
+        content    = CASE
+                       WHEN public.edge_tag.content IS DISTINCT FROM COALESCE(EXCLUDED.content, '{}'::jsonb)
+                         THEN public.edge_tag.content || EXCLUDED.content
+                       ELSE public.edge_tag.content
+                     END,
+        updated_at = now()
+    RETURNING tag_id INTO v_tag_id;
+
+    RETURN v_tag_id;
 END
 $fn$;
 -- +migrate StatementEnd
 
--- Get edge tag mapping by mapping ID
+-- Get edge tag by tag ID
 -- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.get_edge_tag_map_by_id(_map_id bigint)
+CREATE OR REPLACE FUNCTION public.get_edge_tag_by_id(_tag_id bigint)
 RETURNS TABLE (
     tag_id     bigint,
     edge_id    bigint,
@@ -535,21 +445,20 @@ LANGUAGE sql
 STABLE
 AS $fn$
     SELECT 
-        tg.tag_id, 
-        m.edge_id, 
-        m.created_at, 
-        m.updated_at, 
-        tt.name AS ttype_name, 
-        tg.content
-    FROM public.edge_tag_map m
-    JOIN public.tag tg ON tg.tag_id = m.tag_id
-    JOIN public.tag_type_lu tt ON tt.id = tg.ttype_id
-    WHERE m.map_id = _map_id
+        et.tag_id,
+        et.edge_id,
+        et.created_at,
+        et.updated_at,
+        tt.name AS ttype_name,
+        et.content
+    FROM public.edge_tag et
+    JOIN public.tag_type_lu tt ON tt.id = et.ttype_id
+    WHERE et.tag_id = _tag_id
     LIMIT 1;
 $fn$;
 -- +migrate StatementEnd
 
--- Get tag mappings for an edge with optional updated-since and property_name filters
+-- Get tags for an edge with optional updated-since and property_name filters
 -- +migrate StatementBegin
 CREATE OR REPLACE FUNCTION public.edge_get_tags(
     _edge_id bigint,
@@ -557,7 +466,6 @@ CREATE OR REPLACE FUNCTION public.edge_get_tags(
     _names   text[] DEFAULT NULL
 ) RETURNS TABLE (
     tag_id     bigint,
-    map_id     bigint,
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
     ttype_name text,
@@ -567,37 +475,17 @@ LANGUAGE sql
 STABLE
 AS $fn$
     SELECT
-        tg.tag_id,
-        m.map_id,
-        m.created_at,
-        m.updated_at,
+        et.tag_id,
+        et.created_at,
+        et.updated_at,
         tt.name AS ttype_name,
-        tg.content
-    FROM public.edge_tag_map m
-    JOIN public.tag tg
-      ON tg.tag_id = m.tag_id
-    JOIN public.tag_type_lu tt
-      ON tt.id = tg.ttype_id
-    WHERE m.edge_id = _edge_id
-      AND (_since IS NULL OR m.updated_at >= _since)
-      AND (_names IS NULL OR tg.property_name = ANY(_names))
-    ORDER BY m.updated_at DESC, m.map_id DESC;
-$fn$;
--- +migrate StatementEnd
-
--- Get the tag ID for the provided edge map ID
--- +migrate StatementBegin
-CREATE OR REPLACE FUNCTION public.edge_tag_map_get_tag_id(_map_id bigint)
-RETURNS bigint
-LANGUAGE sql
-STABLE
-AS $fn$
-    SELECT tg.tag_id
-    FROM public.edge_tag_map m
-    JOIN public.tag tg ON tg.tag_id = m.tag_id
-    WHERE m.map_id = _map_id
-    ORDER BY m.updated_at DESC, m.map_id DESC
-    LIMIT 1;
+        et.content
+    FROM public.edge_tag et
+    JOIN public.tag_type_lu tt ON tt.id = et.ttype_id
+    WHERE et.edge_id = _edge_id
+      AND (_since IS NULL OR et.updated_at >= _since)
+      AND (_names IS NULL OR et.property_name = ANY(_names))
+    ORDER BY et.updated_at DESC;
 $fn$;
 -- +migrate StatementEnd
 
