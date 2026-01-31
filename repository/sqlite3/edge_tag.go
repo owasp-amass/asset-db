@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,21 +13,31 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	_ "modernc.org/sqlite"
 )
 
-// Params: :edge_id, :tag_id
+// Params: :edge_id, :ttype_name, :property_name, :property_value, :content(JSON)
 const tagEdgeText = `
-INSERT INTO edge_tag_map(edge_id, tag_id)
-VALUES (:edge_id, :tag_id)
-ON CONFLICT(edge_id, tag_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`
+INSERT INTO edge_tag(edge_id, ttype_id, property_name, property_value, content)
+VALUES (:edge_id, (SELECT id FROM tag_type_lu WHERE name = lower(:ttype_name) LIMIT 1), 
+	:property_name, :property_value, coalesce(:content, '{}'))
+ON CONFLICT(edge_id, ttype_id, property_name, property_value) DO UPDATE SET
+    content = CASE
+        WHEN json_patch(edge_tag.content, coalesce(excluded.content,'{}')) IS NOT edge_tag.content
+          THEN json_patch(edge_tag.content, coalesce(excluded.content,'{}'))
+        ELSE edge_tag.content
+    END,
+    updated_at = CURRENT_TIMESTAMP`
 
-// Params: :edge_id, :tag_id
-const selectEdgeTagMapIDText = `
-SELECT map_id FROM edge_tag_map
-WHERE edge_id = :edge_id AND tag_id = :tag_id 
+// Params: :edge_id, :ttype_name, :property_name, :property_value
+const selectEdgeTagIDText = `
+SELECT tag_id FROM edge_tag 
+JOIN tag_type_lu tt ON tt.id = edge_tag.ttype_id
+WHERE edge_tag.edge_id = :edge_id AND tt.name = lower(:ttype_name) 
+  AND edge_tag.property_name = :property_name 
+  AND coalesce(edge_tag.property_value,'∅') = coalesce(:property_value,'∅')
 LIMIT 1`
 
 func (r *SqliteRepository) CreateEdgeTag(ctx context.Context, edge *dbt.Edge, tag *dbt.EdgeTag) (*dbt.EdgeTag, error) {
@@ -40,38 +50,32 @@ func (r *SqliteRepository) CreateEdgeProperty(ctx context.Context, edge *dbt.Edg
 		return nil, err
 	}
 
-	tid, err := r.upsertTag(ctx, string(property.PropertyType()), property.Name(), property.Value(), string(content))
-	if err != nil {
-		return nil, err
-	}
-
 	eid, err := strconv.ParseInt(edge.ID, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	mid, err := r.tagEdge(ctx, eid, tid)
+	tid, err := r.tagEdge(ctx, eid, property, content)
 	if err != nil {
 		return nil, err
 	}
 
-	idstr := strconv.FormatInt(mid, 10)
+	idstr := strconv.FormatInt(tid, 10)
 	return r.FindEdgeTagById(ctx, idstr)
 }
 
 // FindEdgeTagById implements the Repository interface.
 func (r *SqliteRepository) FindEdgeTagById(ctx context.Context, id string) (*dbt.EdgeTag, error) {
-	mid, err := strconv.ParseInt(id, 10, 64)
+	tid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
 	const q = `
-SELECT m.map_id, m.edge_id, m.created_at, m.updated_at, tt.name, tg.content
-FROM edge_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-JOIN tag_type_lu tt ON tt.id = tg.ttype_id
-WHERE m.map_id = :map_id
+SELECT et.tag_id, et.edge_id, et.created_at, et.updated_at, tt.name, et.content
+FROM edge_tag et
+JOIN tag_type_lu tt ON tt.id = et.ttype_id
+WHERE et.tag_id = :tag_id
 LIMIT 1`
 
 	ch := make(chan *rowReadResult, 1)
@@ -79,7 +83,7 @@ LIMIT 1`
 		Ctx:     ctx,
 		Name:    "edge.tag.by_id",
 		SQLText: q,
-		Args:    []any{sql.Named("map_id", mid)},
+		Args:    []any{sql.Named("tag_id", tid)},
 		Result:  ch,
 	})
 
@@ -142,15 +146,20 @@ func (r *SqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
 	return r.deleteTagByID(ctx, tid, true)
 }
 
-func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID, tagID int64) (int64, error) {
+func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID int64, property oam.Property, content string) (int64, error) {
 	done := make(chan error, 1)
+	ttype := string(property.PropertyType())
+
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
-		Name:    "edge.tag.upsert_edge_tag_mapping",
+		Name:    "edge.tag.upsert",
 		SQLText: tagEdgeText,
 		Args: []any{
 			sql.Named("edge_id", edgeID),
-			sql.Named("tag_id", tagID),
+			sql.Named("ttype_name", ttype),
+			sql.Named("property_name", property.Name()),
+			sql.Named("property_value", property.Value()),
+			sql.Named("content", content),
 		},
 		Result: done,
 	})
@@ -162,11 +171,13 @@ func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID, tagID int64) (in
 	ch := make(chan *rowReadResult, 1)
 	r.rpool.Submit(&rowReadJob{
 		Ctx:     ctx,
-		Name:    "edge.tag.edge_tag_mapping_id_by_ids",
-		SQLText: selectEdgeTagMapIDText,
+		Name:    "edge.tag.id_by_values",
+		SQLText: selectEdgeTagIDText,
 		Args: []any{
 			sql.Named("edge_id", edgeID),
-			sql.Named("tag_id", tagID),
+			sql.Named("ttype_name", ttype),
+			sql.Named("property_name", property.Name()),
+			sql.Named("property_value", property.Value()),
 		},
 		Result: ch,
 	})
@@ -186,24 +197,23 @@ func (r *SqliteRepository) tagsForEdge(ctx context.Context, eid int64, since tim
 	key := "edge.tag.tags_for_edge"
 	args := []any{sql.Named("edge_id", eid)}
 	q := `
-SELECT m.map_id, m.created_at, m.updated_at, tt.name, tg.content
-FROM edge_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-JOIN tag_type_lu tt ON tt.id = tg.ttype_id
-WHERE m.edge_id = :edge_id`
+SELECT et.tag_id, et.created_at, et.updated_at, tt.name, et.content
+FROM edge_tag et
+JOIN tag_type_lu tt ON tt.id = et.ttype_id
+WHERE et.edge_id = :edge_id`
 
 	if !since.IsZero() {
 		key += ".since"
-		q += " AND m.updated_at >= :since"
+		q += " AND et.updated_at >= :since"
 		args = append(args, sql.Named("since", since.UTC()))
 	}
 	if values, vargs := inClause(names); values != "" && len(vargs) > 0 {
 		key += fmt.Sprintf(".names%d", len(vargs))
-		q += " AND tg.property_name IN " + values
+		q += " AND et.property_name IN " + values
 		args = append(args, vargs...)
 	}
 
-	q += " ORDER BY m.updated_at DESC"
+	q += " ORDER BY et.updated_at DESC"
 
 	ch := make(chan *rowsReadResult, 1)
 	r.rpool.Submit(&rowsReadJob{
@@ -271,38 +281,10 @@ func (r *SqliteRepository) removeEdgeTag(ctx context.Context, mid int64) (int64,
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
 		Name:    "edge.tag.remove_edge_tag",
-		SQLText: `DELETE FROM edge_tag_map WHERE map_id = :map_id`,
-		Args:    []any{sql.Named("map_id", mid)},
+		SQLText: `DELETE FROM edge_tag WHERE tag_id = :tag_id`,
+		Args:    []any{sql.Named("tag_id", mid)},
 		Result:  done,
 	})
 
 	return tid, <-done
-}
-
-func (r *SqliteRepository) edgeMIDToTID(ctx context.Context, mid int64) (int64, error) {
-	const q = `
-SELECT tg.tag_id
-FROM edge_tag_map m
-JOIN tag tg ON tg.tag_id = m.tag_id
-WHERE m.map_id = :map_id
-ORDER BY m.updated_at DESC
-LIMIT 1`
-
-	ch := make(chan *rowReadResult, 1)
-	r.rpool.Submit(&rowReadJob{
-		Ctx:     ctx,
-		Name:    "edge.tag.mid_to_tid",
-		SQLText: q,
-		Args:    []any{sql.Named("map_id", mid)},
-		Result:  ch,
-	})
-
-	result := <-ch
-	if result.Err != nil {
-		return 0, result.Err
-	}
-
-	var tid int64
-	err := result.Row.Scan(&tid)
-	return tid, err
 }
