@@ -106,10 +106,10 @@ CREATE TABLE IF NOT EXISTS entity_tag (
   content        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(content)),
   UNIQUE (entity_id, ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_entity_tag_created_at ON entity_tag_map (created_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_updated_at ON entity_tag_map (updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_updated ON entity_tag_map (entity_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_id ON entity_tag_map (entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_created_at ON entity_tag (created_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_updated_at ON entity_tag (updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_updated ON entity_tag (entity_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_id ON entity_tag (entity_id);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_ttype_id ON entity_tag (ttype_id);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name ON entity_tag (property_name);
 CREATE INDEX IF NOT EXISTS idx_entity_tag_tt_name ON entity_tag (ttype_id, property_name);

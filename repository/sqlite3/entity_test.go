@@ -14,10 +14,10 @@ import (
 )
 
 func BenchmarkCreateAsset(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	var i int64
 	for b.Loop() {

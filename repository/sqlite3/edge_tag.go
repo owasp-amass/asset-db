@@ -55,7 +55,7 @@ func (r *SqliteRepository) CreateEdgeProperty(ctx context.Context, edge *dbt.Edg
 		return nil, err
 	}
 
-	tid, err := r.tagEdge(ctx, eid, property, content)
+	tid, err := r.tagEdge(ctx, eid, property, string(content))
 	if err != nil {
 		return nil, err
 	}
@@ -92,14 +92,14 @@ LIMIT 1`
 		return nil, result.Err
 	}
 
-	var eid, row_id int64
+	var eid int64
 	var ttype, content, c, u string
-	if err := result.Row.Scan(&row_id, &eid, &c, &u, &ttype, &content); err != nil {
+	if err := result.Row.Scan(&tid, &eid, &c, &u, &ttype, &content); err != nil {
 		return nil, err
 	}
 
 	tag := &dbt.EdgeTag{
-		ID:   strconv.FormatInt(row_id, 10),
+		ID:   id,
 		Edge: &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
 	}
 
@@ -133,17 +133,20 @@ func (r *SqliteRepository) FindEdgeTags(ctx context.Context, edge *dbt.Edge, sin
 }
 
 func (r *SqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
-	mid, err := strconv.ParseInt(id, 10, 64)
+	tid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return err
 	}
 
-	tid, err := r.removeEdgeTag(ctx, mid)
-	if err != nil {
-		return err
-	}
-
-	return r.deleteTagByID(ctx, tid, true)
+	done := make(chan error, 1)
+	r.ww.Submit(&writeJob{
+		Ctx:     ctx,
+		Name:    "edge.tag.delete",
+		SQLText: `DELETE FROM edge_tag WHERE tag_id = :tag_id`,
+		Args:    []any{sql.Named("tag_id", tid)},
+		Result:  done,
+	})
+	return <-done
 }
 
 func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID int64, property oam.Property, content string) (int64, error) {
@@ -232,15 +235,15 @@ WHERE et.edge_id = :edge_id`
 
 	var out []*dbt.EdgeTag
 	for result.Rows.Next() {
-		var row_id int64
+		var tid int64
 		var ttype, content, c, u string
 
-		if err := result.Rows.Scan(&row_id, &c, &u, &ttype, &content); err != nil {
+		if err := result.Rows.Scan(&tid, &c, &u, &ttype, &content); err != nil {
 			return nil, err
 		}
 
 		tag := &dbt.EdgeTag{
-			ID:   strconv.FormatInt(row_id, 10),
+			ID:   strconv.FormatInt(tid, 10),
 			Edge: &dbt.Edge{ID: strconv.FormatInt(eid, 10)},
 		}
 
@@ -268,23 +271,4 @@ WHERE et.edge_id = :edge_id`
 		return nil, errors.New("no tags found for edge")
 	}
 	return out, nil
-}
-
-// removeEdgeTag deletes a specific tag mapping from an edge.
-func (r *SqliteRepository) removeEdgeTag(ctx context.Context, mid int64) (int64, error) {
-	tid, err := r.edgeMIDToTID(ctx, mid)
-	if err != nil {
-		return 0, err
-	}
-
-	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{
-		Ctx:     ctx,
-		Name:    "edge.tag.remove_edge_tag",
-		SQLText: `DELETE FROM edge_tag WHERE tag_id = :tag_id`,
-		Args:    []any{sql.Named("tag_id", mid)},
-		Result:  done,
-	})
-
-	return tid, <-done
 }

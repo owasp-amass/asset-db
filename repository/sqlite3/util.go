@@ -14,8 +14,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// ------------------------------ Utilities ------------------------------------
-
 // parseTimestamp converts a *string timestamp into *time.Time (RFC3339 or SQLite
 // default format). If parsing fails, returns nil (non-fatal for presentation purposes).
 func parseTimestamp(s string) (time.Time, error) {

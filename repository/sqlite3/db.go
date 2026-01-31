@@ -5,11 +5,9 @@
 package sqlite3
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"math/rand"
 	"time"
 
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
@@ -21,7 +19,6 @@ import (
 
 const (
 	SQLite                string = "sqlite"
-	SQLiteMemory          string = "sqlite_memory"
 	numberOfReaderWorkers int    = 8
 )
 
@@ -40,8 +37,6 @@ func New(dbtype, dsn string) (*SqliteRepository, error) {
 	var repo *SqliteRepository
 
 	switch dbtype {
-	case SQLiteMemory:
-		repo, err = sqliteMemoryDatabase()
 	case SQLite:
 		repo, err = sqliteDatabase(dsn)
 	default:
@@ -56,8 +51,10 @@ func New(dbtype, dsn string) (*SqliteRepository, error) {
 
 // sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
 func sqliteDatabase(dsn string) (*SqliteRepository, error) {
-	wdsn := dsn + "?_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)"
-	db, err := sql.Open("sqlite3", wdsn)
+	fdsn := dsn + `?_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)`
+	fdsn += `&_pragma=journal_mode(WAL)&_pragma=temp_store(FILE)&_pragma=page_size(4096)&_pragma=cache_size(-64000)`
+
+	db, err := sql.Open(SQLite, fdsn)
 	if err != nil {
 		return nil, err
 	}
@@ -66,16 +63,7 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, _ = db.ExecContext(ctx, `PRAGMA temp_store = FILE`)
-	_, _ = db.ExecContext(ctx, `PRAGMA mmap_size = 0`) // disable memory-mapped I/O
-	_, _ = db.ExecContext(ctx, `PRAGMA page_size = 4096`)
-	_, _ = db.ExecContext(ctx, `PRAGMA cache_size = -500000`) // set cache size to 500 MiB (in KiB)
-
-	rdsn := dsn + "?mode=ro&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)"
-	dbro, err := sql.Open("sqlite3", rdsn)
+	dbro, err := sql.Open(SQLite, fdsn)
 	if err != nil {
 		return nil, err
 	}
@@ -88,47 +76,6 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 		DB:     db,
 		rodb:   dbro,
 		dbtype: SQLite,
-	}
-
-	if err := repo.migrate(); err != nil {
-		return nil, err
-	}
-	return repo, repo.prepareWorkers()
-}
-
-// sqliteMemoryDatabase creates a new in-memory SQLite database connection.
-func sqliteMemoryDatabase() (*SqliteRepository, error) {
-	name := fmt.Sprintf("file:amassmem%d", rand.Intn(1000))
-	dsn := name + `?mode=memory&_pragma=cache(shared)&_pragma=foreign_keys(ON)&_pragma=temp_store(MEMORY)`
-	dsn += `&_pragma=busy_timeout(5000)&_pragma=synchronous(OFF)&_pragma=journal_mode(MEMORY)`
-
-	db, err := sql.Open("sqlite3", dsn)
-	if err != nil {
-		return nil, err
-	}
-
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(0)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, _ = db.ExecContext(ctx, `PRAGMA page_size = 4096`)
-
-	dbro, err := sql.Open("sqlite3", name+`?mode=memory&cache=shared&immutable=1`)
-	if err != nil {
-		return nil, err
-	}
-
-	dbro.SetMaxOpenConns(numberOfReaderWorkers)
-	dbro.SetMaxIdleConns(numberOfReaderWorkers)
-	dbro.SetConnMaxLifetime(0)
-
-	repo := &SqliteRepository{
-		DB:     db,
-		rodb:   dbro,
-		dbtype: SQLiteMemory,
 	}
 
 	if err := repo.migrate(); err != nil {

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,10 +8,11 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -24,11 +25,10 @@ import (
 func TestExtract(t *testing.T) {
 	now := time.Now()
 
-	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -126,11 +126,10 @@ func TestExtract(t *testing.T) {
 func TestPredAndObject(t *testing.T) {
 	now := time.Now()
 
-	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ipstr := "192.168.1.1"
 	cidr := "192.168.1.0/24"
@@ -211,11 +210,10 @@ func TestPredAndObject(t *testing.T) {
 }
 
 func TestFindFirstSubject(t *testing.T) {
-	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ipstr := "192.168.1.2"
 	ctx := context.Background()
@@ -258,11 +256,10 @@ func TestFindFirstSubject(t *testing.T) {
 func TestEntityPropsMatch(t *testing.T) {
 	now := time.Now()
 
-	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx := context.Background()
 	// create an asset and property for testing
@@ -318,11 +315,10 @@ func TestEntityPropsMatch(t *testing.T) {
 func TestEdgePropsMatch(t *testing.T) {
 	now := time.Now()
 
-	// create a new in-memory SQLite database for testing
-	db, err := assetdb.New(sqlite3.SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ipstr := "192.168.1.1"
 	ctx := context.Background()
@@ -391,4 +387,22 @@ func TestEdgePropsMatch(t *testing.T) {
 	props, ok = edgePropsMatch(db, edge1, []*Property{p3})
 	assert.True(t, ok, "Expected edge properties to match when the specification matches both associated properties")
 	assert.Equal(t, 2, len(props), "Expected two matching properties when the specification matches both associated properties")
+}
+
+func setupTempSQLite() (*sqlite3.SqliteRepository, string, error) {
+	dir, err := os.MkdirTemp("", "sqlite-test-")
+	if err != nil {
+		return nil, "", err
+	}
+
+	fpath := filepath.Join(dir, "db.sqlite")
+	repo, err := sqlite3.New(sqlite3.SQLite, fpath)
+	return repo, fpath, err
+}
+
+func teardownTempSQLite(repo *sqlite3.SqliteRepository, dir string) {
+	if repo != nil {
+		_ = repo.Close()
+	}
+	_ = os.RemoveAll(dir)
 }

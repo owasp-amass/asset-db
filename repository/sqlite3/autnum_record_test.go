@@ -17,10 +17,10 @@ import (
 )
 
 func TestCreateAssetForAutnumRecord(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -81,10 +81,10 @@ func TestCreateAssetForAutnumRecord(t *testing.T) {
 }
 
 func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -162,10 +162,10 @@ func TestFindEntitiesByContentForAutnumRecord(t *testing.T) {
 }
 
 func TestFindEntitiesByTypeForAutnumRecord(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

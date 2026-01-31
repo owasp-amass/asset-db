@@ -22,10 +22,10 @@ import (
 )
 
 func TestCreateEdge(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -111,10 +111,10 @@ func TestCreateEdge(t *testing.T) {
 }
 
 func TestIncomingEdges(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -264,10 +264,10 @@ func TestIncomingEdges(t *testing.T) {
 }
 
 func TestOutgoingEdges(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -417,10 +417,10 @@ func TestOutgoingEdges(t *testing.T) {
 }
 
 func BenchmarkFindEdgeByID(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
 	assert.NoError(b, err, "Failed to create the FQDN asset")
@@ -455,10 +455,10 @@ func BenchmarkFindEdgeByID(b *testing.B) {
 }
 
 func BenchmarkIncomingEdges(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
 	assert.NoError(b, err, "Failed to create the FQDN asset")
@@ -493,10 +493,10 @@ func BenchmarkIncomingEdges(b *testing.B) {
 }
 
 func BenchmarkIncomingEdgesWithSince(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
 	assert.NoError(b, err, "Failed to create the FQDN asset")
@@ -532,10 +532,10 @@ func BenchmarkIncomingEdgesWithSince(b *testing.B) {
 }
 
 func BenchmarkOutgoingEdges(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
 	assert.NoError(b, err, "Failed to create the FQDN asset")
@@ -570,10 +570,10 @@ func BenchmarkOutgoingEdges(b *testing.B) {
 }
 
 func BenchmarkOutgoingEdgesWithSince(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	fqdn, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "www.test.com"})
 	assert.NoError(b, err, "Failed to create the FQDN asset")

@@ -117,10 +117,7 @@ func (r *PostgresRepository) DeleteEdgeTag(ctx context.Context, id string) error
 	}
 
 	_, err = r.removeEdgeTag(ctx, tid)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // tagsForEdge lists all tags assigned to an edge.

@@ -22,10 +22,10 @@ import (
 )
 
 func TestFindEntitiesByType(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -174,10 +174,10 @@ func TestFindEntitiesByType(t *testing.T) {
 }
 
 func BenchmarkFindEntityByID(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	var ids []string
 	for i := range int64(1000) {
@@ -195,10 +195,10 @@ func BenchmarkFindEntityByID(b *testing.B) {
 }
 
 func BenchmarkFindEntitiesByContent(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	var names []string
 	for i := range int64(1000) {
@@ -219,10 +219,10 @@ func BenchmarkFindEntitiesByContent(b *testing.B) {
 }
 
 func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	var names []string
 	since := time.Now()
@@ -245,10 +245,10 @@ func BenchmarkFindEntitiesByContentWithSince(b *testing.B) {
 }
 
 func BenchmarkFindEntitiesByType(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	var since time.Time
 	for i := range int64(1000) {

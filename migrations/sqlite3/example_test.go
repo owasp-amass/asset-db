@@ -19,7 +19,7 @@ func ExampleMigrations() {
 		dsn = v
 	}
 
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		panic(err)
 	}

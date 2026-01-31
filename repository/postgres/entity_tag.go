@@ -115,10 +115,7 @@ func (r *PostgresRepository) DeleteEntityTag(ctx context.Context, id string) err
 	}
 
 	_, err = r.removeEntityTag(ctx, tid)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // tagsForEntity lists all tag assignments for an entity (namespaced).

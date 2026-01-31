@@ -146,8 +146,6 @@ func New(dbtype, dsn string) (Repository, error) {
 	case strings.ToLower(postgres.Postgres):
 		return postgres.New(dbtype, dsn)
 	case strings.ToLower(sqlite3.SQLite):
-		fallthrough
-	case strings.ToLower(sqlite3.SQLiteMemory):
 		return sqlite3.New(dbtype, dsn)
 	}
 	return nil, fmt.Errorf("unknown DB type: %s", dbtype)

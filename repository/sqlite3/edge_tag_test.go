@@ -21,10 +21,10 @@ import (
 )
 
 func TestCreateEdgeProperty(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -88,10 +88,10 @@ func TestCreateEdgeProperty(t *testing.T) {
 }
 
 func TestFindEdgeTags(t *testing.T) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
 	assert.NotNil(t, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -250,10 +250,10 @@ func TestFindEdgeTags(t *testing.T) {
 }
 
 func BenchmarkFindEdgeTagByID(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
 	assert.NoError(b, err, "Failed to create the first FQDN asset")
@@ -286,10 +286,10 @@ func BenchmarkFindEdgeTagByID(b *testing.B) {
 }
 
 func BenchmarkFindEdgeTags(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
 	assert.NoError(b, err, "Failed to create the first FQDN asset")
@@ -322,10 +322,10 @@ func BenchmarkFindEdgeTags(b *testing.B) {
 }
 
 func BenchmarkFindEdgeTagsWithSince(b *testing.B) {
-	db, err := New(SQLiteMemory, "")
-	assert.NoError(b, err, "Failed to create the in-memory sqlite database")
+	db, dir, err := setupTempSQLite()
+	assert.NoError(b, err, "Failed to create the sqlite database")
 	assert.NotNil(b, db, "Asset database should not be nil")
-	defer func() { _ = db.Close() }()
+	defer teardownTempSQLite(db, dir)
 
 	a1, err := db.CreateAsset(context.Background(), &oamdns.FQDN{Name: "test.com"})
 	assert.NoError(b, err, "Failed to create the first FQDN asset")
