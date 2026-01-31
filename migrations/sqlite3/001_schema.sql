@@ -95,58 +95,47 @@ BEGIN
 END;
 -- +migrate StatementEnd
 
-CREATE TABLE IF NOT EXISTS tag (
+CREATE TABLE IF NOT EXISTS entity_tag (
   tag_id         INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  entity_id      INTEGER NOT NULL REFERENCES entity(entity_id) ON DELETE CASCADE,
   ttype_id       INTEGER NOT NULL REFERENCES tag_type_lu(id),
   property_name  TEXT NOT NULL,
   property_value TEXT NOT NULL,
   content        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(content)),
-  UNIQUE (ttype_id, property_name, property_value)
+  UNIQUE (entity_id, ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_tag_created_at ON tag (created_at);
-CREATE INDEX IF NOT EXISTS idx_tag_updated_at ON tag (updated_at);
-CREATE INDEX IF NOT EXISTS idx_tag_ttype_id ON tag (ttype_id);
-CREATE INDEX IF NOT EXISTS idx_tag_property_name ON tag (property_name);
-CREATE INDEX IF NOT EXISTS idx_tag_tt_name ON tag (ttype_id, property_name);
-CREATE INDEX IF NOT EXISTS idx_tag_property_name_value ON tag (property_name, property_value);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_created_at ON entity_tag_map (created_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_updated_at ON entity_tag_map (updated_at);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_updated ON entity_tag_map (entity_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_entity_id ON entity_tag_map (entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_ttype_id ON entity_tag (ttype_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name ON entity_tag (property_name);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_tt_name ON entity_tag (ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_property_name_value ON entity_tag (property_name, property_value);
+CREATE INDEX IF NOT EXISTS idx_entity_tag_ttype_name_value ON entity_tag (ttype_id, property_name, property_value);
 
--- +migrate StatementBegin
-CREATE TRIGGER IF NOT EXISTS trg_tag_au
-AFTER UPDATE OF content, property_value ON tag
-BEGIN
-  UPDATE tag SET updated_at = CURRENT_TIMESTAMP WHERE tag_id = NEW.tag_id;
-END;
--- +migrate StatementEnd
-
-CREATE TABLE IF NOT EXISTS entity_tag_map (
-  map_id     INTEGER PRIMARY KEY AUTOINCREMENT,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  entity_id  INTEGER NOT NULL REFERENCES entity(entity_id) ON DELETE CASCADE,
-  tag_id     INTEGER NOT NULL REFERENCES tag(tag_id) ON DELETE CASCADE,
-  UNIQUE (entity_id, tag_id)
+CREATE TABLE IF NOT EXISTS edge_tag (
+  tag_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
+  edge_id        INTEGER NOT NULL REFERENCES edge(edge_id) ON DELETE CASCADE,
+  ttype_id       INTEGER NOT NULL REFERENCES tag_type_lu(id),
+  property_name  TEXT NOT NULL,
+  property_value TEXT NOT NULL,
+  content        TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(content)),
+  UNIQUE (edge_id, ttype_id, property_name, property_value)
 );
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_created_at ON entity_tag_map (created_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_updated_at ON entity_tag_map (updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_updated ON entity_tag_map (entity_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_entity_id ON entity_tag_map (entity_id);
-CREATE INDEX IF NOT EXISTS idx_entity_tag_map_tag_id ON entity_tag_map (tag_id);
-
-CREATE TABLE IF NOT EXISTS edge_tag_map (
-  map_id     INTEGER PRIMARY KEY AUTOINCREMENT,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
-  edge_id    INTEGER NOT NULL REFERENCES edge(edge_id) ON DELETE CASCADE,
-  tag_id     INTEGER NOT NULL REFERENCES tag(tag_id) ON DELETE CASCADE,
-  UNIQUE (edge_id, tag_id)
-);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_created_at ON edge_tag_map (created_at);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_updated_at ON edge_tag_map (updated_at);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_updated ON edge_tag_map (edge_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_edge_id ON edge_tag_map (edge_id);
-CREATE INDEX IF NOT EXISTS idx_edge_tag_map_tag_id ON edge_tag_map (tag_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_created_at ON edge_tag (created_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_updated_at ON edge_tag (updated_at);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_edge_updated ON edge_tag (edge_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_edge_id ON edge_tag (edge_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_ttype_id ON edge_tag (ttype_id);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name ON edge_tag (property_name);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_tt_name ON edge_tag (ttype_id, property_name);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_property_name_value ON edge_tag (property_name, property_value);
+CREATE INDEX IF NOT EXISTS idx_edge_tag_ttype_name_value ON edge_tag (ttype_id, property_name, property_value);
 
 -- -----------------------------------------------
 -- Asset tables (with normalized columns)
@@ -1087,30 +1076,27 @@ DROP INDEX IF EXISTS idx_account_updated_at;
 DROP INDEX IF EXISTS idx_account_created_at;
 DROP TABLE IF EXISTS account;
 
-DROP INDEX IF EXISTS idx_edge_tag_map;
-DROP INDEX IF EXISTS idx_edge_tag_map_tag_id;
-DROP INDEX IF EXISTS idx_edge_tag_map_edge_id;
-DROP INDEX IF EXISTS idx_edge_tag_map_edge_updated;
-DROP INDEX IF EXISTS idx_edge_tag_map_updated_at;
-DROP INDEX IF EXISTS idx_edge_tag_map_created_at;
-DROP TABLE IF EXISTS edge_tag_map;
+DROP INDEX IF EXISTS idx_edge_tag_ttype_name_value;
+DROP INDEX IF EXISTS idx_edge_tag_property_name_value;
+DROP INDEX IF EXISTS idx_edge_tag_tt_name;
+DROP INDEX IF EXISTS idx_edge_tag_property_name;
+DROP INDEX IF EXISTS idx_edge_tag_ttype_id;
+DROP INDEX IF EXISTS idx_edge_tag_edge_id;
+DROP INDEX IF EXISTS idx_edge_tag_edge_updated;
+DROP INDEX IF EXISTS idx_edge_tag_updated_at;
+DROP INDEX IF EXISTS idx_edge_tag_created_at;
+DROP TABLE IF EXISTS edge_tag;
 
-DROP INDEX IF EXISTS idx_entity_tag_map;
-DROP INDEX IF EXISTS idx_entity_tag_map_tag_id;
-DROP INDEX IF EXISTS idx_entity_tag_map_entity_id;
-DROP INDEX IF EXISTS idx_entity_tag_map_entity_updated;
-DROP INDEX IF EXISTS idx_entity_tag_map_updated_at;
-DROP INDEX IF EXISTS idx_entity_tag_map_created_at;
-DROP TABLE IF EXISTS entity_tag_map;
-
-DROP TRIGGER IF EXISTS trg_tag_au;
-DROP INDEX IF EXISTS idx_tag_property_name_value;
-DROP INDEX IF EXISTS idx_tag_tt_name;
-DROP INDEX IF EXISTS idx_tag_property_value;
-DROP INDEX IF EXISTS idx_tag_ttype_id;
-DROP INDEX IF EXISTS idx_tag_updated_at;
-DROP INDEX IF EXISTS idx_tag_created_at;
-DROP TABLE IF EXISTS tag;
+DROP INDEX IF EXISTS idx_entity_tag_ttype_name_value;
+DROP INDEX IF EXISTS idx_entity_tag_property_name_value;
+DROP INDEX IF EXISTS idx_entity_tag_tt_name;
+DROP INDEX IF EXISTS idx_entity_tag_property_name;
+DROP INDEX IF EXISTS idx_entity_tag_ttype_id;
+DROP INDEX IF EXISTS idx_entity_tag_entity_id;
+DROP INDEX IF EXISTS idx_entity_tag_entity_updated;
+DROP INDEX IF EXISTS idx_entity_tag_updated_at;
+DROP INDEX IF EXISTS idx_entity_tag_created_at;
+DROP TABLE IF EXISTS entity_tag;
 
 DROP TRIGGER IF EXISTS trg_edge_au;
 DROP INDEX IF EXISTS idx_edge_to;
