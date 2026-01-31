@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/owasp-amass/asset-db/types"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	_ "modernc.org/sqlite"
 )
 
 // Params: :domain_text, :record_name, :punycode, :extension, :whois_server, :object_id, :attrs
@@ -59,15 +59,6 @@ func (r *SqliteRepository) upsertDomainRecord(ctx context.Context, a *oamreg.Dom
 	}
 	if a.Domain == "" {
 		return 0, errors.New("domain record domain cannot be empty")
-	}
-	if a.Name == "" {
-		return 0, errors.New("domain record name cannot be empty")
-	}
-	if a.Punycode == "" {
-		return 0, errors.New("domain record punycode cannot be empty")
-	}
-	if a.Extension == "" {
-		return 0, errors.New("domain record extension cannot be empty")
 	}
 
 	attrs := domainRecordAttributes{
@@ -153,18 +144,6 @@ func (r *SqliteRepository) fetchDomainRecordByRowID(ctx context.Context, eid, ro
 	}
 	if a.Domain == "" {
 		return nil, errors.New("domain record domain is missing")
-	}
-	if a.Name == "" {
-		return nil, errors.New("domain record name is missing")
-	}
-	if a.Punycode == "" {
-		return nil, errors.New("domain record punycode is missing")
-	}
-	if a.Extension == "" {
-		return nil, errors.New("domain record extension is missing")
-	}
-	if a.WhoisServer == "" {
-		return nil, errors.New("domain record whois server is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}

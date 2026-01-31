@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/people"
+	_ "modernc.org/sqlite"
 )
 
 // Params: :unique_id, :full_name, :first_name, :family_name, :middle_name, :attrs

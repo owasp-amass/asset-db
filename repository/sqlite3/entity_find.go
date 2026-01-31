@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	_ "modernc.org/sqlite"
 )
 
 // FindEntityById implements the Repository interface.

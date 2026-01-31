@@ -12,9 +12,9 @@ import (
 	"math/rand"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
+	_ "modernc.org/sqlite"
 )
 
 // Normalized Property Graph (NPG) implemented on SQLite
@@ -56,7 +56,7 @@ func New(dbtype, dsn string) (*SqliteRepository, error) {
 
 // sqliteDatabase creates a new SQLite database connection using the provided data source name (dsn).
 func sqliteDatabase(dsn string) (*SqliteRepository, error) {
-	wdsn := dsn + "?_synchronous=NORMAL&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL"
+	wdsn := dsn + "?_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)"
 	db, err := sql.Open("sqlite3", wdsn)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 	_, _ = db.ExecContext(ctx, `PRAGMA page_size = 4096`)
 	_, _ = db.ExecContext(ctx, `PRAGMA cache_size = -500000`) // set cache size to 500 MiB (in KiB)
 
-	rdsn := dsn + "?mode=ro&_busy_timeout=5000&_foreign_keys=on&_journal_mode=WAL"
+	rdsn := dsn + "?mode=ro&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)"
 	dbro, err := sql.Open("sqlite3", rdsn)
 	if err != nil {
 		return nil, err
@@ -99,7 +99,8 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 // sqliteMemoryDatabase creates a new in-memory SQLite database connection.
 func sqliteMemoryDatabase() (*SqliteRepository, error) {
 	name := fmt.Sprintf("file:amassmem%d", rand.Intn(1000))
-	dsn := name + `?mode=memory&cache=shared&_foreign_keys=on&_busy_timeout=5000&_synchronous=OFF&_journal_mode=MEMORY&_temp_store=MEMORY`
+	dsn := name + `?mode=memory&_pragma=cache(shared)&_pragma=foreign_keys(ON)&_pragma=temp_store(MEMORY)`
+	dsn += `&_pragma=busy_timeout(5000)&_pragma=synchronous(OFF)&_pragma=journal_mode(MEMORY)`
 
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
