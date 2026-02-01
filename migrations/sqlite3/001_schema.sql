@@ -58,10 +58,6 @@ CREATE TABLE IF NOT EXISTS entity (
 );
 CREATE INDEX IF NOT EXISTS idx_entity_created_at ON entity (created_at);
 CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON entity (updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_etype_id ON entity (etype_id);
-CREATE INDEX IF NOT EXISTS idx_entity_natural_key ON entity (natural_key);
-CREATE INDEX IF NOT EXISTS idx_entity_table_name ON entity (table_name);
-CREATE INDEX IF NOT EXISTS idx_entity_row_id ON entity (row_id);
 
 -- -----------------------------
 -- Graph edges & tags
@@ -81,7 +77,6 @@ CREATE TABLE IF NOT EXISTS edge (
 CREATE INDEX IF NOT EXISTS idx_edge_created_at ON edge (created_at);
 CREATE INDEX IF NOT EXISTS idx_edge_updated_at ON edge (updated_at);
 CREATE INDEX IF NOT EXISTS idx_edge_etype_id ON edge (etype_id);
-CREATE INDEX IF NOT EXISTS idx_edge_label ON edge (label);
 CREATE INDEX IF NOT EXISTS idx_edge_from_id ON edge (from_entity_id);
 CREATE INDEX IF NOT EXISTS idx_edge_to_id   ON edge (to_entity_id);
 CREATE INDEX IF NOT EXISTS idx_edge_from ON edge (from_entity_id, etype_id, to_entity_id);

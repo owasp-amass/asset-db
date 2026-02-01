@@ -64,10 +64,6 @@ CREATE TABLE IF NOT EXISTS public.entity (
 );
 CREATE INDEX IF NOT EXISTS idx_entity_created_at ON public.entity (created_at);
 CREATE INDEX IF NOT EXISTS idx_entity_updated_at ON public.entity (updated_at);
-CREATE INDEX IF NOT EXISTS idx_entity_type ON public.entity (etype_id);
-CREATE INDEX IF NOT EXISTS idx_entity_natural_key ON public.entity (natural_key);
-CREATE INDEX IF NOT EXISTS idx_entity_table_name ON public.entity (table_name);
-CREATE INDEX IF NOT EXISTS idx_entity_row_id ON public.entity (row_id);
 
 -- -----------------------------
 -- Graph edges
@@ -87,7 +83,6 @@ CREATE TABLE IF NOT EXISTS public.edge (
 CREATE INDEX IF NOT EXISTS idx_edge_created_at ON public.edge (created_at);
 CREATE INDEX IF NOT EXISTS idx_edge_updated_at ON public.edge (updated_at);
 CREATE INDEX IF NOT EXISTS idx_edge_etype ON public.edge (etype_id);
-CREATE INDEX IF NOT EXISTS idx_edge_label ON public.edge (label);
 CREATE INDEX IF NOT EXISTS gin_edge_content ON public.edge USING gin (content jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS idx_edge_from_id ON public.edge (from_entity_id);
 CREATE INDEX IF NOT EXISTS idx_edge_to_id   ON public.edge (to_entity_id);
