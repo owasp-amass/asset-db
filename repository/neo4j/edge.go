@@ -30,13 +30,16 @@ func (neo *NeoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*ty
 			edge.FromEntity.Asset.AssetType(), edge.Relation.Label(), edge.ToEntity.Asset.AssetType())
 	}
 
-	if edge.ID == "" {
-		edge.ID = neo.uniqueEntityID()
-	}
-
 	if edge.LastSeen.IsZero() {
 		edge.LastSeen = time.Now()
 	}
+
+	if edge.ID != "" {
+		neo.DeleteEdge(ctx, edge.ID)
+	} else {
+		edge.ID = neo.uniqueEntityID()
+	}
+
 	// ensure that duplicate relationships are not entered into the database
 	if e, found := neo.isDuplicateEdge(edge, edge.LastSeen); found {
 		return e, nil
@@ -84,6 +87,9 @@ func (neo *NeoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*ty
 
 	r.FromEntity = edge.FromEntity
 	r.ToEntity = edge.ToEntity
+
+
+
 	return r, nil
 }
 
