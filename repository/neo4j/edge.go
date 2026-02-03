@@ -30,6 +30,10 @@ func (neo *NeoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*ty
 			edge.FromEntity.Asset.AssetType(), edge.Relation.Label(), edge.ToEntity.Asset.AssetType())
 	}
 
+	if edge.ID == "" {
+		edge.ID = neo.uniqueEntityID()
+	}
+
 	if edge.LastSeen.IsZero() {
 		edge.LastSeen = time.Now()
 	}
@@ -115,7 +119,7 @@ func (neo *NeoRepository) edgeSeen(rel *types.Edge, updated time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	query := fmt.Sprintf("MATCH ()-[r]->() WHERE elementId(r) = $eid SET r.updated_at = localDateTime('%s')", timeToNeo4jTime(updated))
+	query := fmt.Sprintf("MATCH ()-[r {edge_id: $eid}]->() SET r.updated_at = localDateTime('%s')", timeToNeo4jTime(updated))
 	_, err := neo4jdb.ExecuteQuery(ctx, neo.DB, query,
 		map[string]interface{}{
 			"eid": rel.ID,
@@ -132,7 +136,7 @@ func (neo *NeoRepository) FindEdgeById(ctx context.Context, id string) (*types.E
 	defer cancel()
 
 	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-		"MATCH (from:Entity)-[r]->(to:Entity) WHERE elementId(r) = $eid RETURN r, from.entity_id AS fid, to.entity_id AS tid",
+		"MATCH (from:Entity)-[r {edge_id: $eid}]->(to:Entity) RETURN r, from.entity_id AS fid, to.entity_id AS tid",
 		map[string]interface{}{
 			"eid": id,
 		},
@@ -324,7 +328,7 @@ func (neo *NeoRepository) DeleteEdge(ctx context.Context, id string) error {
 	defer cancel()
 
 	_, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-		"MATCH ()-[r]->() WHERE elementId(r) = $eid DELETE r",
+		"MATCH ()-[r {edge_id: $eid}]->() DELETE r",
 		map[string]interface{}{
 			"eid": id,
 		},
