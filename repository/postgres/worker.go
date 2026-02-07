@@ -271,6 +271,13 @@ func (w *Worker) runAggregator(ctx context.Context) {
 			// Drain channel until closed, then flush whatever remains.
 			w.queue.Process(func(element any) {
 				if j, ok := element.(job); ok {
+					select {
+					case <-j.GetCtx().Done():
+						j.Done() <- errors.New("context expired")
+						return
+					default:
+					}
+
 					batch = append(batch, j)
 					if len(batch) >= w.cfg.MaxBatchSize {
 						flush(batch)
@@ -289,6 +296,13 @@ func (w *Worker) runAggregator(ctx context.Context) {
 				j, ok := element.(job)
 				if !ok {
 					return
+				}
+
+				select {
+				case <-j.GetCtx().Done():
+					j.Done() <- errors.New("context expired")
+					return
+				default:
 				}
 
 				batch = append(batch, j)
@@ -318,7 +332,10 @@ func (w *Worker) flushBatch(ctx context.Context, items []job) error {
 			j.Queue(&b)
 		}
 
-		br := conn.SendBatch(ctx, &b)
+		sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+
+		br := conn.SendBatch(sctx, &b)
 		defer func() { _ = br.Close() }()
 
 		for _, j := range items {
