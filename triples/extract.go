@@ -87,37 +87,50 @@ func performWalk(db repository.Repository, triples []*Triple, idx int, links []*
 	var rels []*Link
 	triple := triples[idx]
 
+	var count int
+	ch := make(chan *Link, len(links))
 	for _, n := range links {
-		ent := n.Node.entity
+		count++
 
-		// filter based on the entity asset and the triple subject
-		if (triple.Subject.Since.IsZero() || !ent.LastSeen.Before(triple.Subject.Since)) &&
-			(triple.Subject.Type == "*" || triple.Subject.Type == ent.Asset.AssetType()) &&
-			(triple.Subject.Key == "*" || valueMatch(ent.Asset.Key(), triple.Subject.Key,
-				triple.Subject.Regexp)) && allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
+		go func(t *Triple, ent *dbt.Entity, link *Link, ch chan<- *Link) {
+			var rel *Link
+			// filter based on the entity asset and the triple subject
+			if (t.Subject.Since.IsZero() || !ent.LastSeen.Before(t.Subject.Since)) &&
+				(t.Subject.Type == "*" || t.Subject.Type == ent.Asset.AssetType()) &&
+				(t.Subject.Key == "*" || valueMatch(ent.Asset.Key(), t.Subject.Key,
+					t.Subject.Regexp)) && allAttrsMatch(ent.Asset, t.Subject.Attributes) {
 
-			if subjectProps, ok := entityPropsMatch(db, ent, triple.Subject.Properties); ok {
-				if entRels, err := predAndObject(db, ent, triple); err == nil && len(entRels) > 0 {
-					var include bool
+				if subjectProps, ok := entityPropsMatch(db, ent, t.Subject.Properties); ok {
+					if entRels, err := predAndObject(db, ent, t); err == nil && len(entRels) > 0 {
+						var include bool
 
-					if idx+1 < len(triples) {
-						if entRels, err := performWalk(db, triples, idx+1, entRels); err == nil && len(entRels) > 0 {
-							include = true // continue walking if there are more triples to process
+						if idx+1 < len(triples) {
+							if entRels, err := performWalk(db, triples, idx+1, entRels); err == nil && len(entRels) > 0 {
+								include = true // continue walking if there are more triples to process
+								n.Node.Relations = append(n.Node.Relations, entRels...)
+							}
+						} else {
+							include = true // last triple, include all relations
 							n.Node.Relations = append(n.Node.Relations, entRels...)
 						}
-					} else {
-						include = true // last triple, include all relations
-						n.Node.Relations = append(n.Node.Relations, entRels...)
-					}
 
-					if include {
-						rels = append(rels, n)
-						n.Node.Properties = subjectProps
+						if include {
+							rel = link // send the link to the channel if it matches the subject and has valid relations
+							n.Node.Properties = subjectProps
+						}
 					}
 				}
 			}
+			ch <- rel // send the link (or nil) to the channel
+		}(triple, n.Node.entity, n, ch)
+	}
+
+	for range count {
+		if rel := <-ch; rel != nil {
+			rels = append(rels, rel)
 		}
 	}
+	close(ch)
 
 	var err error
 	if len(rels) == 0 {
@@ -148,54 +161,69 @@ func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([
 		return nil, fmt.Errorf("failed to get edges for entity %s: %v", ent.ID, err)
 	}
 
+	var count int
 	var results []*Link
+	ch := make(chan *Link, len(edges))
 	for _, edge := range edges {
-		// perform filtering based on the predicate in the triple and the edge relation
-		if edge != nil && (triple.Predicate.Type == oam.RelationType("*") ||
-			triple.Predicate.Type == edge.Relation.RelationType()) && (triple.Predicate.Label == "*" ||
-			valueMatch(edge.Relation.Label(), triple.Predicate.Label, triple.Predicate.Regexp)) &&
-			allAttrsMatch(edge.Relation, triple.Predicate.Attributes) {
-			if linkProps, ok := edgePropsMatch(db, edge, triple.Predicate.Properties); ok {
-				var objent *dbt.Entity
+		count++
 
-				if triple.Direction == DirectionIncoming {
-					objent = edge.FromEntity
-				} else {
-					objent = edge.ToEntity
-				}
+		go func(t *Triple, e *dbt.Edge, ch chan<- *Link) {
+			var link *Link
+			// perform filtering based on the predicate in the triple and the edge relation
+			if e != nil && (t.Predicate.Type == oam.RelationType("*") ||
+				t.Predicate.Type == e.Relation.RelationType()) && (t.Predicate.Label == "*" ||
+				valueMatch(e.Relation.Label(), t.Predicate.Label, t.Predicate.Regexp)) &&
+				allAttrsMatch(e.Relation, t.Predicate.Attributes) {
+				if linkProps, ok := edgePropsMatch(db, e, t.Predicate.Properties); ok {
+					var objent *dbt.Entity
 
-				if obj, err := db.FindEntityById(ctx, objent.ID); err == nil && obj != nil {
-					// perform filtering based on the object in the triple and the entity asset
-					if (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) &&
-						(triple.Object.Type == "*" || triple.Object.Type == obj.Asset.AssetType()) &&
-						(triple.Object.Key == "*" || valueMatch(obj.Asset.Key(), triple.Object.Key,
-							triple.Object.Regexp)) && allAttrsMatch(obj.Asset, triple.Object.Attributes) {
+					if t.Direction == DirectionIncoming {
+						objent = e.FromEntity
+					} else {
+						objent = e.ToEntity
+					}
 
-						if objectProps, ok := entityPropsMatch(db, obj, triple.Object.Properties); ok {
-							results = append(results, &Link{
-								ID:        edge.ID,
-								Type:      edge.Relation.RelationType(),
-								CreatedAt: edge.CreatedAt.Format(time.DateOnly),
-								LastSeen:  edge.LastSeen.Format(time.DateOnly),
-								Relation:  edge.Relation,
-								Node: &Vertex{
-									ID:         obj.ID,
-									entity:     obj,
-									Type:       obj.Asset.AssetType(),
-									CreatedAt:  obj.CreatedAt.Format(time.DateOnly),
-									LastSeen:   obj.LastSeen.Format(time.DateOnly),
-									Asset:      obj.Asset,
-									Relations:  []*Link{},
-									Properties: objectProps,
-								},
-								Properties: linkProps,
-							})
+					if obj, err := db.FindEntityById(ctx, objent.ID); err == nil && obj != nil {
+						// perform filtering based on the object in the triple and the entity asset
+						if (t.Object.Since.IsZero() || !obj.LastSeen.Before(t.Object.Since)) &&
+							(t.Object.Type == "*" || t.Object.Type == obj.Asset.AssetType()) &&
+							(t.Object.Key == "*" || valueMatch(obj.Asset.Key(), t.Object.Key,
+								t.Object.Regexp)) && allAttrsMatch(obj.Asset, t.Object.Attributes) {
+
+							if objectProps, ok := entityPropsMatch(db, obj, t.Object.Properties); ok {
+								link = &Link{
+									ID:        e.ID,
+									Type:      e.Relation.RelationType(),
+									CreatedAt: e.CreatedAt.Format(time.DateOnly),
+									LastSeen:  e.LastSeen.Format(time.DateOnly),
+									Relation:  e.Relation,
+									Node: &Vertex{
+										ID:         obj.ID,
+										entity:     obj,
+										Type:       obj.Asset.AssetType(),
+										CreatedAt:  obj.CreatedAt.Format(time.DateOnly),
+										LastSeen:   obj.LastSeen.Format(time.DateOnly),
+										Asset:      obj.Asset,
+										Relations:  []*Link{},
+										Properties: objectProps,
+									},
+									Properties: linkProps,
+								}
+							}
 						}
 					}
 				}
 			}
+			ch <- link // send the link (or nil) to the channel
+		}(triple, edge, ch)
+	}
+
+	for range count {
+		if link := <-ch; link != nil {
+			results = append(results, link)
 		}
 	}
+	close(ch)
 
 	if len(results) == 0 {
 		return nil, fmt.Errorf("no objects found for entity %s with predicate %s", ent.ID, triple.Predicate.Label)
@@ -269,7 +297,7 @@ func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
 	case strings.EqualFold(subtype, string(oam.Person)):
 		filter["unique_id"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.Phone)):
-		filter["raw"] = subject.Key
+		filter["e164"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.Product)):
 		filter["unique_id"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.ProductRelease)):
