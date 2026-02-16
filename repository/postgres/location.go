@@ -68,7 +68,7 @@ func (r *PostgresRepository) upsertLocation(ctx context.Context, a *contact.Loca
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -87,7 +87,7 @@ func (r *PostgresRepository) fetchLocationByRowID(ctx context.Context, eid, rowI
 			&province, &locality, &postalCode, &streetName, &buildingNumber, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func (r *PostgresRepository) getLocationsUpdatedSince(ctx context.Context, since
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

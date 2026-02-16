@@ -73,7 +73,7 @@ func (r *PostgresRepository) upsertFundsTransfer(ctx context.Context, a *oamfin.
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -91,7 +91,7 @@ func (r *PostgresRepository) fetchFundsTransferByRowID(ctx context.Context, eid,
 		return row.Scan(&row_id, &c, &u, &a.ID, &amount, &refnum, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (r *PostgresRepository) findFundsTransfersByContent(ctx context.Context, fi
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (r *PostgresRepository) getFundsTransfersUpdatedSince(ctx context.Context, 
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

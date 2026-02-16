@@ -60,7 +60,7 @@ func (r *PostgresRepository) upsertProductRelease(ctx context.Context, a *oampla
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -76,7 +76,7 @@ func (r *PostgresRepository) fetchProductReleaseByRowID(ctx context.Context, eid
 		return row.Scan(&row_id, &c, &u, &a.Name, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (r *PostgresRepository) findProductReleasesByContent(ctx context.Context, f
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (r *PostgresRepository) getProductReleasesUpdatedSince(ctx context.Context,
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

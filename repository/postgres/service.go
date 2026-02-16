@@ -65,7 +65,7 @@ func (r *PostgresRepository) upsertService(ctx context.Context, a *oamplat.Servi
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -81,7 +81,7 @@ func (r *PostgresRepository) fetchServiceByRowID(ctx context.Context, eid, rowID
 		return row.Scan(&row_id, &c, &u, &a.ID, &a.Type, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (r *PostgresRepository) findServicesByContent(ctx context.Context, filters 
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func (r *PostgresRepository) getServicesUpdatedSince(ctx context.Context, since 
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

@@ -66,7 +66,7 @@ func (r *PostgresRepository) upsertIdentifier(ctx context.Context, a *oamgen.Ide
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -82,7 +82,7 @@ func (r *PostgresRepository) fetchIdentifierByRowID(ctx context.Context, eid, ro
 		return row.Scan(&row_id, &c, &u, &a.UniqueID, &a.ID, &a.Type, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (r *PostgresRepository) findIdentifiersByContent(ctx context.Context, filte
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (r *PostgresRepository) getIdentifiersUpdatedSince(ctx context.Context, sin
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

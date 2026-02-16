@@ -69,7 +69,7 @@ func (r *PostgresRepository) upsertOrganization(ctx context.Context, a *oamorg.O
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -86,7 +86,7 @@ func (r *PostgresRepository) fetchOrganizationByRowID(ctx context.Context, eid, 
 		return row.Scan(&row_id, &c, &u, &a.ID, &a.Name, &legal, &jurisdiction, &registration, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (r *PostgresRepository) findOrganizationsByContent(ctx context.Context, fil
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (r *PostgresRepository) getOrganizationsUpdatedSince(ctx context.Context, s
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

@@ -65,7 +65,7 @@ func (r *PostgresRepository) upsertAccount(ctx context.Context, a *oamacct.Accou
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -80,7 +80,7 @@ func (r *PostgresRepository) fetchAccountByRowID(ctx context.Context, eid, rowID
 		return row.Scan(&rid, &c, &u, &a.ID, &a.Type, &username, &number, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (r *PostgresRepository) findAccountsByContent(ctx context.Context, filters 
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (r *PostgresRepository) getAccountsUpdatedSince(ctx context.Context, since 
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

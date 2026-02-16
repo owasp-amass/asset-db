@@ -73,7 +73,7 @@ func (r *PostgresRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int6
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -90,7 +90,7 @@ func (r *PostgresRepository) fetchURLByRowID(ctx context.Context, eid, rowID int
 		return row.Scan(&rid, &c, &u, &a.Raw, &scheme, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (r *PostgresRepository) findURLsByContent(ctx context.Context, filters dbt.
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func (r *PostgresRepository) getURLsUpdatedSince(ctx context.Context, since time
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

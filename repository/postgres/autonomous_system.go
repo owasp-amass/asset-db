@@ -55,7 +55,7 @@ func (r *PostgresRepository) upsertAutonomousSystem(ctx context.Context, a *oamn
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -71,7 +71,7 @@ func (r *PostgresRepository) fetchAutonomousSystemByRowID(ctx context.Context, e
 		return row.Scan(&rid, &c, &u, &a.Number, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (r *PostgresRepository) findAutonomousSystemsByContent(ctx context.Context,
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (r *PostgresRepository) getAutonomousSystemsUpdatedSince(ctx context.Contex
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

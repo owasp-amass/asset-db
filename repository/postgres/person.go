@@ -66,7 +66,7 @@ func (r *PostgresRepository) upsertPerson(ctx context.Context, a *people.Person)
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -83,7 +83,7 @@ func (r *PostgresRepository) fetchPersonByRowID(ctx context.Context, eid, rowID 
 		return row.Scan(&rid, &c, &u, &a.ID, &full, &first, &family, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (r *PostgresRepository) findPersonsByContent(ctx context.Context, filters d
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (r *PostgresRepository) getPersonsUpdatedSince(ctx context.Context, since t
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

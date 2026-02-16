@@ -108,7 +108,7 @@ func (r *PostgresRepository) upsertIPNetRecord(ctx context.Context, a *oamreg.IP
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -127,7 +127,7 @@ func (r *PostgresRepository) fetchIPNetRecordByRowID(ctx context.Context, eid, r
 			&a.Handle, &whois, &parent, &start, &end, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (r *PostgresRepository) findIPNetRecordsByContent(ctx context.Context, filt
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func (r *PostgresRepository) getIPNetRecordsUpdatedSince(ctx context.Context, si
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

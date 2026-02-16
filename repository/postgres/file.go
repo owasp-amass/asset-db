@@ -56,7 +56,7 @@ func (r *PostgresRepository) upsertFile(ctx context.Context, a *oamfile.File) (i
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -73,7 +73,7 @@ func (r *PostgresRepository) fetchFileByRowID(ctx context.Context, eid, rowID in
 		return row.Scan(&rid, &c, &u, &a.URL, &name, &fileType, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (r *PostgresRepository) findFilesByContent(ctx context.Context, filters dbt
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (r *PostgresRepository) getFilesUpdatedSince(ctx context.Context, since tim
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

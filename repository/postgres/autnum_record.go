@@ -80,7 +80,7 @@ func (r *PostgresRepository) upsertAutnumRecord(ctx context.Context, a *oamreg.A
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -95,7 +95,7 @@ func (r *PostgresRepository) fetchAutnumRecordByRowID(ctx context.Context, eid, 
 		return row.Scan(&rid, &c, &u, &a.Handle, &a.Number, &name, &whois, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (r *PostgresRepository) findAutnumRecordsByContent(ctx context.Context, fil
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, s
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

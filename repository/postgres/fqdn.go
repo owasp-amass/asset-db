@@ -55,7 +55,7 @@ func (r *PostgresRepository) upsertFQDN(ctx context.Context, a *oamdns.FQDN) (in
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -71,7 +71,7 @@ func (r *PostgresRepository) fetchFQDNByRowID(ctx context.Context, eid, rowID in
 		return row.Scan(&rid, &c, &u, &a.Name, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (r *PostgresRepository) findFQDNsByContent(ctx context.Context, filters dbt
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (r *PostgresRepository) getFQDNsUpdatedSince(ctx context.Context, since tim
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

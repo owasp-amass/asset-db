@@ -13,7 +13,6 @@ import (
 
 	"github.com/caffix/queue"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -394,18 +393,6 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 		}
 		return nil
 	})
-}
-
-func wrapPgErr(prefix string, err error) error {
-	if err == nil {
-		return nil
-	}
-	// Surface pgconn.PgError where possible.
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return fmt.Errorf("%s (pg): %s (SQLSTATE %s): %w", prefix, pgErr.Message, pgErr.Code, err)
-	}
-	return fmt.Errorf("%s: %w", prefix, err)
 }
 
 func errToJobs(jobs []job, err error) {

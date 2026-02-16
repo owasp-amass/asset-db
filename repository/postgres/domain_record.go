@@ -69,7 +69,7 @@ func (r *PostgresRepository) upsertDomainRecord(ctx context.Context, a *oamreg.D
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -87,7 +87,7 @@ func (r *PostgresRepository) fetchDomainRecordByRowID(ctx context.Context, eid, 
 			&name, &puny, &ext, &whois, &objectid, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (r *PostgresRepository) findDomainRecordsByContent(ctx context.Context, fil
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (r *PostgresRepository) getDomainRecordsUpdatedSince(ctx context.Context, s
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

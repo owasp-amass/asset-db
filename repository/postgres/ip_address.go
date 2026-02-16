@@ -77,7 +77,7 @@ func (r *PostgresRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAd
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -93,7 +93,7 @@ func (r *PostgresRepository) fetchIPAddressByRowID(ctx context.Context, eid, row
 		return row.Scan(&rid, &c, &u, &a.Address, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (r *PostgresRepository) findIPAddressesByContent(ctx context.Context, filte
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func (r *PostgresRepository) getIPAddressesUpdatedSince(ctx context.Context, sin
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

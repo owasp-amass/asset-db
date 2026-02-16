@@ -26,13 +26,17 @@ func setupContainerAndPostgresRepo() (*testhelpers.PostgresContainer, *PostgresR
 }
 
 func LogDatabaseState(repo *PostgresRepository) {
-	p := repo.pool.pool
-	st := p.Stat()
-	cfg := p.Config()
-	cc := cfg.ConnConfig
+	names := []string{"reader", "writer"}
+	pools := []*Worker{repo.rpool, repo.wpool}
 
-	log.Printf("pool endpoint host=%q port=%d db=%q user=%q", cc.Host, cc.Port, cc.Database, cc.User)
+	for i, name := range names {
+		p := pools[i].pool
+		st := p.Stat()
+		cfg := p.Config()
+		cc := cfg.ConnConfig
 
-	log.Printf("pool stat: total=%d idle=%d acquired=%d constructing=%d max=%d",
-		st.TotalConns(), st.IdleConns(), st.AcquiredConns(), st.ConstructingConns(), st.MaxConns())
+		log.Printf("%s pool endpoint host=%q port=%d db=%q user=%q", name, cc.Host, cc.Port, cc.Database, cc.User)
+		log.Printf("%s pool stats: total=%d idle=%d acquired=%d constructing=%d max=%d",
+			name, st.TotalConns(), st.IdleConns(), st.AcquiredConns(), st.ConstructingConns(), st.MaxConns())
+	}
 }

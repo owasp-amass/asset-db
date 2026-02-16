@@ -55,7 +55,7 @@ func (r *PostgresRepository) upsertContactRecord(ctx context.Context, a *contact
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -71,7 +71,7 @@ func (r *PostgresRepository) fetchContactRecordByRowID(ctx context.Context, eid,
 		return row.Scan(&rid, &c, &u, &a.DiscoveredAt, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (r *PostgresRepository) findContactRecordsByContent(ctx context.Context, fi
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (r *PostgresRepository) getContactRecordsUpdatedSince(ctx context.Context, 
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

@@ -265,9 +265,10 @@ func (r *PostgresRepository) fetchEntityTypeAndRowID(ctx context.Context, eid in
 		`SELECT e.etype_name, e.row_id FROM public.entity_get_by_id(@entity_id::bigint) AS e`,
 		pgx.NamedArgs{"entity_id": eid}, func(row pgx.Row) error {
 			return row.Scan(&etype, &rowID)
-		})
+		},
+	)
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return "", 0, err
 	}
@@ -360,7 +361,7 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 			return row.Scan(&table, &id)
 		})
 
-		r.pool.Submit(j)
+		r.rpool.Submit(j)
 		if err := j.Wait(); err != nil {
 			return err
 		}
@@ -375,7 +376,7 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 				return nil
 			})
 
-			r.pool.Submit(j)
+			r.wpool.Submit(j)
 			if err := j.Wait(); err != nil {
 				return err
 			}
@@ -392,6 +393,6 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 		return nil
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return j.Wait()
 }

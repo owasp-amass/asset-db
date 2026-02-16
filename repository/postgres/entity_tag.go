@@ -54,7 +54,8 @@ func (r *PostgresRepository) CreateEntityProperty(ctx context.Context, entity *d
 	}, func(row pgx.Row) error {
 		return row.Scan(&tid)
 	})
-	r.pool.Submit(j)
+
+	r.wpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -78,7 +79,7 @@ func (r *PostgresRepository) FindEntityTagById(ctx context.Context, id string) (
 		return row.Scan(&tid, &eid, &c, &u, &ttype, &content)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -159,7 +160,7 @@ func (r *PostgresRepository) tagsForEntity(ctx context.Context, eid int64, since
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -181,6 +182,6 @@ func (r *PostgresRepository) removeEntityTag(ctx context.Context, tid int64) (in
 		return nil
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return tid, j.Wait()
 }

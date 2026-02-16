@@ -98,7 +98,7 @@ func (r *PostgresRepository) upsertTLSCertificate(ctx context.Context, a *oamcer
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -114,7 +114,7 @@ func (r *PostgresRepository) fetchTLSCertificateByRowID(ctx context.Context, eid
 		return row.Scan(&rid, &c, &u, &a.SerialNumber, &a.SubjectCommonName, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (r *PostgresRepository) findTLSCertificatesByContent(ctx context.Context, f
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (r *PostgresRepository) getTLSCertificatesUpdatedSince(ctx context.Context,
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

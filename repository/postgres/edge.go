@@ -97,7 +97,7 @@ func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*d
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, fmt.Errorf("failed to upsert edge: %v", err)
 	}
@@ -125,7 +125,7 @@ func (r *PostgresRepository) idToEdge(ctx context.Context, id int64) (*dbt.Edge,
 		return row.Scan(&rowid, &c, &u, &etype, &fromid, &toid, &raw)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -301,6 +301,6 @@ func (r *PostgresRepository) deleteEdgeByID(ctx context.Context, id int64) error
 		return nil
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return j.Wait()
 }

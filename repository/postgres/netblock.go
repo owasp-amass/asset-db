@@ -77,7 +77,7 @@ func (r *PostgresRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbl
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -93,7 +93,7 @@ func (r *PostgresRepository) fetchNetblockByRowID(ctx context.Context, eid, rowI
 		return row.Scan(&rid, &c, &u, &a.CIDR, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (r *PostgresRepository) findNetblocksByContent(ctx context.Context, filters
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (r *PostgresRepository) getNetblocksUpdatedSince(ctx context.Context, since
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

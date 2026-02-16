@@ -55,7 +55,7 @@ func (r *PostgresRepository) CreateEdgeProperty(ctx context.Context, edge *dbt.E
 		return row.Scan(&tid)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (r *PostgresRepository) FindEdgeTagById(ctx context.Context, id string) (*d
 		return row.Scan(&tid, &eid, &c, &u, &ttype, &content)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (r *PostgresRepository) tagsForEdge(ctx context.Context, eid int64, since t
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -183,6 +183,6 @@ func (r *PostgresRepository) removeEdgeTag(ctx context.Context, tid int64) (int6
 		return nil
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return tid, j.Wait()
 }

@@ -67,7 +67,7 @@ func (r *PostgresRepository) upsertPhone(ctx context.Context, a *contact.Phone) 
 		return row.Scan(&id)
 	})
 
-	r.pool.Submit(j)
+	r.wpool.Submit(j)
 	return id, j.Wait()
 }
 
@@ -84,7 +84,7 @@ func (r *PostgresRepository) fetchPhoneByRowID(ctx context.Context, eid, rowID i
 		return row.Scan(&rid, &c, &u, &a.E164, &cc, &attrsJSON)
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (r *PostgresRepository) findPhonesByContent(ctx context.Context, filters db
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (r *PostgresRepository) getPhonesUpdatedSince(ctx context.Context, since ti
 		return rows.Err()
 	})
 
-	r.pool.Submit(j)
+	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
 		return nil, err
 	}

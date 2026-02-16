@@ -43,7 +43,7 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 
 	rcfg := WorkerConfig{
 		PoolMinConns:      1,
-		PoolMaxConns:      1,
+		PoolMaxConns:      int32(numberOfConns),
 		MaxConnLifetime:   30 * time.Minute,
 		MaxConnIdleTime:   5 * time.Minute,
 		HealthCheckPeriod: 1 * time.Minute,
@@ -54,7 +54,7 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 	wcfg := WorkerConfig{
 		TxMode:            true,
 		PoolMinConns:      1,
-		PoolMaxConns:      int32(numberOfConns),
+		PoolMaxConns:      1,
 		MaxConnLifetime:   30 * time.Minute,
 		MaxConnIdleTime:   5 * time.Minute,
 		HealthCheckPeriod: 1 * time.Minute,
