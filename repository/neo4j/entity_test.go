@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"testing"
 	"time"
+	"context"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -21,7 +22,7 @@ import (
 )
 
 func TestCreateEntity(t *testing.T) {
-	entity, err := store.CreateEntity(&types.Entity{
+	entity, err := store.CreateEntity(context.TODO(), &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "create1.entity",
 		},
@@ -29,7 +30,7 @@ func TestCreateEntity(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(250 * time.Millisecond)
-	newer, err := store.CreateEntity(&types.Entity{
+	newer, err := store.CreateEntity(context.TODO(), &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "create1.entity",
 		},
@@ -53,7 +54,7 @@ func TestCreateEntity(t *testing.T) {
 	}
 
 	time.Sleep(250 * time.Millisecond)
-	second, err := store.CreateEntity(&types.Entity{
+	second, err := store.CreateEntity(context.TODO(), &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "create2.entity",
 		},
@@ -67,14 +68,14 @@ func TestCreateEntity(t *testing.T) {
 }
 
 func TestFindEntityById(t *testing.T) {
-	entity, err := store.CreateEntity(&types.Entity{
+	entity, err := store.CreateEntity(context.TODO(), &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "find1.entity",
 		},
 	})
 	assert.NoError(t, err)
 
-	same, err := store.FindEntityById(entity.ID)
+	same, err := store.FindEntityById(context.TODO(), entity.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, entity.ID, same.ID)
 
@@ -90,13 +91,13 @@ func TestFindEntityById(t *testing.T) {
 func TestFindEntitiesByContent(t *testing.T) {
 	fqdn := &dns.FQDN{Name: "findcontent.entity"}
 
-	_, err := store.FindEntitiesByContent(fqdn, time.Time{}, 0)
+	_, err := store.FindEntitiesByContent(context.TODO(), fqdn.AssetType(), time.Time{}, 0, nil)
 	assert.Error(t, err)
 
-	entity, err := store.CreateAsset(fqdn)
+	entity, err := store.CreateAsset(context.TODO(), fqdn)
 	assert.NoError(t, err)
 
-	e, err := store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(-1*time.Second), 0)
+	e, err := store.FindEntitiesByContent(context.TODO(), fqdn.AssetType(), entity.CreatedAt.Add(-1*time.Second), 0, nil)
 	assert.NoError(t, err)
 	same := e[0]
 	assert.Equal(t, entity.ID, same.ID)
@@ -109,7 +110,7 @@ func TestFindEntitiesByContent(t *testing.T) {
 		t.Errorf("Failed to return an entity with the correct name")
 	}
 
-	_, err = store.FindEntitiesByContent(fqdn, entity.CreatedAt.Add(250*time.Millisecond), 0)
+	_, err = store.FindEntitiesByContent(context.TODO(), fqdn.AssetType(), entity.CreatedAt.Add(250*time.Millisecond), 0, nil)
 	assert.Error(t, err)
 }
 
@@ -120,14 +121,14 @@ func TestFindEntitiesByType(t *testing.T) {
 		addr, err := netip.ParseAddr(fmt.Sprintf("192.168.1.%d", i))
 		assert.NoError(t, err)
 
-		_, err = store.CreateAsset(&oamnet.IPAddress{
+		_, err = store.CreateAsset(context.TODO(), &oamnet.IPAddress{
 			Address: addr,
 			Type:    "IPv4",
 		})
 		assert.NoError(t, err)
 	}
 
-	entities, err := store.FindEntitiesByType(oam.IPAddress, time.Time{}, 0)
+	entities, err := store.FindEntitiesByType(context.TODO(), oam.IPAddress, time.Time{}, 0)
 	assert.NoError(t, err)
 
 	if len(entities) < 10 {
@@ -135,11 +136,11 @@ func TestFindEntitiesByType(t *testing.T) {
 	}
 
 	for i := 1; i <= 10; i++ {
-		_, err := store.CreateAsset(&org.Organization{Name: fmt.Sprintf("findtype%d.entity", i)})
+		_, err := store.CreateAsset(context.TODO(), &org.Organization{Name: fmt.Sprintf("findtype%d.entity", i)})
 		assert.NoError(t, err)
 	}
 
-	entities, err = store.FindEntitiesByType(oam.Organization, now, 0)
+	entities, err = store.FindEntitiesByType(context.TODO(), oam.Organization, now, 0)
 	assert.NoError(t, err)
 
 	if len(entities) < 10 {
@@ -148,16 +149,16 @@ func TestFindEntitiesByType(t *testing.T) {
 }
 
 func TestDeleteEntity(t *testing.T) {
-	entity, err := store.CreateEntity(&types.Entity{
+	entity, err := store.CreateEntity(context.TODO(), &types.Entity{
 		Asset: &dns.FQDN{
 			Name: "delete.entity",
 		},
 	})
 	assert.NoError(t, err)
 
-	err = store.DeleteEntity(entity.ID)
+	err = store.DeleteEntity(context.TODO(), entity.ID)
 	assert.NoError(t, err)
 
-	_, err = store.FindEntityById(entity.ID)
+	_, err = store.FindEntityById(context.TODO(), entity.ID)
 	assert.Error(t, err)
 }

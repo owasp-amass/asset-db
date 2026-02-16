@@ -18,7 +18,7 @@ var store *NeoRepository
 
 func TestMain(m *testing.M) {
 	var err error
-	dsn := "bolt://neo4j:hackme4fun@localhost:7687/amass"
+	dsn := "bolt://neo4j:password@localhost:7687/neo4j"
 
 	store, err = New("neo4j", dsn)
 	if err != nil {
@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestGetDBType(t *testing.T) {
-	if db := store.GetDBType(); db != Neo4j {
+	if db := store.Type(); db != Neo4j {
 		t.Errorf("Failed to return the correct database type")
 	}
 }
