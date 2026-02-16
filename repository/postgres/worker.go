@@ -13,6 +13,7 @@ import (
 
 	"github.com/caffix/queue"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,6 +30,9 @@ type Worker struct {
 
 // WorkerConfig controls batching and concurrency behavior.
 type WorkerConfig struct {
+	// TxMode enables wrapping each job in a transaction with savepoints for isolation.
+	TxMode bool
+
 	// PoolMinConns sets pgxpool MinConns. If 0, defaults to 0.
 	PoolMinConns int32
 
@@ -237,19 +241,10 @@ func (w *Worker) runAggregator(ctx context.Context) {
 			defer w.wg.Done()
 			defer func() { w.flushSem <- struct{}{} }()
 
-			var err error
-			for range 5 {
-				err = w.flushBatch(ctx, items)
-				if err == nil {
-					break
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-			if err != nil {
-				for _, j := range items {
-					j.Done() <- err
-					close(j.Done())
-				}
+			if w.cfg.TxMode {
+				_ = w.flushBatchTxSavepoints(ctx, items)
+			} else {
+				_ = w.flushBatch(ctx, items)
 			}
 		}(items)
 	}
@@ -344,4 +339,78 @@ func (w *Worker) flushBatch(ctx context.Context, items []job) error {
 		}
 		return nil
 	})
+}
+
+func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error {
+	return w.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
+		// One overall timeout for the whole batch (keep or tune)
+		sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+
+		tx, err := conn.Begin(sctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback(sctx) }()
+
+		const sp = "sp_job"
+
+		for i, j := range items {
+			if err := j.GetCtx().Err(); err != nil {
+				j.Done() <- err
+				close(j.Done())
+				continue
+			}
+			// Create savepoint
+			if _, err := tx.Exec(sctx, "SAVEPOINT "+sp); err != nil {
+				j.Done() <- wrapPgErr("savepoint", err)
+				close(j.Done())
+				continue
+			}
+
+			runErr := j.RunTx(tx)
+			if runErr != nil {
+				// Clear aborted tx state (required after a statement error)
+				_, rbErr := tx.Exec(sctx, "ROLLBACK TO SAVEPOINT "+sp)
+				if rbErr != nil {
+					// If rollback to savepoint fails, the whole tx is likely toast; bail
+					fErr := fmt.Errorf("job error: %v; rollback-to-savepoint failed: %w", runErr, rbErr)
+					errToJobs(items[i:], fErr)
+					return fErr
+				}
+			}
+			// Release savepoint (even after rollback-to)
+			if _, relErr := tx.Exec(sctx, "RELEASE SAVEPOINT "+sp); relErr != nil && runErr == nil {
+				runErr = wrapPgErr("release savepoint", relErr)
+			}
+
+			j.Done() <- runErr
+			close(j.Done())
+		}
+		// Commit even if some jobs failed; that’s the whole point.
+		// Only fails if the tx is aborted or commit hits something fatal.
+		if err := tx.Commit(sctx); err != nil {
+			return wrapPgErr("commit", err)
+		}
+		return nil
+	})
+}
+
+func wrapPgErr(prefix string, err error) error {
+	if err == nil {
+		return nil
+	}
+	// Surface pgconn.PgError where possible.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return fmt.Errorf("%s (pg): %s (SQLSTATE %s): %w", prefix, pgErr.Message, pgErr.Code, err)
+	}
+	return fmt.Errorf("%s: %w", prefix, err)
+}
+
+func errToJobs(jobs []job, err error) {
+	for _, job := range jobs {
+		job.Done() <- err
+		close(job.Done())
+	}
 }

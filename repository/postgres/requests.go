@@ -19,8 +19,11 @@ type job interface {
 	GetArgs() pgx.NamedArgs
 	Done() chan error
 	Wait() error
+	// Methods for batching and decoding results:
 	Queue(*pgx.Batch)
 	Decode(pgx.BatchResults) error
+	// Tx-mode that support interactive execution
+	RunTx(pgx.Tx) error
 }
 
 func NewExecJob(ctx context.Context, sqlText string, args pgx.NamedArgs, callback func(tag pgconn.CommandTag) error) job {
@@ -96,16 +99,24 @@ func (w *execJob) Queue(batch *pgx.Batch) {
 func (w *execJob) Decode(br pgx.BatchResults) error {
 	tag, err := br.Exec()
 	if err != nil {
-		// Surface pgconn.PgError where possible.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			return fmt.Errorf("batch decode (pg): %s (SQLSTATE %s): %w", pgErr.Message, pgErr.Code, err)
-		}
-		return fmt.Errorf("batch decode: %w", err)
+		return wrapPgErr("batch decode", err)
 	}
 
 	if w.Callback != nil {
 		return w.Callback(tag)
+	}
+	return nil
+}
+
+func (w *execJob) RunTx(tx pgx.Tx) error {
+	tag, err := tx.Exec(w.Ctx, w.SQLText, w.Args)
+	if err != nil {
+		return wrapPgErr("tx exec", err)
+	}
+	if w.Callback != nil {
+		if err := w.Callback(tag); err != nil {
+			return fmt.Errorf("tx exec callback: %w", err)
+		}
 	}
 	return nil
 }
@@ -155,6 +166,19 @@ func (r *rowJob) Decode(br pgx.BatchResults) error {
 	return row.Scan()
 }
 
+func (r *rowJob) RunTx(tx pgx.Tx) error {
+	row := tx.QueryRow(r.Ctx, r.SQLText, r.Args)
+
+	if r.Callback != nil {
+		if err := r.Callback(row); err != nil {
+			return wrapPgErr("tx queryrow callback", err)
+		}
+		return nil
+	}
+
+	return wrapPgErr("tx queryrow scan", row.Scan())
+}
+
 type rowsJob struct {
 	Ctx      context.Context
 	SQLText  string
@@ -195,12 +219,7 @@ func (r *rowsJob) Queue(batch *pgx.Batch) {
 func (r *rowsJob) Decode(br pgx.BatchResults) error {
 	rows, err := br.Query()
 	if err != nil {
-		// Surface pgconn.PgError where possible.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			return fmt.Errorf("batch decode (pg): %s (SQLSTATE %s): %w", pgErr.Message, pgErr.Code, err)
-		}
-		return fmt.Errorf("batch decode: %w", err)
+		return wrapPgErr("batch decode", err)
 	}
 	defer rows.Close()
 
@@ -208,4 +227,31 @@ func (r *rowsJob) Decode(br pgx.BatchResults) error {
 		return r.Callback(rows)
 	}
 	return nil
+}
+
+func (r *rowsJob) RunTx(tx pgx.Tx) error {
+	rows, err := tx.Query(r.Ctx, r.SQLText, r.Args)
+	if err != nil {
+		return wrapPgErr("tx query", err)
+	}
+	defer rows.Close()
+
+	if r.Callback != nil {
+		if err := r.Callback(rows); err != nil {
+			return wrapPgErr("tx rows callback", err)
+		}
+	}
+	return nil
+}
+
+func wrapPgErr(prefix string, err error) error {
+	if err == nil {
+		return nil
+	}
+	// Surface pgconn.PgError where possible.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return fmt.Errorf("%s (pg): %s (SQLSTATE %s): %w", prefix, pgErr.Message, pgErr.Code, err)
+	}
+	return fmt.Errorf("%s: %w", prefix, err)
 }

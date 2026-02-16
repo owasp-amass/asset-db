@@ -20,15 +20,17 @@ import (
 
 const (
 	Postgres      string = "postgres"
-	numberOfConns int    = 4
+	numberOfConns int    = 3
 )
 
 // PostgresRepository is a repository implementation.
 type PostgresRepository struct {
 	DB     *sql.DB
-	pool   *Worker
 	dsn    string
-	cfg    WorkerConfig
+	rpool  *Worker
+	rcfg   WorkerConfig
+	wpool  *Worker
+	wcfg   WorkerConfig
 	dbtype string
 	cancel context.CancelFunc
 }
@@ -39,15 +41,28 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 		return nil, fmt.Errorf("unsupported database type: %s", dbtype)
 	}
 
-	repo, err := postgresDatabase(dsn, WorkerConfig{
-		PoolMinConns:      2,
+	rcfg := WorkerConfig{
+		PoolMinConns:      1,
+		PoolMaxConns:      1,
+		MaxConnLifetime:   30 * time.Minute,
+		MaxConnIdleTime:   5 * time.Minute,
+		HealthCheckPeriod: 1 * time.Minute,
+		StatementTimeout:  120 * time.Second,
+		ApplicationName:   "asset-db reader",
+	}
+
+	wcfg := WorkerConfig{
+		TxMode:            true,
+		PoolMinConns:      1,
 		PoolMaxConns:      int32(numberOfConns),
 		MaxConnLifetime:   30 * time.Minute,
 		MaxConnIdleTime:   5 * time.Minute,
 		HealthCheckPeriod: 1 * time.Minute,
-		StatementTimeout:  60 * time.Second,
-		ApplicationName:   "asset-db",
-	})
+		StatementTimeout:  120 * time.Second,
+		ApplicationName:   "asset-db writer",
+	}
+
+	repo, err := postgresDatabase(dsn, rcfg, wcfg)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +70,7 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 }
 
 // postgresDatabase creates a new PostgreSQL database connection using the provided data source name (dsn).
-func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error) {
+func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository, error) {
 	dsn = dsn + "?sslmode=disable&statement_cache_capacity=256&timezone=UTC&connect_timeout=5"
 	dsn = dsn + "&application_name=asset-db&statement_timeout=60000&lock_timeout=5000"
 
@@ -85,7 +100,8 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 	repo := &PostgresRepository{
 		DB:     db,
 		dsn:    dsn,
-		cfg:    withDefaults(cfg),
+		rcfg:   withDefaults(rcfg),
+		wcfg:   withDefaults(wcfg),
 		dbtype: Postgres,
 	}
 
@@ -94,13 +110,20 @@ func postgresDatabase(dsn string, cfg WorkerConfig) (*PostgresRepository, error)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	w, err := NewWorker(ctx, repo.dsn, repo.cfg)
+	r, err := NewWorker(ctx, repo.dsn, repo.rcfg)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	repo.rpool = r
+
+	w, err := NewWorker(ctx, repo.dsn, repo.wcfg)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
-	repo.pool = w
+	repo.wpool = w
 	repo.cancel = cancel
 	return repo, nil
 }
@@ -121,8 +144,11 @@ func (pr *PostgresRepository) Close() error {
 	if pr.cancel != nil {
 		pr.cancel()
 	}
-	if pr.pool != nil {
-		_ = pr.pool.Shutdown(context.TODO())
+	if pr.rpool != nil {
+		_ = pr.rpool.Shutdown(context.TODO())
+	}
+	if pr.wpool != nil {
+		_ = pr.wpool.Shutdown(context.TODO())
 	}
 	if pr.DB != nil {
 		return pr.DB.Close()

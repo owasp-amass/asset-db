@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -176,7 +177,7 @@ func (ww *writeWorker) run() {
 
 func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 	if len(jobs) == 0 {
-		return []*writeJob{}, nil
+		return nil, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -190,48 +191,76 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 				return jobs, err
 			}
 			tx, err = ww.conn.BeginTx(ctx, nil)
-		} else {
+		}
+		if err != nil {
 			return jobs, err
 		}
 	}
-	if err != nil {
-		return jobs, err
-	}
 	defer func() { _ = tx.Rollback() }()
 
-	var failed bool
-	var goodjobs []*writeJob
+	// Track jobs that executed successfully and are pending COMMIT.
+	// If COMMIT fails, all of these must be reported as failed.
+	var pendingCommit []*writeJob
+
 	for i, job := range jobs {
 		if err := job.Ctx.Err(); err != nil {
 			job.Result <- err
 			continue
 		}
 
+		// Per-job savepoint to isolate failures.
+		sp := fmt.Sprintf("sp_%d", i)
+
+		if _, err := tx.ExecContext(job.Ctx, "SAVEPOINT "+sp); err != nil {
+			job.Result <- err
+			continue
+		}
+
 		stmt, err := ww.getOrPrepare(job.Ctx, job.Name, job.SQLText)
 		if err != nil {
+			// Roll back just this job, keep going.
+			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
+			_, _ = tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp)
 			job.Result <- err
-			goodjobs = append(goodjobs, jobs[i+1:]...)
-			failed = true
-			break
+			continue
 		}
 
-		if _, err = tx.StmtContext(job.Ctx, stmt).Exec(job.Args...); err != nil {
+		_, err = tx.StmtContext(job.Ctx, stmt).Exec(job.Args...)
+		if err != nil {
+			// Roll back just this job, keep going.
+			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
+			_, _ = tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp)
 			job.Result <- err
-			goodjobs = append(goodjobs, jobs[i+1:]...)
-			failed = true
-			break
+			continue
 		}
 
-		goodjobs = append(goodjobs, job)
+		// Success for this job so far; release savepoint.
+		if _, err := tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp); err != nil {
+			// If we can't release, treat as job failure and isolate.
+			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
+			_, _ = tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp)
+			job.Result <- err
+			continue
+		}
+
+		// Defer "success" until COMMIT is successful.
+		pendingCommit = append(pendingCommit, job)
 	}
 
-	if !failed {
-		if err := tx.Commit(); err == nil {
-			errToJobs(goodjobs, nil)
-			return []*writeJob{}, nil
-		}
+	// If nothing succeeded, we're done (no need to commit).
+	if len(pendingCommit) == 0 {
+		return nil, nil
 	}
-	return goodjobs, errors.New("transaction failed")
+
+	if err := tx.Commit(); err != nil {
+		// None of the "pendingCommit" jobs were durably written.
+		errToJobs(pendingCommit, err)
+		return pendingCommit, err
+	}
+
+	// Now we can mark all "pendingCommit" jobs as successful.
+	errToJobs(pendingCommit, nil)
+	return nil, nil
 }
 
 func errToJobs(jobs []*writeJob, err error) {
