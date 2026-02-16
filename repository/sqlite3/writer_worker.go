@@ -115,11 +115,14 @@ func (ww *writeWorker) run() {
 	defer check.Stop()
 
 	var txlist []*writeJob
-	commit := func() {
-		var err error
-		txlist, err = ww.flushJobs(txlist)
-		for err != nil && len(txlist) > 0 {
-			txlist, err = ww.flushJobs(txlist)
+	commit := func(jobs []*writeJob) {
+		remaining, err := ww.flushJobs(jobs)
+		if err == nil || len(remaining) == 0 {
+			return
+		}
+
+		if failed, err := ww.flushJobs(remaining); err != nil && len(failed) > 0 {
+			errToJobs(failed, err)
 		}
 	}
 
@@ -152,7 +155,8 @@ func (ww *writeWorker) run() {
 
 			txlist = append(txlist, wj)
 			if len(txlist) >= ww.batchSize {
-				commit()
+				commit(txlist)
+				txlist = nil
 				return
 			}
 		}
@@ -164,11 +168,13 @@ func (ww *writeWorker) run() {
 			for !ww.jobs.Empty() {
 				queueCheck()
 			}
-			commit()
+			commit(txlist)
+			txlist = nil
 			return
 		case <-batchdur.C:
 			queueCheck()
-			commit()
+			commit(txlist)
+			txlist = nil
 		case <-ww.jobs.Signal():
 			queueCheck()
 		}
@@ -208,7 +214,7 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 			continue
 		}
 
-		// Per-job savepoint to isolate failures.
+		// Per-job savepoint to isolate failures
 		sp := fmt.Sprintf("sp_%d", i)
 
 		if _, err := tx.ExecContext(job.Ctx, "SAVEPOINT "+sp); err != nil {
@@ -218,7 +224,7 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 
 		stmt, err := ww.getOrPrepare(job.Ctx, job.Name, job.SQLText)
 		if err != nil {
-			// Roll back just this job, keep going.
+			// Roll back just this job, keep going
 			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
 			_, _ = tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp)
 			job.Result <- err
@@ -227,38 +233,37 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 
 		_, err = tx.StmtContext(job.Ctx, stmt).Exec(job.Args...)
 		if err != nil {
-			// Roll back just this job, keep going.
+			// Roll back just this job, keep going
 			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
 			_, _ = tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp)
 			job.Result <- err
 			continue
 		}
 
-		// Success for this job so far; release savepoint.
+		// Success for this job so far; release savepoint
 		if _, err := tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp); err != nil {
-			// If we can't release, treat as job failure and isolate.
+			// If we can't release, treat as job failure and isolate
 			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
 			_, _ = tx.ExecContext(job.Ctx, "RELEASE SAVEPOINT "+sp)
 			job.Result <- err
 			continue
 		}
 
-		// Defer "success" until COMMIT is successful.
+		// Defer "success" until COMMIT is successful
 		pendingCommit = append(pendingCommit, job)
 	}
 
-	// If nothing succeeded, we're done (no need to commit).
+	// If nothing succeeded, we're done (no need to commit)
 	if len(pendingCommit) == 0 {
 		return nil, nil
 	}
 
 	if err := tx.Commit(); err != nil {
-		// None of the "pendingCommit" jobs were durably written.
-		errToJobs(pendingCommit, err)
+		// None of the "pendingCommit" jobs were durably written. Send them back as failed
 		return pendingCommit, err
 	}
 
-	// Now we can mark all "pendingCommit" jobs as successful.
+	// Now we can mark all "pendingCommit" jobs as successful
 	errToJobs(pendingCommit, nil)
 	return nil, nil
 }

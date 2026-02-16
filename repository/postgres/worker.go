@@ -172,7 +172,7 @@ func NewWorkerWithPool(ctx context.Context, pool *pgxpool.Pool, cfg WorkerConfig
 }
 
 func (w *Worker) Submit(j job) {
-	// If ctx is canceled before enqueue, fail fast.
+	// If ctx is canceled before enqueue, fail fast
 	select {
 	case <-j.GetCtx().Done():
 		return
@@ -236,14 +236,14 @@ func (w *Worker) runAggregator(ctx context.Context) {
 		}
 
 		w.wg.Add(1)
-		go func(items []job) {
+		go func(jobs []job) {
 			defer w.wg.Done()
 			defer func() { w.flushSem <- struct{}{} }()
 
 			if w.cfg.TxMode {
-				_ = w.flushBatchTxSavepoints(ctx, items)
+				_ = w.flushBatchTxSavepoints(ctx, jobs)
 			} else {
-				_ = w.flushBatch(ctx, items)
+				_ = w.flushBatch(ctx, jobs)
 			}
 		}(items)
 	}
@@ -262,7 +262,7 @@ func (w *Worker) runAggregator(ctx context.Context) {
 		// If shutting down and channel closed/drained, flush remainder and exit
 		select {
 		case <-ctx.Done():
-			// Drain channel until closed, then flush whatever remains.
+			// Drain channel until closed, then flush whatever remains
 			w.queue.Process(func(element any) {
 				if j, ok := element.(job); ok {
 					select {
@@ -342,7 +342,6 @@ func (w *Worker) flushBatch(ctx context.Context, items []job) error {
 
 func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error {
 	return w.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
-		// One overall timeout for the whole batch (keep or tune)
 		sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
@@ -354,50 +353,58 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 
 		const sp = "sp_job"
 
+		// Record per-job outcome; don't publish yet
+		results := make([]error, len(items))
 		for i, j := range items {
 			if err := j.GetCtx().Err(); err != nil {
-				j.Done() <- err
-				close(j.Done())
+				results[i] = err
 				continue
 			}
-			// Create savepoint
+
 			if _, err := tx.Exec(sctx, "SAVEPOINT "+sp); err != nil {
-				j.Done() <- wrapPgErr("savepoint", err)
-				close(j.Done())
+				results[i] = wrapPgErr("savepoint", err)
 				continue
 			}
 
 			runErr := j.RunTx(tx)
 			if runErr != nil {
-				// Clear aborted tx state (required after a statement error)
-				_, rbErr := tx.Exec(sctx, "ROLLBACK TO SAVEPOINT "+sp)
-				if rbErr != nil {
-					// If rollback to savepoint fails, the whole tx is likely toast; bail
+				if _, rbErr := tx.Exec(sctx, "ROLLBACK TO SAVEPOINT "+sp); rbErr != nil {
+					// tx is likely unusable; fail remaining jobs and abort
 					fErr := fmt.Errorf("job error: %v; rollback-to-savepoint failed: %w", runErr, rbErr)
-					errToJobs(items[i:], fErr)
-					return fErr
+					for k := i; k < len(items); k++ {
+						results[k] = fErr
+					}
+					// We'll fall through to COMMIT (which should fail)
+					break
 				}
 			}
-			// Release savepoint (even after rollback-to)
+			// In PG, RELEASE after ROLLBACK TO is OK, but if RELEASE fails the tx may be unhealthy
 			if _, relErr := tx.Exec(sctx, "RELEASE SAVEPOINT "+sp); relErr != nil && runErr == nil {
 				runErr = wrapPgErr("release savepoint", relErr)
 			}
 
-			j.Done() <- runErr
-			close(j.Done())
+			results[i] = runErr
 		}
-		// Commit even if some jobs failed; that’s the whole point.
-		// Only fails if the tx is aborted or commit hits something fatal.
-		if err := tx.Commit(sctx); err != nil {
-			return wrapPgErr("commit", err)
-		}
-		return nil
-	})
-}
 
-func errToJobs(jobs []job, err error) {
-	for _, job := range jobs {
-		job.Done() <- err
-		close(job.Done())
-	}
+		commitErr := tx.Commit(sctx)
+		if commitErr != nil {
+			commitErr = wrapPgErr("commit", commitErr)
+		}
+
+		// Publish results *after* commit decision
+		for i, item := range items {
+			errToSend := results[i]
+
+			// If commit failed, any previously-successful job must be marked failed
+			if commitErr != nil && errToSend == nil {
+				errToSend = commitErr
+			}
+			// Always send exactly one result per job
+			item.Done() <- errToSend
+			close(item.Done())
+		}
+
+		// Worker-level error should reflect commit failure (if any).
+		return commitErr
+	})
 }
