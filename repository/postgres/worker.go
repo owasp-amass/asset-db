@@ -280,6 +280,7 @@ func (w *Worker) runAggregator(ctx context.Context) {
 				}
 			})
 			flush(batch)
+			batch = nil
 			return
 		default:
 		}
@@ -352,11 +353,10 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 		defer func() { _ = tx.Rollback(sctx) }()
 
 		const sp = "sp_job"
-
 		// Record per-job outcome; don't publish yet
 		results := make([]error, len(items))
-		for i, j := range items {
-			if err := j.GetCtx().Err(); err != nil {
+		for i, item := range items {
+			if err := item.GetCtx().Err(); err != nil {
 				results[i] = err
 				continue
 			}
@@ -366,7 +366,7 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 				continue
 			}
 
-			runErr := j.RunTx(tx)
+			runErr := item.RunTx(tx)
 			if runErr != nil {
 				if _, rbErr := tx.Exec(sctx, "ROLLBACK TO SAVEPOINT "+sp); rbErr != nil {
 					// tx is likely unusable; fail remaining jobs and abort
