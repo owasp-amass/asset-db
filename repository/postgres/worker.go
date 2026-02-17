@@ -323,8 +323,8 @@ func (w *Worker) flushBatch(ctx context.Context, items []job) error {
 	return w.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
 		var b pgx.Batch
 
-		for _, j := range items {
-			j.Queue(&b)
+		for _, item := range items {
+			item.Queue(&b)
 		}
 
 		sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -333,9 +333,9 @@ func (w *Worker) flushBatch(ctx context.Context, items []job) error {
 		br := conn.SendBatch(sctx, &b)
 		defer func() { _ = br.Close() }()
 
-		for _, j := range items {
-			j.Done() <- j.Decode(br)
-			close(j.Done())
+		for _, item := range items {
+			item.Done() <- item.Decode(br)
+			close(item.Done())
 		}
 		return nil
 	})
@@ -348,6 +348,7 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 
 		tx, err := conn.Begin(sctx)
 		if err != nil {
+			errToJobs(err, items)
 			return err
 		}
 		defer func() { _ = tx.Rollback(sctx) }()
@@ -369,6 +370,7 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 			runErr := item.RunTx(tx)
 			if runErr != nil {
 				if _, rbErr := tx.Exec(sctx, "ROLLBACK TO SAVEPOINT "+sp); rbErr != nil {
+					rbErr = wrapPgErr("rollback to savepoint", rbErr)
 					// tx is likely unusable; fail remaining jobs and abort
 					fErr := fmt.Errorf("job error: %v; rollback-to-savepoint failed: %w", runErr, rbErr)
 					for k := i; k < len(items); k++ {
@@ -404,7 +406,19 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 			close(item.Done())
 		}
 
-		// Worker-level error should reflect commit failure (if any).
+		// Worker-level error should reflect commit failure (if any)
 		return commitErr
 	})
+}
+
+func errToJobs(err error, items []job) {
+	for _, item := range items {
+		select {
+		case <-item.GetCtx().Done():
+			item.Done() <- errors.New("context expired")
+		default:
+			item.Done() <- err
+		}
+		close(item.Done())
+	}
 }
