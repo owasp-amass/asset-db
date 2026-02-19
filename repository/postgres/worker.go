@@ -240,10 +240,19 @@ func (w *Worker) runAggregator(ctx context.Context) {
 			defer w.wg.Done()
 			defer func() { w.flushSem <- struct{}{} }()
 
+			f := w.flushBatch
 			if w.cfg.TxMode {
-				_ = w.flushBatchTxSavepoints(ctx, jobs)
-			} else {
-				_ = w.flushBatch(ctx, jobs)
+				f = w.flushBatchTxSavepoints
+			}
+
+			for i := range 5 {
+				if err := f(ctx, jobs); err == nil {
+					break
+				} else if i == 4 {
+					errToJobs(err, jobs)
+				} else {
+					time.Sleep(500 * time.Millisecond)
+				}
 			}
 		}(items)
 	}
@@ -348,7 +357,6 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 
 		tx, err := conn.Begin(sctx)
 		if err != nil {
-			errToJobs(err, items)
 			return err
 		}
 		defer func() { _ = tx.Rollback(sctx) }()
@@ -406,8 +414,8 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 			close(item.Done())
 		}
 
-		// Worker-level error should reflect commit failure (if any)
-		return commitErr
+		// worker-level return value will be nil, since job errors were returned
+		return nil
 	})
 }
 
