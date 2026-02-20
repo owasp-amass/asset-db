@@ -330,10 +330,21 @@ func (w *Worker) runAggregator(ctx context.Context) {
 
 func (w *Worker) flushBatch(ctx context.Context, items []job) error {
 	return w.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
+		var jobs []job
 		var b pgx.Batch
 
+		// check for context expiration
 		for _, item := range items {
-			item.Queue(&b)
+			if err := item.GetCtx().Err(); err != nil {
+				item.Done() <- err
+				close(item.Done())
+				continue
+			}
+			jobs = append(jobs, item)
+		}
+
+		for _, job := range jobs {
+			job.Queue(&b)
 		}
 
 		sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -342,9 +353,9 @@ func (w *Worker) flushBatch(ctx context.Context, items []job) error {
 		br := conn.SendBatch(sctx, &b)
 		defer func() { _ = br.Close() }()
 
-		for _, item := range items {
-			item.Done() <- item.Decode(br)
-			close(item.Done())
+		for _, job := range jobs {
+			job.Done() <- job.Decode(br)
+			close(job.Done())
 		}
 		return nil
 	})
@@ -365,19 +376,21 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 		// Record per-job outcome; don't publish yet
 		results := make([]error, len(items))
 		for i, item := range items {
-			if err := item.GetCtx().Err(); err != nil {
+			jctx := item.GetCtx()
+
+			if err := jctx.Err(); err != nil {
 				results[i] = err
 				continue
 			}
 
-			if _, err := tx.Exec(sctx, "SAVEPOINT "+sp); err != nil {
+			if _, err := tx.Exec(jctx, "SAVEPOINT "+sp); err != nil {
 				results[i] = wrapPgErr("savepoint", err)
 				continue
 			}
 
 			runErr := item.RunTx(tx)
 			if runErr != nil {
-				if _, rbErr := tx.Exec(sctx, "ROLLBACK TO SAVEPOINT "+sp); rbErr != nil {
+				if _, rbErr := tx.Exec(jctx, "ROLLBACK TO SAVEPOINT "+sp); rbErr != nil {
 					rbErr = wrapPgErr("rollback to savepoint", rbErr)
 					// tx is likely unusable; fail remaining jobs and abort
 					fErr := fmt.Errorf("job error: %v; rollback-to-savepoint failed: %w", runErr, rbErr)
@@ -389,7 +402,7 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 				}
 			}
 			// In PG, RELEASE after ROLLBACK TO is OK, but if RELEASE fails the tx may be unhealthy
-			if _, relErr := tx.Exec(sctx, "RELEASE SAVEPOINT "+sp); relErr != nil && runErr == nil {
+			if _, relErr := tx.Exec(jctx, "RELEASE SAVEPOINT "+sp); relErr != nil && runErr == nil {
 				runErr = wrapPgErr("release savepoint", relErr)
 			}
 
