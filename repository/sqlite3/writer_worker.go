@@ -28,7 +28,7 @@ type writeJob struct {
 type writeWorker struct {
 	db            *sql.DB
 	conn          *sql.Conn
-	stmts         map[string]*sql.Stmt
+	cache         *Cache
 	jobs          queue.Queue
 	batchSize     int
 	batchDuration time.Duration
@@ -38,8 +38,24 @@ type writeWorker struct {
 
 func newWriteWorker(db *sql.DB, batchSize int, batchDuration time.Duration) (*writeWorker, error) {
 	ww := &writeWorker{
-		db:            db,
-		stmts:         make(map[string]*sql.Stmt),
+		db: db,
+		cache: NewCache(CacheOptions{
+			MaxBytes:   50 << 20,
+			MaxEntries: 3000,
+			IdleWeight: 5.0,
+			AgeWeight:  0.2,
+			HitWeight:  25.0,
+			IdleTTL:    30 * time.Minute,
+			AgeTTL:     12 * time.Hour,
+			Shards:     32,
+			SampleN:    64,
+			CostFn: func(key string, _ *sql.Stmt) int64 {
+				// key is SQL text:
+				//  - len(sql) bytes
+				//  - plus a fixed overhead fudge factor per entry
+				return int64(len(key)) + 1024
+			},
+		}),
 		jobs:          queue.NewQueue(),
 		batchSize:     batchSize,
 		batchDuration: batchDuration,
@@ -62,36 +78,37 @@ func (ww *writeWorker) Submit(job *writeJob) {
 func (ww *writeWorker) Close() {
 	close(ww.quit)
 	ww.wg.Wait()
-
-	for _, st := range ww.stmts {
-		_ = st.Close()
-	}
-	ww.stmts = nil
+	ww.cache.Close()
 }
 
-func (ww *writeWorker) closeStmts() {
-	for _, st := range ww.stmts {
-		_ = st.Close()
-	}
-	ww.stmts = make(map[string]*sql.Stmt)
-}
-
-func (ww *writeWorker) getOrPrepare(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
-	st, found := ww.stmts[key]
-	if found && st != nil {
-		return st, nil
+func (ww *writeWorker) getOrPrepare(ctx context.Context, key, sqlText string) (Lease, error) {
+	if lease, ok := ww.cache.GetLease(key); ok {
+		return lease, nil
 	}
 
 	ps, err := ww.conn.PrepareContext(ctx, sqlText)
-	if err != nil {
-		return nil, err
+	if err != nil && errors.Is(err, driver.ErrBadConn) {
+		_ = ww.conn.Close()
+		if err := ww.acquireConn(); err != nil {
+			return Lease{}, err
+		}
+		ps, err = ww.conn.PrepareContext(ctx, sqlText)
 	}
+	if err != nil {
+		return Lease{}, err
+	}
+	ww.cache.Put(key, ps)
 
-	ww.stmts[key] = ps
-	return ps, nil
+	lease, ok := ww.cache.GetLease(key)
+	if !ok {
+		return Lease{}, errors.New("failed to acquire the prepared statement")
+	}
+	return lease, nil
 }
 
 func (ww *writeWorker) acquireConn() error {
+	ww.cache.RetireAll()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -101,7 +118,6 @@ func (ww *writeWorker) acquireConn() error {
 	}
 
 	ww.conn = conn
-	ww.closeStmts()
 	return nil
 }
 
@@ -222,7 +238,7 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 			continue
 		}
 
-		stmt, err := ww.getOrPrepare(job.Ctx, job.Name, job.SQLText)
+		lease, err := ww.getOrPrepare(job.Ctx, job.Name, job.SQLText)
 		if err != nil {
 			// Roll back just this job, keep going
 			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
@@ -230,8 +246,9 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 			job.Result <- err
 			continue
 		}
+		defer lease.Release()
 
-		_, err = tx.StmtContext(job.Ctx, stmt).Exec(job.Args...)
+		_, err = tx.StmtContext(job.Ctx, lease.Stmt).Exec(job.Args...)
 		if err != nil {
 			// Roll back just this job, keep going
 			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)

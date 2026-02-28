@@ -83,18 +83,16 @@ func (r *SqliteRepository) findByContent(ctx context.Context, atype string, sinc
 
 	// Query entity ids via join to the concrete asset table.
 	sb := strings.Builder{}
-	sb.WriteString(`
-SELECT e.entity_id FROM entity e
-JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ? 
-JOIN ` + table + ` a ON a.id = e.row_id`)
+	fmt.Fprint(&sb, "SELECT e.entity_id FROM entity e JOIN entity_type_lu t ON t.id = e.etype_id")
+	fmt.Fprintf(&sb, " AND t.name = ? JOIN %s a ON a.id = e.row_id", table)
 
 	args = append([]any{table}, args...) // prepend type/table to args
 	if where != "" {
-		sb.WriteString(" WHERE " + where + "\n")
+		fmt.Fprintf(&sb, " WHERE %s\n", where)
 	}
 	sb.WriteString("ORDER BY e.updated_at DESC")
 	if limit > 0 {
-		sb.WriteString(fmt.Sprintf(" LIMIT %d", limit))
+		fmt.Fprintf(&sb, " LIMIT %d", limit)
 	}
 
 	q := sb.String()

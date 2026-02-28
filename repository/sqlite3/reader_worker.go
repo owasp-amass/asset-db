@@ -89,7 +89,7 @@ func (pool *readerWorkerPool) Close() {
 type readerWorker struct {
 	db    *sql.DB
 	conn  *sql.Conn
-	stmts map[string]*sql.Stmt
+	cache *Cache
 	jobs  queue.Queue
 	wg    sync.WaitGroup
 	quit  chan struct{}
@@ -97,10 +97,26 @@ type readerWorker struct {
 
 func newReaderWorker(db *sql.DB) (*readerWorker, error) {
 	rw := &readerWorker{
-		db:    db,
-		stmts: make(map[string]*sql.Stmt),
-		jobs:  queue.NewQueue(),
-		quit:  make(chan struct{}),
+		db: db,
+		cache: NewCache(CacheOptions{
+			MaxBytes:   50 << 20,
+			MaxEntries: 3000,
+			IdleWeight: 5.0,
+			AgeWeight:  0.2,
+			HitWeight:  25.0,
+			IdleTTL:    30 * time.Minute,
+			AgeTTL:     12 * time.Hour,
+			Shards:     32,
+			SampleN:    64,
+			CostFn: func(key string, _ *sql.Stmt) int64 {
+				// key is SQL text:
+				//  - len(sql) bytes
+				//  - plus a fixed overhead fudge factor per entry
+				return int64(len(key)) + 1024
+			},
+		}),
+		jobs: queue.NewQueue(),
+		quit: make(chan struct{}),
 	}
 
 	if err := rw.acquireConn(); err != nil {
@@ -119,40 +135,38 @@ func (rw *readerWorker) Submit(job any) {
 func (rw *readerWorker) Close() {
 	close(rw.quit)
 	rw.wg.Wait()
-	rw.closeStmts()
+	rw.cache.Close()
 	_ = rw.conn.Close()
 }
 
-func (rw *readerWorker) closeStmts() {
-	for _, st := range rw.stmts {
-		_ = st.Close()
-	}
-	rw.stmts = make(map[string]*sql.Stmt)
-}
-
-func (rw *readerWorker) getOrPrepare(ctx context.Context, key, sqlText string) (*sql.Stmt, error) {
-	st, found := rw.stmts[key]
-	if found && st != nil {
-		return st, nil
+func (rw *readerWorker) getOrPrepare(ctx context.Context, key, sqlText string) (Lease, error) {
+	if lease, ok := rw.cache.GetLease(key); ok {
+		return lease, nil
 	}
 
 	ps, err := rw.conn.PrepareContext(ctx, sqlText)
 	if err != nil && errors.Is(err, driver.ErrBadConn) {
 		_ = rw.conn.Close()
 		if err := rw.acquireConn(); err != nil {
-			return nil, err
+			return Lease{}, err
 		}
 		ps, err = rw.conn.PrepareContext(ctx, sqlText)
 	}
 	if err != nil {
-		return nil, err
+		return Lease{}, err
 	}
+	rw.cache.Put(key, ps)
 
-	rw.stmts[key] = ps
-	return ps, nil
+	lease, ok := rw.cache.GetLease(key)
+	if !ok {
+		return Lease{}, errors.New("failed to acquire the prepared statement")
+	}
+	return lease, nil
 }
 
 func (rw *readerWorker) acquireConn() error {
+	rw.cache.RetireAll()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -167,7 +181,6 @@ func (rw *readerWorker) acquireConn() error {
 	}
 
 	rw.conn = conn
-	rw.closeStmts()
 	return nil
 }
 
@@ -217,13 +230,14 @@ func (rw *readerWorker) processRowReadJob(j *rowReadJob) {
 		return
 	}
 
-	stmt, err := rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
+	lease, err := rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
 	if err != nil {
 		j.Result <- &rowReadResult{Row: nil, Err: err}
 		return
 	}
+	defer lease.Release()
 
-	row := stmt.QueryRowContext(j.Ctx, j.Args...)
+	row := lease.Stmt.QueryRowContext(j.Ctx, j.Args...)
 	if row == nil {
 		j.Result <- &rowReadResult{Row: nil, Err: sql.ErrNoRows}
 		return
@@ -236,7 +250,15 @@ func (rw *readerWorker) processRowReadJob(j *rowReadJob) {
 				j.Result <- &rowReadResult{Row: nil, Err: err}
 				return
 			}
-			row = stmt.QueryRowContext(j.Ctx, j.Args...)
+
+			lease, err = rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
+			if err != nil {
+				j.Result <- &rowReadResult{Row: nil, Err: err}
+				return
+			}
+			defer lease.Release()
+
+			row = lease.Stmt.QueryRowContext(j.Ctx, j.Args...)
 		} else {
 			j.Result <- &rowReadResult{Row: nil, Err: err}
 			return
@@ -267,13 +289,14 @@ func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
 		return
 	}
 
-	stmt, err := rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
+	lease, err := rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
 	if err != nil {
 		j.Result <- &rowsReadResult{Rows: nil, Err: err}
 		return
 	}
+	defer lease.Release()
 
-	rows, err := stmt.QueryContext(j.Ctx, j.Args...)
+	rows, err := lease.Stmt.QueryContext(j.Ctx, j.Args...)
 	if rows == nil {
 		j.Result <- &rowsReadResult{Rows: nil, Err: sql.ErrNoRows}
 		return
@@ -286,7 +309,15 @@ func (rw *readerWorker) processRowsReadJob(j *rowsReadJob) {
 				j.Result <- &rowsReadResult{Rows: nil, Err: err}
 				return
 			}
-			rows, err = stmt.QueryContext(j.Ctx, j.Args...)
+
+			lease, err = rw.getOrPrepare(j.Ctx, j.Name, j.SQLText)
+			if err != nil {
+				j.Result <- &rowsReadResult{Rows: nil, Err: err}
+				return
+			}
+			defer lease.Release()
+
+			rows, err = lease.Stmt.QueryContext(j.Ctx, j.Args...)
 		} else {
 			j.Result <- &rowsReadResult{Rows: nil, Err: err}
 			return
