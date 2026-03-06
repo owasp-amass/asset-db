@@ -3,19 +3,17 @@ module github.com/owasp-amass/asset-db
 go 1.26.0
 
 require (
-	github.com/caffix/queue v0.4.0
-	github.com/caffix/stringset v0.2.1-0.20251119025138-9044e6b53d5b
-	github.com/docker/go-connections v0.6.0
-	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/caffix/queue v0.4.1-0.20260303044231-38e3190f084d
+	github.com/caffix/stringset v0.2.1-0.20260303044338-0122c4694af1
+	github.com/google/uuid v1.6.1-0.20241114170450-2d3c2a9cc518
+	github.com/jackc/pgx/v5 v5.8.1-0.20260301001513-2c625120dbce
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
-	github.com/owasp-amass/open-asset-model v0.15.0
+	github.com/owasp-amass/open-asset-model v0.15.1-0.20260306015734-5261c591eef2
 	github.com/rubenv/sql-migrate v1.8.1
 	github.com/stretchr/testify v1.11.1
-	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.31.0
+	gorm.io/gorm v1.31.2-0.20260131083940-4380dd6dd1a5
 	modernc.org/sqlite v1.46.1
 )
 
@@ -33,6 +31,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
+	github.com/docker/go-connections v0.6.1-0.20251201130350-6539818a34ac // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
@@ -69,6 +68,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/testcontainers/testcontainers-go v0.40.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
