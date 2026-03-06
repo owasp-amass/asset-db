@@ -6,12 +6,8 @@ package testhelpers
 
 import (
 	"context"
-	"time"
 
-	"github.com/docker/go-connections/nat"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 type PostgresContainer struct {
@@ -26,25 +22,12 @@ func CreatePostgresContainer(ctx context.Context) (*PostgresContainer, error) {
 		pass   = "amasspass"
 	)
 
-	waitReady := wait.ForLog("database system is ready to accept connections").
-		WithOccurrence(2).
-		WithStartupTimeout(90 * time.Second)
-
-	waitSQL := wait.ForSQL("5432/tcp", "pgx", func(host string, port nat.Port) string {
-		// This DSN is used only for the wait check.
-		// Keep it minimal and reliable.
-		return "postgres://" + user + ":" + pass + "@" + host + ":" +
-			port.Port() + "/" + dbName + "?sslmode=disable&application_name=tc_wait"
-	}).WithStartupTimeout(90 * time.Second)
-
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:17.7-alpine",
 		postgres.WithDatabase(dbName),
 		postgres.WithUsername(user),
 		postgres.WithPassword(pass),
-		testcontainers.WithWaitStrategy(
-			wait.ForAll(waitReady, waitSQL),
-		),
+		postgres.BasicWaitStrategies(),
 	)
 	if err != nil {
 		return nil, err
