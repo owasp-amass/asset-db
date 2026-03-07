@@ -118,6 +118,9 @@ func (r *SqliteRepository) Close() error {
 	if r.ww != nil {
 		r.ww.Close()
 	}
+	if r.rodb != nil {
+		_ = r.rodb.Close()
+	}
 	if r.DB != nil {
 		return r.DB.Close()
 	}

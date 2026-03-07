@@ -79,6 +79,7 @@ func (ww *writeWorker) Close() {
 	close(ww.quit)
 	ww.wg.Wait()
 	ww.cache.Close()
+	_ = ww.conn.Close()
 }
 
 func (ww *writeWorker) getOrPrepare(ctx context.Context, key, sqlText string) (Lease, error) {
