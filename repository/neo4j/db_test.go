@@ -18,7 +18,7 @@ var store *NeoRepository
 
 func TestMain(m *testing.M) {
 	var err error
-	dsn := "bolt://neo4j:password@localhost:7687/neo4j"
+	dsn := "bolt://neo4j:password@localhost:7687/amass"
 
 	store, err = New("neo4j", dsn)
 	if err != nil {
