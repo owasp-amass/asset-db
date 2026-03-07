@@ -9,6 +9,20 @@ services:
     ports:
       - "5432:5432"
 
+  neo4j:
+    container_name: assetdb_neo4j
+    image: neo4j:latest
+    restart: always
+    env_file: .env.local
+    expose: 
+      - "7474"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-db:/data    
+      
 volumes:
   postgres-db:
     driver: local
+  neo4j-db:
