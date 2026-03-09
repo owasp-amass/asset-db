@@ -201,6 +201,8 @@ func (w *Worker) Shutdown(ctx context.Context) error {
 		case <-ctx.Done():
 			err = ctx.Err()
 		}
+
+		w.pool.Close()
 	})
 
 	return err
