@@ -41,6 +41,7 @@ func (neo *NeoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 		// ensure that duplicate entities are not entered into the database
 		entity = entities[0]
 		entity.LastSeen = time.Now()
+		entity.Asset = input.Asset
 	}
 
 	if entity != nil {
