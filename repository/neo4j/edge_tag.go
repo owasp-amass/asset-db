@@ -62,7 +62,7 @@ func (neo *NeoRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, i
 		defer cancel()
 
 		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-			"MATCH (n:EdgeTag {tag_id: $tid}) SET p = $props RETURN p",
+			"MATCH (p:EdgeTag {tag_id: $tid}) SET p = $props RETURN p",
 			map[string]interface{}{"tid": tag.ID, "props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),

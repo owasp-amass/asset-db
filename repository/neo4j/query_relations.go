@@ -22,6 +22,7 @@ func edgePropsMap(edge *types.Edge) (map[string]interface{}, error) {
 
 	m := make(map[string]interface{})
 	// begin populating the map of parameters
+	m["edge_id"] = edge.ID
 	m["etype"] = edge.Relation.RelationType()
 	m["created_at"] = timeToNeo4jTime(edge.CreatedAt)
 	m["updated_at"] = timeToNeo4jTime(edge.LastSeen)
