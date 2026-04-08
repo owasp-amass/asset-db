@@ -20,7 +20,7 @@ import (
 )
 
 type Results struct {
-	Node *Vertex `json:"entity"`
+	Nodes []*Vertex `json:"entities"`
 }
 
 type Vertex struct {
@@ -57,30 +57,34 @@ func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
 		return nil, errors.New("no triples provided for extraction")
 	}
 
-	ent, err := findFirstSubject(db, triples[0].Subject)
+	ents, err := findSubjects(db, triples[0].Subject)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find first subject: %w", err)
 	}
 
-	n := &Vertex{
-		entity:    ent,
-		ID:        ent.ID,
-		Type:      ent.Asset.AssetType(),
-		CreatedAt: ent.CreatedAt.Format(time.DateOnly),
-		LastSeen:  ent.LastSeen.Format(time.DateOnly),
-		Asset:     ent.Asset,
-		Relations: []*Link{},
+	var nodes []*Vertex
+	for _, ent := range ents {
+		n := &Vertex{
+			entity:    ent,
+			ID:        ent.ID,
+			Type:      ent.Asset.AssetType(),
+			CreatedAt: ent.CreatedAt.Format(time.DateOnly),
+			LastSeen:  ent.LastSeen.Format(time.DateOnly),
+			Asset:     ent.Asset,
+			Relations: []*Link{},
+		}
+
+		rels, err := performWalk(db, triples, 0, []*Link{{Node: n}})
+		if err != nil || len(rels) != 1 {
+			continue
+		}
+		nodes = append(nodes, n)
 	}
 
-	rels, err := performWalk(db, triples, 0, []*Link{{Node: n}})
-	if err != nil {
-		return nil, err
+	if len(nodes) == 0 {
+		return nil, errors.New("failed to extract the walk from any subject")
 	}
-	if len(rels) != 1 {
-		return nil, errors.New("failed to extract the walk from the first subject")
-	}
-
-	return &Results{Node: n}, nil
+	return &Results{Nodes: nodes}, nil
 }
 
 func performWalk(db repository.Repository, triples []*Triple, idx int, links []*Link) ([]*Link, error) {
@@ -266,6 +270,43 @@ func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, err
 		return nil, fmt.Errorf("failed to find the subject in the database: %v", err)
 	}
 	return ents[0], nil
+}
+
+func findSubjects(db repository.Repository, subject *Node) ([]*dbt.Entity, error) {
+	if subject == nil {
+		return nil, errors.New("subject cannot be nil")
+	}
+
+	if subject.Regexp != nil {
+		since := subject.Since
+		if since.IsZero() {
+			since = time.Unix(0, 0)
+		}
+
+		ents, err := db.FindEntitiesByType(context.Background(), subject.Type, since, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find entities by type: %v", err)
+		}
+
+		var matched []*dbt.Entity
+		for _, ent := range ents {
+			if valueMatch(ent.Asset.Key(), subject.Key, subject.Regexp) &&
+				allAttrsMatch(ent.Asset, subject.Attributes) {
+				matched = append(matched, ent)
+			}
+		}
+
+		if len(matched) == 0 {
+			return nil, fmt.Errorf("no entity of type %s matched the regex pattern", subject.Type)
+		}
+		return matched, nil
+	}
+
+	ent, err := findFirstSubject(db, subject)
+	if err != nil {
+		return nil, err
+	}
+	return []*dbt.Entity{ent}, nil
 }
 
 func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
