@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -222,6 +223,11 @@ func TestFindFirstSubject(t *testing.T) {
 	assert.NoError(t, err, "Failed to create IP address asset")
 	assert.NotNil(t, nentity, "IP address entity should not be nil")
 
+	// add an FQDN asset to the database
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	assert.NoError(t, err, "Failed to create FQDN asset")
+	assert.NotNil(t, fentity, "FQDN entity should not be nil")
+
 	// attempt to find a nil subject in the database
 	entity, err := findFirstSubject(db, nil)
 	assert.Error(t, err, "Expected an error when finding a nil subject")
@@ -251,6 +257,35 @@ func TestFindFirstSubject(t *testing.T) {
 	assert.NoError(t, err, "Failed to find a valid subject")
 	assert.NotNil(t, entity, "Entity should not be nil for a valid subject")
 	assert.Equal(t, ipstr, entity.Asset.Key(), "Entity key should match the subject key")
+
+	// attempt to find an FQDN subject by regex pattern
+	entity, err = findFirstSubject(db, &Node{
+		Type:   oam.FQDN,
+		Key:    "#/owasp.*/#",
+		Regexp: regexp.MustCompile("owasp.*"),
+	})
+	assert.NoError(t, err, "Failed to find FQDN subject by regex")
+	assert.NotNil(t, entity, "Entity should not be nil for regex subject")
+	assert.Equal(t, "owasp.org", entity.Asset.Key(), "Entity key should match the regex pattern")
+
+	// attempt to find an IP subject by regex pattern
+	entity, err = findFirstSubject(db, &Node{
+		Type:   oam.IPAddress,
+		Key:    "#/192.*/#",
+		Regexp: regexp.MustCompile("192.*"),
+	})
+	assert.NoError(t, err, "Failed to find IP subject by regex")
+	assert.NotNil(t, entity, "Entity should not be nil for regex IP subject")
+	assert.Equal(t, ipstr, entity.Asset.Key(), "Entity key should match the regex pattern")
+
+	// attempt to find a subject by regex that matches nothing
+	entity, err = findFirstSubject(db, &Node{
+		Type:   oam.FQDN,
+		Key:    "#/nonexistent.*/#",
+		Regexp: regexp.MustCompile("nonexistent.*"),
+	})
+	assert.Error(t, err, "Expected an error when regex matches nothing")
+	assert.Nil(t, entity, "Entity should be nil when regex matches nothing")
 }
 
 func TestEntityPropsMatch(t *testing.T) {
@@ -387,6 +422,86 @@ func TestEdgePropsMatch(t *testing.T) {
 	props, ok = edgePropsMatch(db, edge1, []*Property{p3})
 	assert.True(t, ok, "Expected edge properties to match when the specification matches both associated properties")
 	assert.Equal(t, 2, len(props), "Expected two matching properties when the specification matches both associated properties")
+}
+
+func TestExtractWithRegexSubject(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
+	assert.NotNil(t, db, "Asset database should not be nil")
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// create entities
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	assert.NoError(t, err, "Failed to create FQDN asset")
+	assert.NotNil(t, fentity, "FQDN entity should not be nil")
+	sentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
+	assert.NoError(t, err, "Failed to create subdomain asset")
+	assert.NotNil(t, sentity, "Subdomain entity should not be nil")
+	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr("192.168.1.2"), Type: "IPv4"})
+	assert.NoError(t, err, "Failed to create IP address asset")
+	assert.NotNil(t, nentity, "IP address entity should not be nil")
+
+	// create edges: owasp.org --node--> www.owasp.org
+	edge, err := db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.SimpleRelation{Name: "node"},
+		FromEntity: fentity,
+		ToEntity:   sentity,
+	})
+	assert.NoError(t, err, "Failed to create node edge")
+	assert.NotNil(t, edge, "Node edge should not be nil")
+
+	// create edges: www.owasp.org --dns_record--> 192.168.1.2
+	edge, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation: oamdns.BasicDNSRelation{
+			Name: "dns_record",
+			Header: oamdns.RRHeader{
+				RRType: 1,
+				Class:  1,
+				TTL:    3600,
+			},
+		},
+		FromEntity: sentity,
+		ToEntity:   nentity,
+	})
+	assert.NoError(t, err, "Failed to create dns_record edge")
+	assert.NotNil(t, edge, "DNS record edge should not be nil")
+
+	// regex subject, walk to subdomain via node relation
+	triple, err := ParseTriple(`<fqdn:#/^owasp\.org$/#> - <*:node> -> <fqdn:www.owasp.org>`)
+	assert.NoError(t, err, "Failed to parse regex subject triple")
+	assert.NotNil(t, triple, "Parsed triple should not be nil")
+
+	results, err := Extract(db, []*Triple{triple})
+	assert.NoError(t, err, "Failed to extract with regex subject")
+	assert.NotNil(t, results, "Results should not be nil")
+	assert.Equal(t, "owasp.org", results.Node.Asset.Key(), "Subject should be owasp.org")
+	assert.Equal(t, 1, len(results.Node.Relations), "Should have one relation")
+	assert.Equal(t, "www.owasp.org", results.Node.Relations[0].Node.Asset.Key(), "Object should be www.owasp.org")
+
+	// multi-hop: regex first subject walks through node then dns_record
+	triple1, err := ParseTriple(`<fqdn:#/^owasp\.org$/#> - <*:node> -> <fqdn:*>`)
+	assert.NoError(t, err, "Failed to parse first triple for multi-hop")
+	triple2, err := ParseTriple(`<fqdn:*> - <*:dns_record> -> <ipaddress:*>`)
+	assert.NoError(t, err, "Failed to parse second triple for multi-hop")
+
+	results, err = Extract(db, []*Triple{triple1, triple2})
+	assert.NoError(t, err, "Failed to extract multi-hop with regex subject")
+	assert.NotNil(t, results, "Multi-hop results should not be nil")
+	assert.Equal(t, "owasp.org", results.Node.Asset.Key(), "Subject should be owasp.org")
+	assert.Equal(t, 1, len(results.Node.Relations), "Should have one relation from first hop")
+	assert.Equal(t, "www.owasp.org", results.Node.Relations[0].Node.Asset.Key(), "First hop object should be www.owasp.org")
+	assert.Equal(t, 1, len(results.Node.Relations[0].Node.Relations), "Should have one relation from second hop")
+	assert.Equal(t, "192.168.1.2", results.Node.Relations[0].Node.Relations[0].Node.Asset.Key(), "Second hop object should be 192.168.1.2")
+
+	// regex matches nothing
+	triple, err = ParseTriple(`<fqdn:#/nonexistent.*/#> - <*:node> -> <fqdn:*>`)
+	assert.NoError(t, err, "Failed to parse nonexistent regex triple")
+	results, err = Extract(db, []*Triple{triple})
+	assert.Error(t, err, "Expected error when regex matches no entities")
+	assert.Nil(t, results, "Results should be nil when regex matches nothing")
 }
 
 func setupTempSQLite() (*sqlite3.SqliteRepository, string, error) {

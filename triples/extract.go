@@ -236,6 +236,26 @@ func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, err
 		return nil, errors.New("subject cannot be nil")
 	}
 
+	// Regex keys cannot go through subjectToAsset() (literal SQL filter).
+	// Fetch by type and filter in-memory, same as performWalk().
+	if subject.Regexp != nil {
+		since := subject.Since
+		if since.IsZero() {
+			since = time.Unix(0, 0)
+		}
+		ents, err := db.FindEntitiesByType(context.Background(), subject.Type, since, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find entities by type: %v", err)
+		}
+		for _, ent := range ents {
+			if valueMatch(ent.Asset.Key(), subject.Key, subject.Regexp) &&
+				allAttrsMatch(ent.Asset, subject.Attributes) {
+				return ent, nil
+			}
+		}
+		return nil, fmt.Errorf("no entity of type %s matched the regex pattern", subject.Type)
+	}
+
 	filter, err := subjectToAsset(subject)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert subject to asset: %v", err)
