@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,16 +62,17 @@ func TestExtract(t *testing.T) {
 	assert.NotNil(t, results, "Results should not be nil")
 
 	// verify the extracted associations
-	assert.NotNil(t, results.Node, "Results first node should not be nil")
-	assert.Equal(t, oam.FQDN, results.Node.Type, "Results first node type should be FQDN")
-	assert.Equal(t, "owasp.org", results.Node.Asset.Key(), "Results first node key should be 'owasp.org'")
-	assert.Equal(t, 1, len(results.Node.Relations), "Results first node should have one relation")
-	assert.Equal(t, oam.SimpleRelation, results.Node.Relations[0].Type, "Relation type should be SimpleRelation")
-	assert.Equal(t, "node", results.Node.Relations[0].Relation.Label(), "Relation label should be 'node'")
-	assert.NotNil(t, results.Node.Relations[0].Node, "Relation node should not be nil")
-	assert.Equal(t, oam.FQDN, results.Node.Relations[0].Node.Type, "Relation node type should be FQDN")
-	assert.Equal(t, "www.owasp.org", results.Node.Relations[0].Node.Asset.Key(), "Relation node key should be 'www.owasp.org'")
-	assert.Equal(t, 0, len(results.Node.Relations[0].Node.Relations), "Relation node should have no relations")
+	assert.Equal(t, 1, len(results.Nodes), "Results should have one root node")
+	assert.NotNil(t, results.Nodes[0], "Results first node should not be nil")
+	assert.Equal(t, oam.FQDN, results.Nodes[0].Type, "Results first node type should be FQDN")
+	assert.Equal(t, "owasp.org", results.Nodes[0].Asset.Key(), "Results first node key should be 'owasp.org'")
+	assert.Equal(t, 1, len(results.Nodes[0].Relations), "Results first node should have one relation")
+	assert.Equal(t, oam.SimpleRelation, results.Nodes[0].Relations[0].Type, "Relation type should be SimpleRelation")
+	assert.Equal(t, "node", results.Nodes[0].Relations[0].Relation.Label(), "Relation label should be 'node'")
+	assert.NotNil(t, results.Nodes[0].Relations[0].Node, "Relation node should not be nil")
+	assert.Equal(t, oam.FQDN, results.Nodes[0].Relations[0].Node.Type, "Relation node type should be FQDN")
+	assert.Equal(t, "www.owasp.org", results.Nodes[0].Relations[0].Node.Asset.Key(), "Relation node key should be 'www.owasp.org'")
+	assert.Equal(t, 0, len(results.Nodes[0].Relations[0].Node.Relations), "Relation node should have no relations")
 
 	// create a triple that will fail to extract associations
 	triple, err = ParseTriple("<fqdn:owasp.org> - <*> -> <fqdn:netsec.owasp.org>")
@@ -222,6 +225,11 @@ func TestFindFirstSubject(t *testing.T) {
 	assert.NoError(t, err, "Failed to create IP address asset")
 	assert.NotNil(t, nentity, "IP address entity should not be nil")
 
+	// add an FQDN asset to the database
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	assert.NoError(t, err, "Failed to create FQDN asset")
+	assert.NotNil(t, fentity, "FQDN entity should not be nil")
+
 	// attempt to find a nil subject in the database
 	entity, err := findFirstSubject(db, nil)
 	assert.Error(t, err, "Expected an error when finding a nil subject")
@@ -251,6 +259,35 @@ func TestFindFirstSubject(t *testing.T) {
 	assert.NoError(t, err, "Failed to find a valid subject")
 	assert.NotNil(t, entity, "Entity should not be nil for a valid subject")
 	assert.Equal(t, ipstr, entity.Asset.Key(), "Entity key should match the subject key")
+
+	// attempt to find an FQDN subject by regex pattern
+	entity, err = findFirstSubject(db, &Node{
+		Type:   oam.FQDN,
+		Key:    "#/owasp.*/#",
+		Regexp: regexp.MustCompile("owasp.*"),
+	})
+	assert.NoError(t, err, "Failed to find FQDN subject by regex")
+	assert.NotNil(t, entity, "Entity should not be nil for regex subject")
+	assert.Equal(t, "owasp.org", entity.Asset.Key(), "Entity key should match the regex pattern")
+
+	// attempt to find an IP subject by regex pattern
+	entity, err = findFirstSubject(db, &Node{
+		Type:   oam.IPAddress,
+		Key:    "#/192.*/#",
+		Regexp: regexp.MustCompile("192.*"),
+	})
+	assert.NoError(t, err, "Failed to find IP subject by regex")
+	assert.NotNil(t, entity, "Entity should not be nil for regex IP subject")
+	assert.Equal(t, ipstr, entity.Asset.Key(), "Entity key should match the regex pattern")
+
+	// attempt to find a subject by regex that matches nothing
+	entity, err = findFirstSubject(db, &Node{
+		Type:   oam.FQDN,
+		Key:    "#/nonexistent.*/#",
+		Regexp: regexp.MustCompile("nonexistent.*"),
+	})
+	assert.Error(t, err, "Expected an error when regex matches nothing")
+	assert.Nil(t, entity, "Entity should be nil when regex matches nothing")
 }
 
 func TestEntityPropsMatch(t *testing.T) {
@@ -387,6 +424,354 @@ func TestEdgePropsMatch(t *testing.T) {
 	props, ok = edgePropsMatch(db, edge1, []*Property{p3})
 	assert.True(t, ok, "Expected edge properties to match when the specification matches both associated properties")
 	assert.Equal(t, 2, len(props), "Expected two matching properties when the specification matches both associated properties")
+}
+
+func TestExtractWithRegexSubject(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
+	assert.NotNil(t, db, "Asset database should not be nil")
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// create entities
+	fentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	assert.NoError(t, err, "Failed to create FQDN asset")
+	assert.NotNil(t, fentity, "FQDN entity should not be nil")
+	sentity, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
+	assert.NoError(t, err, "Failed to create subdomain asset")
+	assert.NotNil(t, sentity, "Subdomain entity should not be nil")
+	nentity, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr("192.168.1.2"), Type: "IPv4"})
+	assert.NoError(t, err, "Failed to create IP address asset")
+	assert.NotNil(t, nentity, "IP address entity should not be nil")
+
+	// create edges: owasp.org --node--> www.owasp.org
+	edge, err := db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.SimpleRelation{Name: "node"},
+		FromEntity: fentity,
+		ToEntity:   sentity,
+	})
+	assert.NoError(t, err, "Failed to create node edge")
+	assert.NotNil(t, edge, "Node edge should not be nil")
+
+	// create edges: www.owasp.org --dns_record--> 192.168.1.2
+	edge, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation: oamdns.BasicDNSRelation{
+			Name: "dns_record",
+			Header: oamdns.RRHeader{
+				RRType: 1,
+				Class:  1,
+				TTL:    3600,
+			},
+		},
+		FromEntity: sentity,
+		ToEntity:   nentity,
+	})
+	assert.NoError(t, err, "Failed to create dns_record edge")
+	assert.NotNil(t, edge, "DNS record edge should not be nil")
+
+	// regex subject, walk to subdomain via node relation
+	triple, err := ParseTriple(`<fqdn:#/^owasp\.org$/#> - <*:node> -> <fqdn:www.owasp.org>`)
+	assert.NoError(t, err, "Failed to parse regex subject triple")
+	assert.NotNil(t, triple, "Parsed triple should not be nil")
+
+	results, err := Extract(db, []*Triple{triple})
+	assert.NoError(t, err, "Failed to extract with regex subject")
+	assert.NotNil(t, results, "Results should not be nil")
+	assert.Equal(t, 1, len(results.Nodes), "Should have one root node")
+	assert.Equal(t, "owasp.org", results.Nodes[0].Asset.Key(), "Subject should be owasp.org")
+	assert.Equal(t, 1, len(results.Nodes[0].Relations), "Should have one relation")
+	assert.Equal(t, "www.owasp.org", results.Nodes[0].Relations[0].Node.Asset.Key(), "Object should be www.owasp.org")
+
+	// multi-hop: regex first subject walks through node then dns_record
+	triple1, err := ParseTriple(`<fqdn:#/^owasp\.org$/#> - <*:node> -> <fqdn:*>`)
+	assert.NoError(t, err, "Failed to parse first triple for multi-hop")
+	triple2, err := ParseTriple(`<fqdn:*> - <*:dns_record> -> <ipaddress:*>`)
+	assert.NoError(t, err, "Failed to parse second triple for multi-hop")
+
+	results, err = Extract(db, []*Triple{triple1, triple2})
+	assert.NoError(t, err, "Failed to extract multi-hop with regex subject")
+	assert.NotNil(t, results, "Multi-hop results should not be nil")
+	assert.Equal(t, 1, len(results.Nodes), "Should have one root node for multi-hop")
+	assert.Equal(t, "owasp.org", results.Nodes[0].Asset.Key(), "Subject should be owasp.org")
+	assert.Equal(t, 1, len(results.Nodes[0].Relations), "Should have one relation from first hop")
+	assert.Equal(t, "www.owasp.org", results.Nodes[0].Relations[0].Node.Asset.Key(), "First hop object should be www.owasp.org")
+	assert.Equal(t, 1, len(results.Nodes[0].Relations[0].Node.Relations), "Should have one relation from second hop")
+	assert.Equal(t, "192.168.1.2", results.Nodes[0].Relations[0].Node.Relations[0].Node.Asset.Key(), "Second hop object should be 192.168.1.2")
+
+	// regex matches nothing
+	triple, err = ParseTriple(`<fqdn:#/nonexistent.*/#> - <*:node> -> <fqdn:*>`)
+	assert.NoError(t, err, "Failed to parse nonexistent regex triple")
+	results, err = Extract(db, []*Triple{triple})
+	assert.Error(t, err, "Expected error when regex matches no entities")
+	assert.Nil(t, results, "Results should be nil when regex matches nothing")
+}
+
+func TestExtractMultiRootRegexSubject(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
+	assert.NotNil(t, db, "Asset database should not be nil")
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// create three FQDN entities: two .org domains and one .net
+	oEnt, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "owasp.org"})
+	assert.NoError(t, err, "Failed to create owasp.org")
+	eEnt, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "example.org"})
+	assert.NoError(t, err, "Failed to create example.org")
+	_, err = db.CreateAsset(ctx, &oamdns.FQDN{Name: "other.net"})
+	assert.NoError(t, err, "Failed to create other.net")
+
+	// create subdomain entities
+	woEnt, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
+	assert.NoError(t, err, "Failed to create www.owasp.org")
+	weEnt, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.example.org"})
+	assert.NoError(t, err, "Failed to create www.example.org")
+
+	// create edges: owasp.org --node--> www.owasp.org
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.SimpleRelation{Name: "node"},
+		FromEntity: oEnt,
+		ToEntity:   woEnt,
+	})
+	assert.NoError(t, err, "Failed to create owasp.org -> www.owasp.org edge")
+
+	// create edges: example.org --node--> www.example.org
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.SimpleRelation{Name: "node"},
+		FromEntity: eEnt,
+		ToEntity:   weEnt,
+	})
+	assert.NoError(t, err, "Failed to create example.org -> www.example.org edge")
+
+	// regex matching both .org domains: should return 2 root vertices
+	triple, err := ParseTriple(`<fqdn:#/.*\.org$/#> - <*:node> -> <fqdn:*>`)
+	assert.NoError(t, err, "Failed to parse .org regex triple")
+
+	results, err := Extract(db, []*Triple{triple})
+	assert.NoError(t, err, "Failed to extract with .org regex")
+	assert.NotNil(t, results, "Results should not be nil")
+	assert.Equal(t, 2, len(results.Nodes), "Should have two root nodes for .org regex")
+
+	// collect root keys for set-based assertion (ordering not guaranteed)
+	rootKeys := map[string]bool{}
+	for _, n := range results.Nodes {
+		rootKeys[n.Asset.Key()] = true
+		assert.Equal(t, 1, len(n.Relations), "Each root should have one relation")
+	}
+	assert.True(t, rootKeys["owasp.org"], "owasp.org should be a root")
+	assert.True(t, rootKeys["example.org"], "example.org should be a root")
+
+	// verify each root's relation points to the correct subdomain
+	for _, n := range results.Nodes {
+		switch n.Asset.Key() {
+		case "owasp.org":
+			assert.Equal(t, "www.owasp.org", n.Relations[0].Node.Asset.Key())
+		case "example.org":
+			assert.Equal(t, "www.example.org", n.Relations[0].Node.Asset.Key())
+		}
+	}
+
+	// regex matching everything: other.net matches but has no walks, so only 2 roots
+	triple, err = ParseTriple(`<fqdn:#/.*/#> - <*:node> -> <fqdn:*>`)
+	assert.NoError(t, err, "Failed to parse match-all regex triple")
+
+	results, err = Extract(db, []*Triple{triple})
+	assert.NoError(t, err, "Failed to extract with match-all regex")
+	assert.NotNil(t, results, "Results should not be nil")
+	assert.Equal(t, 2, len(results.Nodes), "Should have two root nodes (other.net has no walks)")
+
+	// regex matching nothing
+	triple, err = ParseTriple(`<fqdn:#/nonexistent.*/#> - <*:node> -> <fqdn:*>`)
+	assert.NoError(t, err, "Failed to parse nonexistent regex triple")
+
+	results, err = Extract(db, []*Triple{triple})
+	assert.Error(t, err, "Expected error when regex matches no entities")
+	assert.Nil(t, results, "Results should be nil when regex matches nothing")
+}
+
+// Sanity-check: "give me all Services reachable from *.owasp.org"
+func TestExtractServicesForWildcardFQDN(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err)
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// FQDNs
+	api, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "api.owasp.org"})
+	assert.NoError(t, err)
+	www, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "www.owasp.org"})
+	assert.NoError(t, err)
+	unrelated, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "example.com"})
+	assert.NoError(t, err)
+
+	// Services
+	svcHTTPS, err := db.CreateAsset(ctx, &oamplat.Service{ID: "https-api", Type: "https"})
+	assert.NoError(t, err)
+	svcHTTP, err := db.CreateAsset(ctx, &oamplat.Service{ID: "http-www", Type: "http"})
+	assert.NoError(t, err)
+	svcOther, err := db.CreateAsset(ctx, &oamplat.Service{ID: "http-example", Type: "http"})
+	assert.NoError(t, err)
+
+	// api.owasp.org --port:443--> https-api
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.PortRelation{Name: "port", PortNumber: 443, Protocol: "tcp"},
+		FromEntity: api, ToEntity: svcHTTPS,
+	})
+	assert.NoError(t, err)
+	// www.owasp.org --port:80--> http-www
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.PortRelation{Name: "port", PortNumber: 80, Protocol: "tcp"},
+		FromEntity: www, ToEntity: svcHTTP,
+	})
+	assert.NoError(t, err)
+	// example.com --port:80--> http-example (should not appear)
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.PortRelation{Name: "port", PortNumber: 80, Protocol: "tcp"},
+		FromEntity: unrelated, ToEntity: svcOther,
+	})
+	assert.NoError(t, err)
+
+	// "give me all services for *.owasp.org"
+	triple, err := ParseTriple(`<fqdn:#/.*\.owasp\.org$/#> - <portrelation:port> -> <service:*>`)
+	assert.NoError(t, err)
+
+	results, err := Extract(db, []*Triple{triple})
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.Equal(t, 2, len(results.Nodes), "two owasp.org subdomains have services")
+
+	svcIDs := map[string]bool{}
+	for _, n := range results.Nodes {
+		assert.Equal(t, 1, len(n.Relations))
+		svcIDs[n.Relations[0].Node.Asset.Key()] = true
+	}
+	assert.True(t, svcIDs["https-api"])
+	assert.True(t, svcIDs["http-www"])
+	assert.False(t, svcIDs["http-example"], "example.com service should not appear")
+}
+
+// Sanity-check: two-hop walk from regex FQDNs through IPs to Services
+func TestExtractFQDNToIPToService(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err)
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// FQDNs
+	site1, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "app.example.org"})
+	assert.NoError(t, err)
+	site2, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "api.example.org"})
+	assert.NoError(t, err)
+
+	// IPs
+	ip1, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr("10.0.0.1"), Type: "IPv4"})
+	assert.NoError(t, err)
+	ip2, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr("10.0.0.2"), Type: "IPv4"})
+	assert.NoError(t, err)
+
+	// Services
+	svc1, err := db.CreateAsset(ctx, &oamplat.Service{ID: "svc-app", Type: "https"})
+	assert.NoError(t, err)
+	svc2, err := db.CreateAsset(ctx, &oamplat.Service{ID: "svc-api", Type: "https"})
+	assert.NoError(t, err)
+
+	// app.example.org --dns_record--> 10.0.0.1
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamdns.BasicDNSRelation{Name: "dns_record", Header: oamdns.RRHeader{RRType: 1, Class: 1, TTL: 300}},
+		FromEntity: site1, ToEntity: ip1,
+	})
+	assert.NoError(t, err)
+	// api.example.org --dns_record--> 10.0.0.2
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamdns.BasicDNSRelation{Name: "dns_record", Header: oamdns.RRHeader{RRType: 1, Class: 1, TTL: 300}},
+		FromEntity: site2, ToEntity: ip2,
+	})
+	assert.NoError(t, err)
+	// 10.0.0.1 --port:443--> svc-app
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.PortRelation{Name: "port", PortNumber: 443, Protocol: "tcp"},
+		FromEntity: ip1, ToEntity: svc1,
+	})
+	assert.NoError(t, err)
+	// 10.0.0.2 --port:443--> svc-api
+	_, err = db.CreateEdge(ctx, &dbt.Edge{
+		Relation:   oamgen.PortRelation{Name: "port", PortNumber: 443, Protocol: "tcp"},
+		FromEntity: ip2, ToEntity: svc2,
+	})
+	assert.NoError(t, err)
+
+	// two-hop: regex FQDNs -> dns_record -> IPs -> port -> Services
+	t1, err := ParseTriple(`<fqdn:#/.*\.example\.org$/#> - <basicdnsrelation:dns_record> -> <ipaddress:*>`)
+	assert.NoError(t, err)
+	t2, err := ParseTriple(`<ipaddress:*> - <portrelation:port> -> <service:*>`)
+	assert.NoError(t, err)
+
+	results, err := Extract(db, []*Triple{t1, t2})
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.Equal(t, 2, len(results.Nodes), "two FQDNs should produce two roots")
+
+	// each root should have: 1 dns_record relation -> IP -> 1 port relation -> Service
+	for _, root := range results.Nodes {
+		assert.Equal(t, oam.FQDN, root.Type)
+		assert.Equal(t, 1, len(root.Relations), "one IP per FQDN")
+		ipVertex := root.Relations[0].Node
+		assert.Equal(t, oam.IPAddress, ipVertex.Type)
+		assert.Equal(t, 1, len(ipVertex.Relations), "one service per IP")
+		assert.Equal(t, oam.Service, ipVertex.Relations[0].Node.Type)
+	}
+}
+
+// Sanity-check: regex that matches many FQDNs but only some have the required walk
+func TestExtractRegexPartialWalks(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err)
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// five subdomains of owasp.org, only two have services
+	names := []string{"a.owasp.org", "b.owasp.org", "c.owasp.org", "d.owasp.org", "e.owasp.org"}
+	var ents []*dbt.Entity
+	for _, name := range names {
+		ent, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: name})
+		assert.NoError(t, err)
+		ents = append(ents, ent)
+	}
+
+	// only a.owasp.org and c.owasp.org get services
+	for _, i := range []int{0, 2} {
+		svc, err := db.CreateAsset(ctx, &oamplat.Service{ID: fmt.Sprintf("svc-%s", names[i]), Type: "http"})
+		assert.NoError(t, err)
+		_, err = db.CreateEdge(ctx, &dbt.Edge{
+			Relation:   oamgen.PortRelation{Name: "port", PortNumber: 80, Protocol: "tcp"},
+			FromEntity: ents[i], ToEntity: svc,
+		})
+		assert.NoError(t, err)
+	}
+
+	triple, err := ParseTriple(`<fqdn:#/.*\.owasp\.org$/#> - <portrelation:port> -> <service:*>`)
+	assert.NoError(t, err)
+
+	results, err := Extract(db, []*Triple{triple})
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(results.Nodes), "only 2 of 5 FQDNs have services")
+
+	rootKeys := map[string]bool{}
+	for _, n := range results.Nodes {
+		rootKeys[n.Asset.Key()] = true
+	}
+	assert.True(t, rootKeys["a.owasp.org"])
+	assert.True(t, rootKeys["c.owasp.org"])
 }
 
 func setupTempSQLite() (*sqlite3.SqliteRepository, string, error) {
