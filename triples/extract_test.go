@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -405,4 +406,33 @@ func teardownTempSQLite(repo *sqlite3.SqliteRepository, dir string) {
 		_ = repo.Close()
 	}
 	_ = os.RemoveAll(dir)
+}
+
+func TestFindFirstSubjectRegex(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
+	assert.NotNil(t, db, "Asset database should not be nil")
+	defer teardownTempSQLite(db, dir)
+
+	ctx := context.Background()
+	match := "192.168.1.2"
+	other := "10.0.0.5"
+
+	_, err = db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(match), Type: "IPv4"})
+	assert.NoError(t, err, "Failed to create the matching IP address asset")
+	_, err = db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr(other), Type: "IPv4"})
+	assert.NoError(t, err, "Failed to create the non-matching IP address asset")
+
+	// A regex in the subject position must be evaluated against stored entities,
+	// not passed through as a literal key.
+	entity, err := findFirstSubject(db, &Node{
+		Type:   oam.IPAddress,
+		Key:    `#/^192\./#`,
+		Regexp: regexp.MustCompile(`^192\.`),
+	})
+	assert.NoError(t, err, "A regex subject should match a stored entity")
+	assert.NotNil(t, entity, "Entity should not be nil for a matching regex subject")
+	if entity != nil {
+		assert.Equal(t, match, entity.Asset.Key(), "Should return the entity matching the regex")
+	}
 }
