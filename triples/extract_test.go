@@ -71,6 +71,14 @@ func TestExtract(t *testing.T) {
 	assert.Equal(t, "www.owasp.org", results.Node.Relations[0].Node.Asset.Key(), "Relation node key should be 'www.owasp.org'")
 	assert.Equal(t, 0, len(results.Node.Relations[0].Node.Relations), "Relation node should have no relations")
 
+	// test extracting associations with regex in the first subject
+	reTriple, err := ParseTriple("<fqdn:#/^[a-z]+\\.org$/#> - <*:node> -> <fqdn:www.owasp.org>")
+	assert.NoError(t, err, "Failed to parse triple with regex subject")
+	reResults, err := Extract(db, []*Triple{reTriple})
+	assert.NoError(t, err, "Failed to extract associations with regex subject")
+	assert.NotNil(t, reResults, "Results should not be nil with regex subject")
+	assert.Equal(t, "owasp.org", reResults.Node.Asset.Key())
+
 	// create a triple that will fail to extract associations
 	triple, err = ParseTriple("<fqdn:owasp.org> - <*> -> <fqdn:netsec.owasp.org>")
 	assert.NoError(t, err, "Failed to parse the second triple")
@@ -251,6 +259,35 @@ func TestFindFirstSubject(t *testing.T) {
 	assert.NoError(t, err, "Failed to find a valid subject")
 	assert.NotNil(t, entity, "Entity should not be nil for a valid subject")
 	assert.Equal(t, ipstr, entity.Asset.Key(), "Entity key should match the subject key")
+
+	// attempt to find a subject using a regex
+	reNode, err := parseNode("<ipaddress:#/192\\.168\\.1\\..*/#>")
+	assert.NoError(t, err, "Failed to parse regex node")
+	entity, err = findFirstSubject(db, reNode)
+	assert.NoError(t, err, "Failed to find subject using regex")
+	assert.NotNil(t, entity, "Entity should not be nil for regex subject")
+	assert.Equal(t, ipstr, entity.Asset.Key(), "Entity key should match the regex")
+
+	// attempt to find a subject using a non-matching regex
+	nonMatchNode, err := parseNode("<ipaddress:#/10\\.0\\.0\\..*/#>")
+	assert.NoError(t, err, "Failed to parse non-matching regex node")
+	entity, err = findFirstSubject(db, nonMatchNode)
+	assert.Error(t, err, "Expected error for non-matching regex subject")
+	assert.Nil(t, entity, "Entity should be nil for non-matching regex subject")
+
+	// attempt to find a subject using a wildcard key
+	wildcardNode, err := parseNode("<ipaddress:*>")
+	assert.NoError(t, err, "Failed to parse wildcard node")
+	entity, err = findFirstSubject(db, wildcardNode)
+	assert.NoError(t, err, "Failed to find subject using wildcard key")
+	assert.NotNil(t, entity, "Entity should not be nil for wildcard subject")
+
+	// attempt to find a subject using a wildcard type and key
+	allWildcardNode, err := parseNode("<*>")
+	assert.NoError(t, err, "Failed to parse all wildcard node")
+	entity, err = findFirstSubject(db, allWildcardNode)
+	assert.NoError(t, err, "Failed to find subject using wildcard type and key")
+	assert.NotNil(t, entity, "Entity should not be nil for wildcard type and key subject")
 }
 
 func TestEntityPropsMatch(t *testing.T) {

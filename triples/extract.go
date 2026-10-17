@@ -236,6 +236,34 @@ func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, err
 		return nil, errors.New("subject cannot be nil")
 	}
 
+	if subject.Regexp != nil || subject.Key == "*" || subject.Type == "*" {
+		var types []oam.AssetType
+		if subject.Type == "*" {
+			types = oam.AssetList
+		} else {
+			types = []oam.AssetType{subject.Type}
+		}
+
+		since := subject.Since
+		if since.IsZero() {
+			since = time.Unix(0, 0)
+		}
+
+		for _, atype := range types {
+			ents, err := db.FindEntitiesByType(context.Background(), atype, since, 0)
+			if err != nil {
+				continue
+			}
+			for _, ent := range ents {
+				if (subject.Key == "*" || valueMatch(ent.Asset.Key(), subject.Key, subject.Regexp)) &&
+					allAttrsMatch(ent.Asset, subject.Attributes) {
+					return ent, nil
+				}
+			}
+		}
+		return nil, errors.New("failed to find the subject in the database")
+	}
+
 	filter, err := subjectToAsset(subject)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert subject to asset: %v", err)
@@ -244,6 +272,9 @@ func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, err
 	ents, err := db.FindEntitiesByContent(context.Background(), subject.Type, subject.Since, 1, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find the subject in the database: %v", err)
+	}
+	if !allAttrsMatch(ents[0].Asset, subject.Attributes) {
+		return nil, errors.New("subject attributes did not match")
 	}
 	return ents[0], nil
 }
