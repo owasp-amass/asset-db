@@ -50,7 +50,7 @@ func attrMatch(s any, path string, av *AttrValue) bool {
 
 	// follow the path through the nested structs
 	for _, label := range labels {
-		if val.Kind() == reflect.Ptr {
+		if val.Kind() == reflect.Pointer {
 			val = val.Elem()
 		}
 		if val.Kind() != reflect.Struct {
