@@ -1,0 +1,33 @@
+name: ai-fixture-checks
+
+on:
+  push:
+    branches:
+      - feature/ai-investigation-inference
+  pull_request:
+    paths:
+      - 'internal/aitestfixture/**'
+      - 'cmd/ai-fixture-seed/**'
+      - 'testdata/ai/**'
+      - '.github/workflows/ai-fixture.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check fixture files and seeded SQLite graph
+        run: go test -v ./internal/aitestfixture/...
+      - name: Build fixture seeder
+        run: go build ./cmd/ai-fixture-seed
+      - name: Verify fixture packages
+        run: go vet ./internal/aitestfixture/... ./cmd/ai-fixture-seed
