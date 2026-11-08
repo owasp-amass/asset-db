@@ -1,0 +1,11 @@
+{"scope":"relation","target":"edge-parent-tech","kind":"source","name":"synthetic-registry-a","confidence":90}
+{"scope":"relation","target":"edge-parent-tech","kind":"source","name":"synthetic-lei-b","confidence":85}
+{"scope":"relation","target":"edge-parent-europe","kind":"source","name":"synthetic-registry-a","confidence":75}
+{"scope":"relation","target":"edge-tech-web-main","kind":"source","name":"synthetic-site-a","confidence":70}
+{"scope":"relation","target":"edge-tech-web-alternate","kind":"source","name":"synthetic-site-a","confidence":70}
+{"scope":"relation","target":"edge-tech-web-alternate","kind":"source","name":"synthetic-site-b","confidence":65}
+{"scope":"relation","target":"edge-url-main-domain","kind":"source","name":"synthetic-dns-a","confidence":75}
+{"scope":"relation","target":"edge-url-alternate-domain","kind":"source","name":"synthetic-dns-a","confidence":75}
+{"scope":"relation","target":"edge-url-alternate-domain","kind":"source","name":"synthetic-dns-b","confidence":75}
+{"scope":"relation","target":"edge-northwind-web","kind":"simple","name":"unattributed-association","value":"synthetic-unverified"}
+{"scope":"asset","target":"org-northwind","kind":"simple","name":"ai-fixture-category","value":"independent"}
