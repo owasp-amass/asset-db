@@ -1,0 +1,11 @@
+{"id":"org-parent","type":"Organization","organization":{"unique_id":"synthetic-acme-holdings","name":"Acme Holdings Inc.","jurisdiction":"US-NY"}}
+{"id":"org-tech","type":"Organization","organization":{"unique_id":"synthetic-acme-tech","name":"Acme Technologies Ltd.","jurisdiction":"US-NY"}}
+{"id":"org-europe","type":"Organization","organization":{"unique_id":"synthetic-acme-europe","name":"Acme Europe GmbH","jurisdiction":"DE"}}
+{"id":"org-northwind","type":"Organization","organization":{"unique_id":"synthetic-northwind","name":"Northwind Retail LLC","jurisdiction":"US-CA"}}
+{"id":"fqdn-tech","type":"FQDN","fqdn":{"name":"tech.acme.example"}}
+{"id":"fqdn-europe","type":"FQDN","fqdn":{"name":"eu.acme.example"}}
+{"id":"fqdn-northwind","type":"FQDN","fqdn":{"name":"northwind.example"}}
+{"id":"url-tech-main","type":"URL","url":{"url":"https://tech.acme.example/","scheme":"https","host":"tech.acme.example","path":"/"}}
+{"id":"url-tech-alternate","type":"URL","url":{"url":"https://tech.acme.example/alternate","scheme":"https","host":"tech.acme.example","path":"/alternate"}}
+{"id":"url-europe","type":"URL","url":{"url":"https://eu.acme.example/","scheme":"https","host":"eu.acme.example","path":"/"}}
+{"id":"url-northwind","type":"URL","url":{"url":"https://northwind.example/","scheme":"https","host":"northwind.example","path":"/"}}
