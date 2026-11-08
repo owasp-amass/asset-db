@@ -1,0 +1,12 @@
+{"id":"edge-acme-tech","from":"org-acme-holdings","to":"org-acme-technology","label":"subsidiary"}
+{"id":"edge-acme-europe","from":"org-acme-holdings","to":"org-acme-europe","label":"subsidiary"}
+{"id":"edge-acme-web","from":"org-acme-holdings","to":"url-acme","label":"website"}
+{"id":"edge-acme-tech-web","from":"org-acme-technology","to":"url-acme-tech","label":"website"}
+{"id":"edge-acme-europe-web","from":"org-acme-europe","to":"url-acme-eu","label":"website"}
+{"id":"edge-northwind-web","from":"org-northwind","to":"url-northwind","label":"website"}
+{"id":"edge-fabrikam-web","from":"org-fabrikam","to":"url-fabrikam","label":"website"}
+{"id":"edge-acme-url","from":"url-acme","to":"fqdn-acme","label":"domain"}
+{"id":"edge-acme-tech-url","from":"url-acme-tech","to":"fqdn-acme-tech","label":"domain"}
+{"id":"edge-acme-eu-url","from":"url-acme-eu","to":"fqdn-acme-eu","label":"domain"}
+{"id":"edge-northwind-url","from":"url-northwind","to":"fqdn-northwind","label":"domain"}
+{"id":"edge-fabrikam-url","from":"url-fabrikam","to":"fqdn-fabrikam","label":"domain"}

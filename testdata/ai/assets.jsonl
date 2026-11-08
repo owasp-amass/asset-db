@@ -1,0 +1,15 @@
+{"id":"org-acme-holdings","type":"Organization","organization":{"unique_id":"synthetic-acme-holdings","name":"Acme Holdings Inc.","jurisdiction":"US-NY"}}
+{"id":"org-acme-technology","type":"Organization","organization":{"unique_id":"synthetic-acme-tech","name":"Acme Technologies Ltd.","jurisdiction":"US-NY"}}
+{"id":"org-acme-europe","type":"Organization","organization":{"unique_id":"synthetic-acme-europe","name":"Acme Europe GmbH","jurisdiction":"DE"}}
+{"id":"org-northwind","type":"Organization","organization":{"unique_id":"synthetic-northwind","name":"Northwind Retail LLC","jurisdiction":"US-CA"}}
+{"id":"org-fabrikam","type":"Organization","organization":{"unique_id":"synthetic-fabrikam","name":"Fabrikam Health Ltd.","jurisdiction":"GB"}}
+{"id":"fqdn-acme","type":"FQDN","fqdn":{"name":"acme.example"}}
+{"id":"fqdn-acme-tech","type":"FQDN","fqdn":{"name":"tech.acme.example"}}
+{"id":"fqdn-acme-eu","type":"FQDN","fqdn":{"name":"eu.acme.example"}}
+{"id":"fqdn-northwind","type":"FQDN","fqdn":{"name":"northwind.example"}}
+{"id":"fqdn-fabrikam","type":"FQDN","fqdn":{"name":"fabrikam.example"}}
+{"id":"url-acme","type":"URL","url":{"url":"https://acme.example/","scheme":"https","host":"acme.example","path":"/"}}
+{"id":"url-acme-tech","type":"URL","url":{"url":"https://tech.acme.example/","scheme":"https","host":"tech.acme.example","path":"/"}}
+{"id":"url-acme-eu","type":"URL","url":{"url":"https://eu.acme.example/","scheme":"https","host":"eu.acme.example","path":"/"}}
+{"id":"url-northwind","type":"URL","url":{"url":"https://northwind.example/","scheme":"https","host":"northwind.example","path":"/"}}
+{"id":"url-fabrikam","type":"URL","url":{"url":"https://fabrikam.example/","scheme":"https","host":"fabrikam.example","path":"/"}}

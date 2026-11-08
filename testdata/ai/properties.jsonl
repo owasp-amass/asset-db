@@ -1,0 +1,6 @@
+{"scope":"relation","target":"edge-acme-tech","kind":"source","name":"synthetic-registry-a","confidence":90}
+{"scope":"relation","target":"edge-acme-tech","kind":"source","name":"synthetic-lei-b","confidence":85}
+{"scope":"relation","target":"edge-acme-europe","kind":"source","name":"synthetic-registry-a","confidence":90}
+{"scope":"relation","target":"edge-acme-europe","kind":"source","name":"synthetic-lei-b","confidence":85}
+{"scope":"asset","target":"org-northwind","kind":"simple","name":"ai-fixture-category","value":"independent"}
+{"scope":"asset","target":"org-fabrikam","kind":"simple","name":"ai-fixture-category","value":"independent"}
