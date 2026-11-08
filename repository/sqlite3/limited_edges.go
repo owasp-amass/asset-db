@@ -16,7 +16,7 @@ import (
 // ReadEdgesLimited bounds the SQL result set rather than materializing all
 // matching relationships. It intentionally does not change legacy queries.
 func (r *SqliteRepository) ReadEdgesLimited(ctx context.Context, entity *types.Entity, direction string, since time.Time, limit int, labels ...string) ([]*types.Edge, bool, error) {
-	if r == nil || r.rodb == nil || entity == nil {
+	if r == nil || r.rpool == nil || entity == nil {
 		return nil, false, errors.New("missing SQLite reader or entity")
 	}
 	if limit < 1 || limit > 500 {
@@ -64,10 +64,18 @@ func (r *SqliteRepository) ReadEdgesLimited(ctx context.Context, entity *types.E
         FROM edge e JOIN edge_type_lu t ON t.id=e.etype_id
         WHERE ` + strings.Join(where, " AND ") + ` ORDER BY e.updated_at DESC,e.edge_id DESC LIMIT ?`
 	args = append(args, limit+1)
-	rows, err := r.rodb.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, false, err
+	ch := make(chan *rowsReadResult, 1)
+	r.rpool.Submit(&rowsReadJob{Ctx: ctx, Name: query, SQLText: query, Args: args, Result: ch})
+	var result *rowsReadResult
+	select {
+	case <-ctx.Done():
+		return nil, false, ctx.Err()
+	case result = <-ch:
 	}
+	if result.Err != nil {
+		return nil, false, result.Err
+	}
+	rows := result.Rows
 	defer rows.Close()
 	out := make([]*types.Edge, 0, limit)
 	for rows.Next() {
