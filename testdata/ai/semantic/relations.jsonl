@@ -1,0 +1,10 @@
+{"id":"edge-parent-tech","from":"org-parent","to":"org-tech","label":"subsidiary"}
+{"id":"edge-parent-europe","from":"org-parent","to":"org-europe","label":"subsidiary"}
+{"id":"edge-tech-web-main","from":"org-tech","to":"url-tech-main","label":"website"}
+{"id":"edge-tech-web-alternate","from":"org-tech","to":"url-tech-alternate","label":"website"}
+{"id":"edge-url-main-domain","from":"url-tech-main","to":"fqdn-tech","label":"domain"}
+{"id":"edge-url-alternate-domain","from":"url-tech-alternate","to":"fqdn-tech","label":"domain"}
+{"id":"edge-europe-web","from":"org-europe","to":"url-europe","label":"website"}
+{"id":"edge-europe-domain","from":"url-europe","to":"fqdn-europe","label":"domain"}
+{"id":"edge-northwind-web","from":"org-northwind","to":"url-northwind","label":"website"}
+{"id":"edge-northwind-domain","from":"url-northwind","to":"fqdn-northwind","label":"domain"}
