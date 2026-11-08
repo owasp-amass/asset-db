@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "description": "Synthetic classification acceptance scenarios; not directly importable OAM assets",
+  "cases": [
+    {
+      "id": "parent-subsidiary-001",
+      "task": "pairwise_relation",
+      "subject": {
+        "asset_type": "Organization",
+        "key": "Acme Holdings Inc."
+      },
+      "object": {
+        "asset_type": "Organization",
+        "key": "Acme Technologies Ltd."
+      },
+      "observations": [
+        {
+          "id": "registry-001",
+          "source_id": "fictional-registry-a",
+          "kind": "corporate_registry",
+          "statement": "Fictional registry lists Acme Technologies Ltd. as a subsidiary of Acme Holdings Inc."
+        },
+        {
+          "id": "lei-001",
+          "source_id": "fictional-lei-dataset-b",
+          "kind": "legal_entity_relationship",
+          "statement": "Independent synthetic legal-entity dataset corroborates the parent-child link."
+        }
+      ],
+      "expected": {
+        "label": "subsidiary",
+        "direction": "subject_to_object",
+        "proposal_allowed": true,
+        "auto_commit": false
+      },
+      "rationale": "Two synthetic independent source records support the directed relationship, subject to human review."
+    },
+    {
+      "id": "shared-hosting-negative-002",
+      "task": "pairwise_relation",
+      "subject": {
+        "asset_type": "Organization",
+        "key": "Northwind Retail LLC"
+      },
+      "object": {
+        "asset_type": "Organization",
+        "key": "Fabrikam Health Ltd."
+      },
+      "observations": [
+        {
+          "id": "dns-002",
+          "source_id": "fictional-dns-a",
+          "kind": "dns",
+          "statement": "Both fictional organizations have domains routed through the same CDN."
+        },
+        {
+          "id": "tls-002",
+          "source_id": "fictional-tls-b",
+          "kind": "tls",
+          "statement": "Both domains use certificates from the same public issuer."
+        }
+      ],
+      "expected": {
+        "label": "none",
+        "proposal_allowed": false,
+        "auto_commit": false
+      },
+      "rationale": "Shared CDN and certificate issuer are common infrastructure and cannot establish common ownership."
+    },
+    {
+      "id": "name-collision-abstain-003",
+      "task": "pairwise_relation",
+      "subject": {
+        "asset_type": "Organization",
+        "key": "Acme Labs, Inc."
+      },
+      "object": {
+        "asset_type": "Organization",
+        "key": "ACME Labs Ltd."
+      },
+      "observations": [
+        {
+          "id": "public-name-003",
+          "source_id": "fictional-directory-a",
+          "kind": "directory",
+          "statement": "Names are highly similar but registration jurisdictions and ownership are unresolved."
+        }
+      ],
+      "expected": {
+        "label": "unknown",
+        "proposal_allowed": false,
+        "auto_commit": false
+      },
+      "rationale": "String similarity alone is not proof of identity, parentage, or control."
+    }
+  ]
+}
