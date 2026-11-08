@@ -56,4 +56,5 @@ func TestSeedIntoDisposablePostgres(t *testing.T) {
 	if err != nil || len(tags) != 2 {
 		t.Fatalf("expected two synthetic sources, got %d: %v", len(tags), err)
 	}
+	assertLimitedEdges(t, ctx, repo, report.AssetIDs["org-acme-holdings"])
 }
