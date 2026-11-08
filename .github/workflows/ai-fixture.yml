@@ -25,9 +25,41 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Check fixture files and seeded SQLite graph
+      - name: Check synthetic fixtures and SQLite graph
         run: go test -v ./internal/aitestfixture/...
       - name: Build fixture seeder
         run: go build ./cmd/ai-fixture-seed
       - name: Verify fixture packages
         run: go vet ./internal/aitestfixture/... ./cmd/ai-fixture-seed
+
+  postgres-fixture:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+      AMASS_AI_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/amass_ai_fixture_ci
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: amass_ai_fixture_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d amass_ai_fixture_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Enable PostgreSQL text search extension in disposable DB
+        env:
+          PGPASSWORD: postgres
+        run: psql -h 127.0.0.1 -U postgres -d amass_ai_fixture_ci -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;'
+      - name: Verify PostgreSQL fixture seeding and provenance
+        run: go test -v ./internal/aitestfixture/... -run '^TestSeedIntoDisposablePostgres$' -count=1
