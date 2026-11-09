@@ -25,10 +25,12 @@ func (r *SqliteRepository) ReadEdgesLimited(ctx context.Context, entity *types.E
 	if limit < 1 || limit > 500 {
 		return nil, false, errors.New("edge limit must be 1..500")
 	}
+
 	eid, err := strconv.ParseInt(entity.ID, 10, 64)
 	if err != nil {
 		return nil, false, fmt.Errorf("invalid entity ID: %w", err)
 	}
+
 	var expr string
 	switch direction {
 	case "in":
@@ -40,10 +42,12 @@ func (r *SqliteRepository) ReadEdgesLimited(ctx context.Context, entity *types.E
 	default:
 		return nil, false, errors.New("invalid edge direction")
 	}
+
 	args := []any{eid}
 	if direction == "both" {
 		args = append(args, eid)
 	}
+
 	var where = []string{expr}
 	if !since.IsZero() {
 		where = append(where, "e.updated_at >= ?")
@@ -58,11 +62,14 @@ func (r *SqliteRepository) ReadEdgesLimited(ctx context.Context, entity *types.E
 			if l == "" || len(l) > 128 {
 				return nil, false, errors.New("invalid edge label")
 			}
+
 			placeholders = append(placeholders, "?")
 			args = append(args, strings.ToLower(l))
 		}
+
 		where = append(where, "e.label IN ("+strings.Join(placeholders, ",")+")")
 	}
+
 	query := `SELECT e.edge_id,t.name,e.from_entity_id,e.to_entity_id,e.content,e.created_at,e.updated_at
         FROM edge e JOIN edge_type_lu t ON t.id=e.etype_id
         WHERE ` + strings.Join(where, " AND ") + ` ORDER BY e.updated_at DESC,e.edge_id DESC LIMIT ?`
@@ -78,6 +85,7 @@ func (r *SqliteRepository) ReadEdgesLimited(ctx context.Context, entity *types.E
 	if result.Err != nil {
 		return nil, false, result.Err
 	}
+
 	rows := result.Rows
 	defer rows.Close()
 	out := make([]*types.Edge, 0, limit)
@@ -85,28 +93,35 @@ func (r *SqliteRepository) ReadEdgesLimited(ctx context.Context, entity *types.E
 		if len(out) >= limit {
 			return out, true, nil
 		}
+
 		var id, from, to int64
 		var etype, raw, c, u string
 		if err := rows.Scan(&id, &etype, &from, &to, &raw, &c, &u); err != nil {
 			return nil, false, err
 		}
+
 		rel, err := extractOAMRelation(etype, json.RawMessage(raw))
 		if err != nil {
 			return nil, false, err
 		}
+
 		created, err := parseTimestamp(c)
 		if err != nil {
 			return nil, false, err
 		}
+
 		updated, err := parseTimestamp(u)
 		if err != nil {
 			return nil, false, err
 		}
+
 		out = append(out, &types.Edge{ID: strconv.FormatInt(id, 10), Relation: rel,
-			FromEntity: &types.Entity{ID: strconv.FormatInt(from, 10)}, ToEntity: &types.Entity{ID: strconv.FormatInt(to, 10)}, CreatedAt: created, LastSeen: updated})
+			FromEntity: &types.Entity{ID: strconv.FormatInt(from,
+				10)}, ToEntity: &types.Entity{ID: strconv.FormatInt(to, 10)}, CreatedAt: created, LastSeen: updated})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, false, err
 	}
+
 	return out, false, nil
 }

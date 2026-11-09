@@ -8,24 +8,24 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSemanticAlternateRouteFixtureLoadsAndSeeds(t *testing.T) {
-	dir := filepath.Join(fixtureDir(), "semantic")
-	f, err := Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(f.Assets) != 11 || len(f.Relations) != 10 || len(f.Properties) != 11 {
-		t.Fatalf("unexpected semantic fixture counts: assets=%d relations=%d properties=%d", len(f.Assets), len(f.Relations), len(f.Properties))
-	}
+	f, err := Load(filepath.Join(fixtureDir(), "semantic"))
+	assert.NoError(t, err, "Failed to load the semantic fixture")
+	assert.Len(t, f.Assets, 11, "Unexpected number of semantic fixture assets")
+	assert.Len(t, f.Relations, 10, "Unexpected number of semantic fixture relations")
+	assert.Len(t, f.Properties, 11, "Unexpected number of semantic fixture properties")
+
 	fromTo := map[string]int{}
 	for _, r := range f.Relations {
 		fromTo[r.From+"->"+r.To]++
 	}
-	if fromTo["url-tech-main->fqdn-tech"] != 1 || fromTo["url-tech-alternate->fqdn-tech"] != 1 {
-		t.Fatal("expected independent synthetic URL routes to one FQDN")
-	}
+	assert.Equal(t, 1, fromTo["url-tech-main->fqdn-tech"], "Missing the main URL route to the FQDN")
+	assert.Equal(t, 1, fromTo["url-tech-alternate->fqdn-tech"], "Missing the alternate URL route to the FQDN")
+
 	sources := map[string]map[string]bool{}
 	for _, p := range f.Properties {
 		if p.Scope != "relation" || p.Kind != "source" {
@@ -34,18 +34,18 @@ func TestSemanticAlternateRouteFixtureLoadsAndSeeds(t *testing.T) {
 		if sources[p.Target] == nil {
 			sources[p.Target] = map[string]bool{}
 		}
+
 		sources[p.Target][p.Name] = true
 	}
-	if len(sources["edge-parent-tech"]) != 2 || len(sources["edge-parent-europe"]) != 1 || len(sources["edge-tech-web-main"]) != 1 || len(sources["edge-tech-web-alternate"]) != 2 {
-		t.Fatalf("source contrast scenario missing: %+v", sources)
-	}
+	assert.Len(t, sources["edge-parent-tech"], 2, "Unexpected source count on edge-parent-tech")
+	assert.Len(t, sources["edge-parent-europe"], 1, "Unexpected source count on edge-parent-europe")
+	assert.Len(t, sources["edge-tech-web-main"], 1, "Unexpected source count on edge-tech-web-main")
+	assert.Len(t, sources["edge-tech-web-alternate"], 2, "Unexpected source count on edge-tech-web-alternate")
+
 	db := &recordingWriter{}
 	report, err := Seed(context.Background(), db, f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Assets != 11 || report.Relations != 10 || report.Properties != 11 {
-		t.Fatalf("seed count mismatch: %+v", report)
-	}
-	t.Logf("semantic fixture assets=%d relations=%d properties=%d; alternate URL paths and uneven source-tag support", report.Assets, report.Relations, report.Properties)
+	assert.NoError(t, err, "Failed to seed the semantic fixture")
+	assert.Equal(t, 11, report.Assets, "Seeded asset count does not match")
+	assert.Equal(t, 10, report.Relations, "Seeded relation count does not match")
+	assert.Equal(t, 11, report.Properties, "Seeded property count does not match")
 }

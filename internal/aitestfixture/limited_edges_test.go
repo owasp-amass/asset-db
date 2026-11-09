@@ -13,53 +13,58 @@ import (
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
+	"github.com/stretchr/testify/assert"
 )
 
 func assertLimitedEdges(t *testing.T, ctx context.Context, db repository.Repository, parentID string) {
 	t.Helper()
+
 	reader, ok := db.(repository.LimitedEdgeReader)
+	assert.True(t, ok, "Repository does not implement bounded edge reads")
 	if !ok {
-		t.Fatal("repository does not implement bounded edge reads")
+		return
 	}
+
 	parent, err := db.FindEntityById(ctx, parentID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err, "Failed to find the parent organization")
+	assert.NotNil(t, parent, "Parent organization should not be nil")
+
 	edges, more, err := reader.ReadEdgesLimited(ctx, parent, "out", time.Time{}, 1, "subsidiary")
-	if err != nil || len(edges) != 1 || !more {
-		t.Fatalf("expected one edge and more=true: edges=%d more=%v err=%v", len(edges), more, err)
-	}
+	assert.NoError(t, err, "Failed to read one bounded edge")
+	assert.Len(t, edges, 1, "A limit of one should return one edge")
+	assert.True(t, more, "More edges should be reported beyond a limit of one")
+
 	edges, more, err = reader.ReadEdgesLimited(ctx, parent, "out", time.Time{}, 2, "subsidiary")
-	if err != nil || len(edges) != 2 || more {
-		t.Fatalf("expected two edges and no remainder: edges=%d more=%v err=%v", len(edges), more, err)
-	}
+	assert.NoError(t, err, "Failed to read two bounded edges")
+	assert.Len(t, edges, 2, "A limit of two should return both edges")
+	assert.False(t, more, "No edges should remain beyond a limit of two")
+
 	edges, more, err = reader.ReadEdgesLimited(ctx, parent, "in", time.Time{}, 2, "subsidiary")
-	if err != nil || len(edges) != 0 || more {
-		t.Fatalf("expected empty inbound results: edges=%d more=%v err=%v", len(edges), more, err)
-	}
-	if _, _, err = reader.ReadEdgesLimited(ctx, parent, "out", time.Time{}, 0); err == nil {
-		t.Fatal("zero limit unexpectedly accepted")
-	}
-	if _, _, err = reader.ReadEdgesLimited(ctx, parent, "unsafe", time.Time{}, 10); err == nil {
-		t.Fatal("invalid direction accepted")
-	}
+	assert.NoError(t, err, "Failed to read inbound bounded edges")
+	assert.Empty(t, edges, "The parent should have no inbound subsidiary edges")
+	assert.False(t, more, "No inbound edges should remain")
+
+	_, _, err = reader.ReadEdgesLimited(ctx, parent, "out", time.Time{}, 0)
+	assert.Error(t, err, "A zero limit should be rejected")
+
+	_, _, err = reader.ReadEdgesLimited(ctx, parent, "unsafe", time.Time{}, 10)
+	assert.Error(t, err, "An invalid direction should be rejected")
 }
 
 func TestBoundedSQLiteEdges(t *testing.T) {
 	f, err := Load(fixtureDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err, "Failed to load the synthetic fixture")
+
 	db, err := assetdb.New(sqlite3.SQLite, filepath.Join(t.TempDir(), "limited.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	assert.NoError(t, err, "Failed to create the sqlite database")
+	assert.NotNil(t, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
 	report, err := Seed(ctx, db, f)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err, "Failed to seed the synthetic fixture")
+
 	assertLimitedEdges(t, ctx, db, report.AssetIDs["org-acme-holdings"])
 }

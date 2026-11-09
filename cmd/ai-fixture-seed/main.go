@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// ai-fixture-seed is a DANGEROUSLY WRITING TEST UTILITY that refuses normal
+// ai-fixture-seed is a dangerously writing test utility that refuses normal
 // Amass databases. Use only for newly created disposable test databases.
 package main
 
@@ -30,6 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run() error {
 	var dir, sqlite, pgdsn string
 	var confirm bool
@@ -44,6 +45,7 @@ func run() error {
 	if (sqlite == "") == (pgdsn == "") {
 		return errors.New("choose exactly one of -sqlite or -postgres-dsn")
 	}
+
 	var kind, dsn string
 	if sqlite != "" {
 		abs, err := filepath.Abs(sqlite)
@@ -61,6 +63,7 @@ func run() error {
 		if _, err := os.Stat(filepath.Dir(abs)); err != nil {
 			return fmt.Errorf("SQLite parent directory must exist: %w", err)
 		}
+
 		kind, dsn = sqlite3.SQLite, abs
 	} else {
 		parsed, err := url.Parse(pgdsn)
@@ -70,19 +73,24 @@ func run() error {
 		if parsed.Scheme != "postgres" && parsed.Scheme != "postgresql" {
 			return errors.New("PostgreSQL DSN must be postgres://")
 		}
-		if !strings.HasPrefix(strings.TrimPrefix(parsed.Path, "/"), "amass_ai_fixture_") || parsed.Host == "" || parsed.User == nil {
+		if !strings.HasPrefix(strings.TrimPrefix(parsed.Path,
+			"/"), "amass_ai_fixture_") || parsed.Host == "" || parsed.User == nil {
 			return errors.New("PostgreSQL database name must begin amass_ai_fixture_ and DSN requires explicit host and user")
 		}
+
 		kind, dsn = postgres.Postgres, pgdsn
 	}
+
 	f, err := aitestfixture.Load(dir)
 	if err != nil {
 		return err
 	}
+
 	db, err := assetdb.New(kind, dsn)
 	if err != nil {
 		return err
 	}
+
 	defer db.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -90,5 +98,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
 	return json.NewEncoder(os.Stdout).Encode(report)
 }
