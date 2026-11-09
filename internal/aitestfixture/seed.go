@@ -1,4 +1,7 @@
+// Copyright © by Jeff Foley 2017-2026. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
+
 // Package aitestfixture seeds SMALL, SYNTHETIC OAM graphs in disposable databases.
 // It is deliberately opt-in and must never be run against customer databases.
 package aitestfixture
