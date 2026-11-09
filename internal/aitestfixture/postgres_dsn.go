@@ -20,8 +20,10 @@ func validateDisposablePostgresDSN(dsn string) error {
 	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
 		return errors.New("unexpected PostgreSQL scheme")
 	}
-	if u.Hostname() == "" || u.User == nil || !strings.HasPrefix(strings.TrimPrefix(u.EscapedPath(), "/"), "amass_ai_fixture_") {
+	if u.Hostname() == "" || u.User == nil || !strings.HasPrefix(strings.TrimPrefix(u.EscapedPath(),
+		"/"), "amass_ai_fixture_") {
 		return errors.New("test DSN must name an explicit disposable amass_ai_fixture_* database")
 	}
+
 	return nil
 }

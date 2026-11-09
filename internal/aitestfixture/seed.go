@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package aitestfixture seeds SMALL, SYNTHETIC OAM graphs in disposable databases.
+// Package aitestfixture seeds small, synthetic OAM graphs in disposable databases.
 // It is deliberately opt-in and must never be run against customer databases.
 package aitestfixture
 
@@ -33,12 +33,14 @@ type AssetRecord struct {
 	FQDN         *dns.FQDN         `json:"fqdn,omitempty"`
 	URL          *oamurl.URL       `json:"url,omitempty"`
 }
+
 type RelationRecord struct {
 	ID    string `json:"id"`
 	From  string `json:"from"`
 	To    string `json:"to"`
 	Label string `json:"label"`
 }
+
 type PropertyRecord struct {
 	Scope      string `json:"scope"`  // asset or relation
 	Target     string `json:"target"` // stable fixture ID
@@ -47,6 +49,7 @@ type PropertyRecord struct {
 	Value      string `json:"value,omitempty"`
 	Confidence int    `json:"confidence,omitempty"`
 }
+
 type Fixture struct {
 	Assets     []AssetRecord
 	Relations  []RelationRecord
@@ -74,6 +77,7 @@ func readLines[T any](path string, max int) ([]T, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer f.Close()
 	// Reject oversized fixtures to prevent accidental bulk loads.
 	s := bufio.NewScanner(io.LimitReader(f, 4<<20))
@@ -87,18 +91,22 @@ func readLines[T any](path string, max int) ([]T, error) {
 		if len(out) >= max {
 			return nil, fmt.Errorf("too many records in %s", path)
 		}
+
 		d := json.NewDecoder(strings.NewReader(raw))
 		d.DisallowUnknownFields()
 		var row T
 		if err := d.Decode(&row); err != nil {
 			return nil, fmt.Errorf("%s record %d: %w", path, len(out)+1, err)
 		}
+
 		var extra any
 		if err := d.Decode(&extra); err != io.EOF {
 			return nil, fmt.Errorf("%s record %d: trailing JSON", path, len(out)+1)
 		}
+
 		out = append(out, row)
 	}
+
 	return out, s.Err()
 }
 
@@ -109,14 +117,17 @@ func Load(dir string) (Fixture, error) {
 	if err != nil {
 		return f, err
 	}
+
 	f.Relations, err = readLines[RelationRecord](filepath.Join(dir, "relations.jsonl"), 4000)
 	if err != nil {
 		return f, err
 	}
+
 	f.Properties, err = readLines[PropertyRecord](filepath.Join(dir, "properties.jsonl"), 8000)
 	if err != nil {
 		return f, err
 	}
+
 	return f, f.Validate()
 }
 
@@ -126,6 +137,7 @@ func (f Fixture) Validate() error {
 	if len(f.Assets) == 0 || len(f.Assets) > 2000 || len(f.Relations) > 4000 || len(f.Properties) > 8000 {
 		return errors.New("fixture sizes outside bounds")
 	}
+
 	ids := map[string]oam.AssetType{}
 	for _, a := range f.Assets {
 		if !safeID.MatchString(a.ID) || ids[a.ID] != "" {
@@ -133,32 +145,41 @@ func (f Fixture) Validate() error {
 		}
 		switch a.Type {
 		case "Organization":
-			if a.Organization == nil || a.FQDN != nil || a.URL != nil || !strings.HasPrefix(a.Organization.ID, "synthetic-") || a.Organization.Name == "" {
+			if a.Organization == nil || a.FQDN != nil || a.URL != nil ||
+				!strings.HasPrefix(a.Organization.ID, "synthetic-") || a.Organization.Name == "" {
 				return fmt.Errorf("invalid synthetic organization %q", a.ID)
 			}
+
 			ids[a.ID] = oam.Organization
 		case "FQDN":
 			if a.FQDN == nil || a.Organization != nil || a.URL != nil || !strings.HasSuffix(a.FQDN.Name, ".example") {
 				return fmt.Errorf("invalid example FQDN %q", a.ID)
 			}
+
 			ids[a.ID] = oam.FQDN
 		case "URL":
-			if a.URL == nil || a.Organization != nil || a.FQDN != nil || !strings.HasSuffix(a.URL.Host, ".example") || !strings.HasPrefix(a.URL.Raw, "https://") || a.URL.Username != "" || a.URL.Password != "" {
+			if a.URL == nil || a.Organization != nil || a.FQDN != nil || !strings.HasSuffix(a.URL.Host,
+				".example") || !strings.HasPrefix(a.URL.Raw,
+				"https://") || a.URL.Username != "" || a.URL.Password != "" {
 				return fmt.Errorf("invalid synthetic URL %q", a.ID)
 			}
+
 			ids[a.ID] = oam.URL
 		default:
 			return fmt.Errorf("unsupported fixture asset type %q", a.Type)
 		}
 	}
+
 	edges := map[string]bool{}
 	for _, r := range f.Relations {
 		if !safeID.MatchString(r.ID) || edges[r.ID] {
 			return fmt.Errorf("duplicate or invalid relation ID %q", r.ID)
 		}
-		if ids[r.From] == "" || ids[r.To] == "" || !oam.ValidRelationship(ids[r.From], r.Label, oam.SimpleRelation, ids[r.To]) {
+		if ids[r.From] == "" || ids[r.To] == "" || !oam.ValidRelationship(ids[r.From], r.Label,
+			oam.SimpleRelation, ids[r.To]) {
 			return fmt.Errorf("invalid taxonomy relation %q", r.ID)
 		}
+
 		edges[r.ID] = true
 	}
 	for _, p := range f.Properties {
@@ -183,11 +204,12 @@ func (f Fixture) Validate() error {
 			return fmt.Errorf("invalid property kind %q", p.Kind)
 		}
 	}
+
 	return nil
 }
 
-// Seed validates the entire fixture before the first write. The caller MUST
-// select a NEW disposable database. No rollback is attempted on partial failure.
+// Seed validates the entire fixture before the first write. The caller must
+// select a new disposable database. No rollback is attempted on partial failure.
 func Seed(ctx context.Context, db Writer, f Fixture) (Report, error) {
 	report := Report{AssetIDs: map[string]string{}, RelationIDs: map[string]string{}}
 	if db == nil {
@@ -196,12 +218,14 @@ func Seed(ctx context.Context, db Writer, f Fixture) (Report, error) {
 	if err := f.Validate(); err != nil {
 		return report, err
 	}
+
 	entities := map[string]*types.Entity{}
 	edges := map[string]*types.Edge{}
 	for _, a := range f.Assets {
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
+
 		var asset oam.Asset
 		switch a.Type {
 		case "Organization":
@@ -211,6 +235,7 @@ func Seed(ctx context.Context, db Writer, f Fixture) (Report, error) {
 		case "URL":
 			asset = a.URL
 		}
+
 		e, err := db.CreateAsset(ctx, asset)
 		if err != nil {
 			return report, fmt.Errorf("create asset %s: %w", a.ID, err)
@@ -218,6 +243,7 @@ func Seed(ctx context.Context, db Writer, f Fixture) (Report, error) {
 		if e == nil {
 			return report, fmt.Errorf("create asset %s returned nil", a.ID)
 		}
+
 		entities[a.ID] = e
 		report.AssetIDs[a.ID] = e.ID
 		report.Assets++
@@ -226,13 +252,20 @@ func Seed(ctx context.Context, db Writer, f Fixture) (Report, error) {
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
-		edge, err := db.CreateEdge(ctx, &types.Edge{Relation: &general.SimpleRelation{Name: r.Label}, FromEntity: entities[r.From], ToEntity: entities[r.To]})
+
+		edge, err := db.CreateEdge(ctx,
+			&types.Edge{
+				Relation:   &general.SimpleRelation{Name: r.Label},
+				FromEntity: entities[r.From],
+				ToEntity:   entities[r.To],
+			})
 		if err != nil {
 			return report, fmt.Errorf("create relation %s: %w", r.ID, err)
 		}
 		if edge == nil {
 			return report, fmt.Errorf("create relation %s returned nil", r.ID)
 		}
+
 		edges[r.ID] = edge
 		report.RelationIDs[r.ID] = edge.ID
 		report.Relations++
@@ -241,12 +274,14 @@ func Seed(ctx context.Context, db Writer, f Fixture) (Report, error) {
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
+
 		var property oam.Property
 		if p.Kind == "source" {
 			property = &general.SourceProperty{Source: p.Name, Confidence: p.Confidence}
 		} else {
 			property = &general.SimpleProperty{PropertyName: p.Name, PropertyValue: p.Value}
 		}
+
 		var err error
 		if p.Scope == "asset" {
 			_, err = db.CreateEntityProperty(ctx, entities[p.Target], property)
@@ -256,7 +291,9 @@ func Seed(ctx context.Context, db Writer, f Fixture) (Report, error) {
 		if err != nil {
 			return report, fmt.Errorf("create property for %s: %w", p.Target, err)
 		}
+
 		report.Properties++
 	}
+
 	return report, nil
 }

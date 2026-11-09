@@ -12,52 +12,51 @@ import (
 
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository/postgres"
+	"github.com/stretchr/testify/assert"
 )
 
-// TestSeedIntoDisposablePostgres deliberately requires an explicit test DSN.
-// CI supplies an isolated service with a disposable amass_ai_fixture_* DB.
-// Developers must never point this test at their normal Amass database.
 func TestSeedIntoDisposablePostgres(t *testing.T) {
 	dsn := os.Getenv("AMASS_AI_TEST_POSTGRES_DSN")
 	if dsn == "" {
 		t.Skip("AMASS_AI_TEST_POSTGRES_DSN not configured")
 	}
 	if err := validateDisposablePostgresDSN(dsn); err != nil {
+		// Never seed a database that does not look disposable.
 		t.Fatal(err)
 	}
+
 	fixture, err := Load(fixtureDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err, "Failed to load the synthetic fixture")
+
 	repo, err := assetdb.New(postgres.Postgres, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer repo.Close()
+	assert.NoError(t, err, "Failed to connect to the disposable PostgreSQL database")
+	assert.NotNil(t, repo, "Asset database should not be nil")
+	defer func() { _ = repo.Close() }()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
+
 	report, err := Seed(ctx, repo, fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Assets != 15 || report.Relations != 12 || report.Properties != 6 {
-		t.Fatalf("unexpected counts: %+v", report)
-	}
+	assert.NoError(t, err, "Failed to seed the synthetic fixture")
+	assert.Equal(t, 15, report.Assets, "Unexpected number of seeded assets")
+	assert.Equal(t, 12, report.Relations, "Unexpected number of seeded relations")
+	assert.Equal(t, 6, report.Properties, "Unexpected number of seeded properties")
+
 	parent, err := repo.FindEntityById(ctx, report.AssetIDs["org-acme-holdings"])
-	if err != nil || parent == nil {
-		t.Fatalf("parent missing: %v", err)
-	}
+	assert.NoError(t, err, "Failed to find the parent organization")
+	assert.NotNil(t, parent, "Parent organization should not be nil")
+
 	edges, err := repo.OutgoingEdges(ctx, parent, time.Time{}, "subsidiary")
-	if err != nil || len(edges) != 2 {
-		t.Fatalf("expected 2 subsidiaries, got %d: %v", len(edges), err)
-	}
+	assert.NoError(t, err, "Failed to read the subsidiary edges")
+	assert.Len(t, edges, 2, "Expected two subsidiaries")
+
 	edge, err := repo.FindEdgeById(ctx, report.RelationIDs["edge-acme-tech"])
-	if err != nil || edge == nil {
-		t.Fatalf("relation missing: %v", err)
-	}
+	assert.NoError(t, err, "Failed to find the seeded relation")
+	assert.NotNil(t, edge, "Seeded relation should not be nil")
+
 	tags, err := repo.FindEdgeTags(ctx, edge, time.Time{})
-	if err != nil || len(tags) != 2 {
-		t.Fatalf("expected two synthetic sources, got %d: %v", len(tags), err)
-	}
+	assert.NoError(t, err, "Failed to read the relation sources")
+	assert.Len(t, tags, 2, "Expected two synthetic sources")
+
 	assertLimitedEdges(t, ctx, repo, report.AssetIDs["org-acme-holdings"])
 }
