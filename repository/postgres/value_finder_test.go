@@ -13,6 +13,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,17 +88,33 @@ func TestPostgresFindEntitiesByValue(t *testing.T) {
 	cert("vf02", "vf-owasp-events.org", "vf:aa")
 	cert("vf03", "www.vf.example", "vf:cc")
 
-	ents, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "subject_key_id", "vf:aa", time.Time{}, 10)
+	ents, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "subject_key_id", "vf:aa", false, time.Time{}, 10)
 	require.NoError(t, err)
 	assert.Len(t, ents, 2)
 
-	ents, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "authority_key_id", "vf:ca", time.Time{}, 10)
+	ents, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "authority_key_id", "vf:ca", false, time.Time{}, 10)
 	require.NoError(t, err)
 	assert.Len(t, ents, 3)
 
-	_, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "x') OR 1=1 --", "x", time.Time{}, 10)
+	_, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "x') OR 1=1 --", "x", false, time.Time{}, 10)
 	assert.Error(t, err)
 	_, _, err = db.FindEntitiesByAttribute(ctx, oam.AssetType("entity; DROP TABLE entity"), "subject_key_id", "x",
-		time.Time{}, 10)
+		false, time.Time{}, 10)
 	assert.Error(t, err)
+}
+
+func TestPostgresFindEntitiesByAttributeContains(t *testing.T) {
+	db := valueFinderRepo(t)
+	ctx := context.Background()
+	for id, location := range map[string]string{"vfs1": "https://www.VF-OWASP.org/landing", "vfs2": "https://vf-example.com/"} {
+		_, err := db.CreateAsset(ctx, &oamplat.Service{ID: id, Type: "web-service",
+			Attributes: map[string][]string{"Location": {location}}})
+		require.NoError(t, err)
+	}
+
+	ents, more, err := db.FindEntitiesByAttribute(ctx, oam.Service, "attributes", "vf-owasp.org", true, time.Time{}, 10)
+	require.NoError(t, err)
+	assert.False(t, more)
+	require.Len(t, ents, 1)
+	assert.Equal(t, "vfs1", ents[0].Asset.(*oamplat.Service).ID)
 }

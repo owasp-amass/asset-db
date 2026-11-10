@@ -26,8 +26,11 @@ type ValueFinder interface {
 	// (case-insensitive) when contains is set.
 	FindEntitiesByTagValue(ctx context.Context, atype oam.AssetType, name, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error)
 	// FindEntitiesByAttribute finds entities of atype whose stored asset
-	// attribute key (a JSON field such as subject_key_id) equals value.
-	FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, since time.Time, limit int) ([]*types.Entity, bool, error)
+	// attribute key (a JSON field such as subject_key_id) equals value, or
+	// whose text contains it (case-insensitive) when contains is set. An
+	// object or list attribute (a service's headers) is matched as its JSON
+	// text.
+	FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error)
 }
 
 var (

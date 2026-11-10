@@ -38,7 +38,7 @@ func TestTagValueQueryUsesParameters(t *testing.T) {
 }
 
 func TestAttributeQueryUsesParameters(t *testing.T) {
-	query, params, err := attributeQuery(oam.TLSCertificate, "subject_key_id", "aa:bb", time.Time{}, 5)
+	query, params, err := attributeQuery(oam.TLSCertificate, "subject_key_id", "aa:bb", false, time.Time{}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,10 +53,20 @@ func TestValueQueriesRejectUnsafeInput(t *testing.T) {
 		time.Time{}, 10); err == nil {
 		t.Error("an asset type outside OAM was accepted as a label")
 	}
-	if _, _, err := attributeQuery(oam.TLSCertificate, "subject_key_id] = 1 OR a[x", "v", time.Time{}, 10); err == nil {
+	if _, _, err := attributeQuery(oam.TLSCertificate, "subject_key_id] = 1 OR a[x", "v", false, time.Time{}, 10); err == nil {
 		t.Error("an attribute key that is not an identifier was accepted")
 	}
 	if _, _, err := tagValueQuery(oam.FQDN, "dns_record", "v", false, time.Time{}, 501); err == nil {
 		t.Error("a limit above 500 was accepted")
+	}
+}
+
+func TestAttributeContainsQueryLowersTheValue(t *testing.T) {
+	query, params, err := attributeQuery(oam.Service, "attributes", "OWASP.org", true, time.Time{}, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(query, "toLower(toString(a[$key])) CONTAINS $value") || params["value"] != "owasp.org" {
+		t.Errorf("query %q with params %v", query, params)
 	}
 }

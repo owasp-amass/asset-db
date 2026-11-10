@@ -48,7 +48,7 @@ func (r *PostgresRepository) FindEntitiesByTagValue(ctx context.Context, atype o
 }
 
 // FindEntitiesByAttribute implements repository.ValueFinder.
-func (r *PostgresRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, since time.Time, limit int) ([]*types.Entity, bool, error) {
+func (r *PostgresRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
 	if r == nil || r.DB == nil {
 		return nil, false, errors.New("missing PostgreSQL reader")
 	}
@@ -66,11 +66,17 @@ func (r *PostgresRepository) FindEntitiesByAttribute(ctx context.Context, atype 
 
 	// The table and key are validated and written into the query so an
 	// index on (attrs->>'key') applies.
-	args := []any{table, value}
+	match, arg := fmt.Sprintf("(a.attrs->>'%s') = $2", key), any(value)
+	if contains {
+		match = fmt.Sprintf(`lower(a.attrs->>'%s') LIKE $2 ESCAPE '\'`, key)
+		arg = valuequery.LikePattern(value)
+	}
+
+	args := []any{table, arg}
 	query := fmt.Sprintf(`SELECT e.entity_id FROM public.entity e
         JOIN public.entity_type_lu t ON t.id = e.etype_id AND t.name = $1
         JOIN public.%s a ON a.id = e.row_id
-        WHERE (a.attrs->>'%s') = $2`, table, key)
+        WHERE %s`, table, match)
 	if !since.IsZero() {
 		args = append(args, since.UTC())
 		query += fmt.Sprintf(" AND e.updated_at >= $%d", len(args))

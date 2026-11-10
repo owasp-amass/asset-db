@@ -12,6 +12,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamplat "github.com/owasp-amass/open-asset-model/platform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,20 +94,45 @@ func TestFindEntitiesByAttribute(t *testing.T) {
 	cert("02", "owasp-events.org", "aa:bb", "ca:01")
 	cert("03", "www.example.com", "cc:dd", "ca:02")
 
-	ents, more, err := db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "subject_key_id", "aa:bb", time.Time{}, 10)
+	ents, more, err := db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "subject_key_id", "aa:bb", false, time.Time{}, 10)
 	require.NoError(t, err)
 	assert.False(t, more)
 	assert.Len(t, ents, 2)
 
-	ents, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "authority_key_id", "ca:02", time.Time{}, 10)
+	ents, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "authority_key_id", "ca:02", false, time.Time{}, 10)
 	require.NoError(t, err)
 	require.Len(t, ents, 1)
 	assert.Equal(t, "03", ents[0].Asset.Key())
 
-	_, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "subject_key_id') OR 1=1 --", "x", time.Time{},
+	_, _, err = db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "subject_key_id') OR 1=1 --", "x", false, time.Time{},
 		10)
 	assert.Error(t, err)
 	_, _, err = db.FindEntitiesByAttribute(ctx, oam.AssetType("entity; DROP TABLE entity"), "subject_key_id", "x",
-		time.Time{}, 10)
+		false, time.Time{}, 10)
 	assert.Error(t, err)
+}
+
+func TestFindEntitiesByAttributeContains(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	require.NoError(t, err)
+	defer teardownTempSQLite(db, dir)
+
+	ctx := context.Background()
+	service := func(id, location string) {
+		_, err := db.CreateAsset(ctx, &oamplat.Service{ID: id, Type: "web-service",
+			Attributes: map[string][]string{"Location": {location}, "Server": {"nginx"}}})
+		require.NoError(t, err)
+	}
+
+	service("s1", "https://www.OWASP.org/landing")
+	service("s2", "https://example.com/")
+	ents, more, err := db.FindEntitiesByAttribute(ctx, oam.Service, "attributes", "owasp.org", true, time.Time{}, 10)
+	require.NoError(t, err)
+	assert.False(t, more)
+	require.Len(t, ents, 1)
+	assert.Equal(t, "s1", ents[0].Asset.(*oamplat.Service).ID)
+
+	ents, _, err = db.FindEntitiesByAttribute(ctx, oam.Service, "attributes", "100%_owasp", true, time.Time{}, 10)
+	require.NoError(t, err)
+	assert.Empty(t, ents, "LIKE wildcards in the value must match literally")
 }
