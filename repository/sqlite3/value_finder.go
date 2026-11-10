@@ -44,7 +44,7 @@ func (r *SqliteRepository) FindEntitiesByTagValue(ctx context.Context, atype oam
 }
 
 // FindEntitiesByAttribute implements repository.ValueFinder.
-func (r *SqliteRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, since time.Time, limit int) ([]*types.Entity, bool, error) {
+func (r *SqliteRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
 	if r == nil || r.rpool == nil {
 		return nil, false, errors.New("missing SQLite reader")
 	}
@@ -62,11 +62,17 @@ func (r *SqliteRepository) FindEntitiesByAttribute(ctx context.Context, atype oa
 
 	// The key is validated and written into the expression so an index on
 	// json_extract(attrs, '$.key') applies.
-	args := []any{table, value}
+	match, arg := fmt.Sprintf("json_extract(a.attrs, '$.%s') = ?", key), any(value)
+	if contains {
+		match = fmt.Sprintf(`lower(json_extract(a.attrs, '$.%s')) LIKE ? ESCAPE '\'`, key)
+		arg = valuequery.LikePattern(value)
+	}
+
+	args := []any{table, arg}
 	query := fmt.Sprintf(`SELECT e.entity_id FROM entity e
         JOIN entity_type_lu t ON t.id = e.etype_id AND t.name = ?
         JOIN %s a ON a.id = e.row_id
-        WHERE json_extract(a.attrs, '$.%s') = ?`, table, key)
+        WHERE %s`, table, match)
 	if !since.IsZero() {
 		query += " AND e.updated_at >= ?"
 		args = append(args, since.UTC())

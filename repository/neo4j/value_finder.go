@@ -61,8 +61,8 @@ func tagValueQuery(atype oam.AssetType, name, value string, contains bool, since
 }
 
 // FindEntitiesByAttribute implements repository.ValueFinder.
-func (neo *NeoRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, since time.Time, limit int) ([]*types.Entity, bool, error) {
-	query, params, err := attributeQuery(atype, key, value, since, limit)
+func (neo *NeoRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
+	query, params, err := attributeQuery(atype, key, value, contains, since, limit)
 	if err != nil {
 		return nil, false, err
 	}
@@ -72,7 +72,7 @@ func (neo *NeoRepository) FindEntitiesByAttribute(ctx context.Context, atype oam
 
 // attributeQuery builds the Cypher query and parameters for
 // FindEntitiesByAttribute; the key is a parameter too (a[$key]).
-func attributeQuery(atype oam.AssetType, key, value string, since time.Time, limit int) (string, map[string]any, error) {
+func attributeQuery(atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) (string, map[string]any, error) {
 	if err := valuequery.Check(atype, key, value, limit); err != nil {
 		return "", nil, err
 	}
@@ -87,6 +87,11 @@ func attributeQuery(atype oam.AssetType, key, value string, since time.Time, lim
 
 	where := "a[$key] = $value"
 	params := map[string]any{"key": key, "value": value, "limit": limit + 1}
+	if contains {
+		// Maps such as a service's headers are stored as JSON strings.
+		where = "toLower(toString(a[$key])) CONTAINS $value"
+		params["value"] = strings.ToLower(value)
+	}
 	if !since.IsZero() {
 		where += " AND a.updated_at >= $since"
 		params["since"] = timeToNeo4jTime(since)
