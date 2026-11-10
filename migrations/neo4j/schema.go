@@ -49,6 +49,12 @@ func InitializeSchema(driver neo4jdb.DriverWithContext, dbname string) error {
 		return err
 	}
 
+	// Value searches (repository.ValueFinder) select tags by property name.
+	err = executeQuery(driver, dbname, "CREATE INDEX enttag_range_index_property_name IF NOT EXISTS FOR (n:EntityTag) ON (n.property_name)")
+	if err != nil {
+		return err
+	}
+
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_edgetag_tag_id IF NOT EXISTS FOR (n:EdgeTag) REQUIRE n.tag_id IS UNIQUE")
 	if err != nil {
 		return err
@@ -204,6 +210,17 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 	}
 
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_tls_content_serial_number IF NOT EXISTS FOR (n:TLSCertificate) REQUIRE n.serial_number IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	// Value searches (repository.ValueFinder) match certificates by key identifier.
+	err = executeQuery(driver, dbname, "CREATE INDEX tls_range_index_subject_key_id IF NOT EXISTS FOR (n:TLSCertificate) ON (n.subject_key_id)")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE INDEX tls_range_index_authority_key_id IF NOT EXISTS FOR (n:TLSCertificate) ON (n.authority_key_id)")
 	if err != nil {
 		return err
 	}

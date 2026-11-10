@@ -8,6 +8,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/postgres"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	"github.com/owasp-amass/asset-db/types"
@@ -32,4 +33,5 @@ type ValueFinder interface {
 var (
 	_ ValueFinder = (*sqlite3.SqliteRepository)(nil)
 	_ ValueFinder = (*postgres.PostgresRepository)(nil)
+	_ ValueFinder = (*neo4j.NeoRepository)(nil)
 )
