@@ -47,3 +47,15 @@ type EdgeTag struct {
 	Property  oam.Property
 	Edge      *Edge
 }
+
+// EdgeCursor marks the last edge of a page read by a repository's
+// ReadEdgesPage. Pages run newest first: updated_at descending, then edge
+// ID descending.
+type EdgeCursor struct {
+	UpdatedAt time.Time
+	EdgeID    string
+	// SortKey is updated_at exactly as the repository compared it. SQLite
+	// stores it as text in more than one format, so a cursor is passed back
+	// unchanged rather than rebuilt from UpdatedAt.
+	SortKey string
+}
