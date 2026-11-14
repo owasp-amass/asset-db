@@ -24,8 +24,14 @@ func (neo *NeoRepository) CreateEdge(ctx context.Context, edge *types.Edge) (*ty
 		return nil, errors.New("failed input validation checks")
 	}
 
+	// A port relation is stored under its own name (tcp_port_443) but is the
+	// "port" relationship in the taxonomy, as the SQL repositories check it.
+	label := edge.Relation.Label()
+	if edge.Relation.RelationType() == oam.PortRelation {
+		label = "port"
+	}
 	if !oam.ValidRelationship(edge.FromEntity.Asset.AssetType(),
-		edge.Relation.Label(), edge.Relation.RelationType(), edge.ToEntity.Asset.AssetType()) {
+		label, edge.Relation.RelationType(), edge.ToEntity.Asset.AssetType()) {
 		return &types.Edge{}, fmt.Errorf("%s -%s-> %s is not valid in the taxonomy",
 			edge.FromEntity.Asset.AssetType(), edge.Relation.Label(), edge.ToEntity.Asset.AssetType())
 	}

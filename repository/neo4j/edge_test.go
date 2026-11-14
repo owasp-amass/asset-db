@@ -14,6 +14,7 @@ import (
 	"github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/platform"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -227,4 +228,33 @@ func TestDeleteEdge(t *testing.T) {
 
 	_, err = store.FindEdgeById(ctx, edge.ID)
 	assert.Error(t, err)
+}
+
+// A port relation is stored under its own name (tcp_port_443) and checked
+// as the taxonomy's "port" relationship, as the SQL repositories check it.
+func TestCreatePortEdge(t *testing.T) {
+	ctx := context.Background()
+	host, err := store.CreateEntity(ctx, &types.Entity{Asset: &dns.FQDN{Name: "port.edge"}})
+	assert.NoError(t, err, "create the host")
+
+	svc, err := store.CreateEntity(ctx, &types.Entity{Asset: &platform.Service{ID: "port-edge-443",
+		Type: "web-service"}})
+	assert.NoError(t, err, "create the service")
+
+	edge, err := store.CreateEdge(ctx, &types.Edge{
+		Relation:   &general.PortRelation{Name: "tcp_port_443", PortNumber: 443, Protocol: "TCP"},
+		FromEntity: host,
+		ToEntity:   svc,
+	})
+	assert.NoError(t, err, "a port relation under its own name is valid")
+	if assert.NotNil(t, edge, "the stored edge") {
+		assert.Equal(t, "tcp_port_443", edge.Relation.Label(), "the stored name is kept")
+	}
+
+	_, err = store.CreateEdge(ctx, &types.Edge{
+		Relation:   &general.PortRelation{Name: "tcp_port_443", PortNumber: 443, Protocol: "TCP"},
+		FromEntity: svc,
+		ToEntity:   host,
+	})
+	assert.Error(t, err, "a port relation from a service to a name is not in the taxonomy")
 }
