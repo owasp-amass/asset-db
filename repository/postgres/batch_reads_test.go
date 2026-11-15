@@ -120,6 +120,47 @@ func TestPostgresBatchReads(t *testing.T) {
 		_, _, err = db.ReadEdgesPerLabel(ctx, root, "sideways", time.Time{}, 5)
 		assert.Error(t, err, "an invalid direction is refused")
 	})
+
+	t.Run("edges for entities", func(t *testing.T) {
+		ids := []string{root.ID, children[0].ID, ip.ID, "987654321"}
+		out, more, err := db.ReadEdgesForEntities(ctx, ids, "out", time.Time{}, 3)
+		assert.NoError(t, err, "reading the out edges of several entities")
+		assert.Equal(t, []string{root.ID}, more, "only the root has more than three out edges")
+		assert.Len(t, out[root.ID], 3, "the root's out edges are capped at three")
+		assert.Empty(t, out[children[0].ID], "a child has no out edges")
+		assert.Empty(t, out["987654321"], "an ID with no entity has no edges")
+
+		// Each entity's edges are what ReadEdgesLimited returns for it alone.
+		alone, _, err := db.ReadEdgesLimited(ctx, root, "out", time.Time{}, 3)
+		assert.NoError(t, err, "reading the root's edges alone")
+
+		var want, got []string
+		for _, e := range alone {
+			want = append(want, e.ID)
+		}
+		for _, e := range out[root.ID] {
+			got = append(got, e.ID)
+			assert.Equal(t, root.ID, e.FromEntity.ID, "every out edge starts at the root")
+		}
+
+		assert.Equal(t, want, got, "an entity's edges match ReadEdgesLimited for it")
+
+		in, more, err := db.ReadEdgesForEntities(ctx, []string{children[1].ID, ip.ID}, "in", time.Time{}, 5)
+		assert.NoError(t, err, "reading in edges of several entities")
+		assert.Empty(t, more, "each has one in edge")
+		for _, id := range []string{children[1].ID, ip.ID} {
+			if assert.Len(t, in[id], 1, "one in edge for %s", id) {
+				assert.Equal(t, root.ID, in[id][0].FromEntity.ID, "the in edge of %s starts at the root", id)
+			}
+		}
+
+		labeled, _, err := db.ReadEdgesForEntities(ctx, []string{root.ID}, "out", time.Time{}, 5, "dns_record")
+		assert.NoError(t, err, "reading one label for several entities")
+		assert.Len(t, labeled[root.ID], 1, "only the named label is read")
+
+		_, _, err = db.ReadEdgesForEntities(ctx, ids, "both", time.Time{}, 5)
+		assert.Error(t, err, "both directions at once are refused")
+	})
 }
 
 // TestPostgresEntitiesByIdsQueries runs every asset type's query, so each

@@ -187,3 +187,119 @@ RETURN t, i, r, startNode(r).entity_id AS fid, endNode(r).entity_id AS tid ORDER
 
 	return out, more, nil
 }
+
+// ReadEdgesForEntities reads the edges of many entities in one direction
+// ("in" or "out") with up to perEntity edges for each, newest first, in one
+// query. The result holds each entity's edges by entity ID; more lists the
+// entities with edges beyond perEntity.
+func (neo *NeoRepository) ReadEdgesForEntities(ctx context.Context, ids []string, direction string, since time.Time, perEntity int, labels ...string) (map[string][]*types.Edge, []string, error) {
+	if neo == nil || neo.DB == nil {
+		return nil, nil, errors.New("missing Neo4j repository")
+	}
+	if perEntity < 1 || perEntity > 500 {
+		return nil, nil, errors.New("edge limit per entity must be 1..500")
+	}
+	if len(ids) > MaxEntitiesByIds {
+		return nil, nil, fmt.Errorf("at most %d entity IDs may be read at once", MaxEntitiesByIds)
+	}
+	if len(labels) > MaxEdgeLabelsPerRead {
+		return nil, nil, errors.New("too many edge labels")
+	}
+
+	var pattern string
+	switch direction {
+	case "in":
+		pattern = "(n:Entity {entity_id: eid})<-[r]-(:Entity)"
+	case "out":
+		pattern = "(n:Entity {entity_id: eid})-[r]->(:Entity)"
+	default:
+		return nil, nil, errors.New("edge direction must be in or out")
+	}
+	if len(ids) == 0 {
+		return map[string][]*types.Edge{}, nil, nil
+	}
+
+	params := map[string]any{"ids": ids, "lim": int64(perEntity + 1)}
+	var where []string
+	if !since.IsZero() {
+		params["since"] = timeToNeo4jTime(since)
+		where = append(where, "r.updated_at >= $since")
+	}
+	if len(labels) > 0 {
+		rtypes := make([]string, 0, len(labels))
+		for _, l := range labels {
+			if l == "" || len(l) > 128 {
+				return nil, nil, errors.New("invalid edge label")
+			}
+
+			rtypes = append(rtypes, strings.ToUpper(l))
+		}
+
+		params["types"] = rtypes
+		where = append(where, "type(r) IN $types")
+	}
+
+	query := "UNWIND $ids AS eid MATCH " + pattern
+	if len(where) > 0 {
+		query += " WHERE " + strings.Join(where, " AND ")
+	}
+
+	query += ` WITH eid, r ORDER BY r.updated_at DESC, elementId(r) DESC
+WITH eid, collect(DISTINCT r)[0..$lim] AS rs
+UNWIND range(0, size(rs) - 1) AS i
+WITH eid, i, rs[i] AS r
+RETURN eid, i, r, startNode(r).entity_id AS fid, endNode(r).entity_id AS tid ORDER BY eid, i`
+
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, params, neo4jdb.EagerResultTransformer,
+		neo4jdb.ExecuteQueryWithDatabase(neo.dbname))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	out := make(map[string][]*types.Edge, len(ids))
+	var more []string
+	for _, record := range result.Records {
+		eid, _, err := neo4jdb.GetRecordValue[string](record, "eid")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		i, _, err := neo4jdb.GetRecordValue[int64](record, "i")
+		if err != nil {
+			return nil, nil, err
+		}
+		if i >= int64(perEntity) {
+			more = append(more, eid)
+			continue
+		}
+
+		r, isnil, err := neo4jdb.GetRecordValue[neo4jdb.Relationship](record, "r")
+		if err != nil || isnil {
+			return nil, nil, errors.New("malformed Neo4j relationship")
+		}
+
+		fid, _, err := neo4jdb.GetRecordValue[string](record, "fid")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		tid, _, err := neo4jdb.GetRecordValue[string](record, "tid")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		edge, err := relationshipToEdge(r)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		edge.FromEntity = &types.Entity{ID: fid}
+		edge.ToEntity = &types.Entity{ID: tid}
+		out[eid] = append(out[eid], edge)
+	}
+
+	return out, more, nil
+}
