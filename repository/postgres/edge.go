@@ -33,8 +33,29 @@ FROM public.edge e
 JOIN public.edge_type_lu t ON t.id = e.etype_id
 WHERE e.edge_id = @edge_id;`
 
-const edgesForEntityText = `SELECT e.edge_id, e.created_at, e.updated_at, e.etype_name, e.from_entity_id, e.to_entity_id, e.label, e.content 
-FROM public.edges_for_entity(@entity_id::bigint, @direction::text, @since::timestamp, @labels::text[]) as e;`
+// edgesForEntityText reads an entity's edges in one direction, as
+// public.edges_for_entity does. The direction is in the text rather than a
+// parameter: a prepared statement's generic plan cannot tell the
+// directions apart, so it read both the from and the to index and
+// filtered, which for an entity with many incoming edges made every
+// outgoing read walk all of them.
+// Params: @entity_id::bigint, @since::timestamp, @labels::text[]
+func edgesForEntityText(dir string) string {
+	where := "e.from_entity_id = @entity_id::bigint"
+	switch dir {
+	case "in":
+		where = "e.to_entity_id = @entity_id::bigint"
+	case "both":
+		where = "(e.from_entity_id = @entity_id::bigint OR e.to_entity_id = @entity_id::bigint)"
+	}
+
+	return `SELECT e.edge_id, e.created_at, e.updated_at, te.name, e.from_entity_id, e.to_entity_id, e.label, e.content
+FROM public.edge e JOIN public.edge_type_lu te ON te.id = e.etype_id
+WHERE ` + where + `
+  AND (@since::timestamp IS NULL OR e.updated_at >= @since::timestamp)
+  AND (@labels::text[] IS NULL OR e.label = ANY(@labels::text[]))
+ORDER BY e.updated_at DESC, e.edge_id DESC;`
+}
 
 func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt.Edge, error) {
 	if edge == nil {
@@ -54,22 +75,27 @@ func (r *PostgresRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*d
 		return nil, fmt.Errorf("invalid FromEntity ID: %v", err)
 	}
 
-	fromEnt, err := r.FindEntityById(ctx, edge.FromEntity.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find FromEntity: %v", err)
-	}
-	fromtype := fromEnt.Asset.AssetType()
-
 	toID, err := strconv.ParseInt(edge.ToEntity.ID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid ToEntity ID: %v", err)
 	}
 
-	toEnt, err := r.FindEntityById(ctx, edge.ToEntity.ID)
+	// The relationship is checked against the entities' types, which come
+	// from the type cache or one query for both.
+	types, err := r.entityTypesOf(ctx, fromID, toID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find ToEntity: %v", err)
+		return nil, fmt.Errorf("failed to find the entity types: %v", err)
 	}
-	totype := toEnt.Asset.AssetType()
+
+	fromtype, ok := assetTypes[types[fromID]]
+	if !ok {
+		return nil, fmt.Errorf("failed to find FromEntity: %v", errEntityTypeUnknown(types[fromID]))
+	}
+
+	totype, ok := assetTypes[types[toID]]
+	if !ok {
+		return nil, fmt.Errorf("failed to find ToEntity: %v", errEntityTypeUnknown(types[toID]))
+	}
 
 	label := edge.Relation.Label()
 	rtype := edge.Relation.RelationType()
@@ -220,6 +246,7 @@ func (r *PostgresRepository) DeleteEdge(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("invalid edge ID: %v", err)
 	}
+
 	return r.deleteEdgeByID(ctx, eid)
 }
 
@@ -235,6 +262,7 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 	if !since.IsZero() {
 		since = since.UTC()
 	}
+
 	ts := zeronull.Timestamp(since)
 
 	if len(labels) == 0 {
@@ -242,9 +270,8 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 	}
 
 	var out []*dbt.Edge
-	j := NewRowsJob(ctx, edgesForEntityText, pgx.NamedArgs{
+	j := NewRowsJob(ctx, edgesForEntityText(dir), pgx.NamedArgs{
 		"entity_id": eid,
-		"direction": dir,
 		"since":     ts,
 		"labels":    labels,
 	}, func(rows pgx.Rows) error {
@@ -276,6 +303,7 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 				out = append(out, edge)
 			}
 		}
+
 		return rows.Err()
 	})
 
@@ -287,6 +315,7 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 	if len(out) == 0 {
 		return nil, fmt.Errorf("zero edges found for entity %d", eid)
 	}
+
 	return out, nil
 }
 
@@ -298,6 +327,7 @@ func (r *PostgresRepository) deleteEdgeByID(ctx context.Context, id int64) error
 		if tag.RowsAffected() == 0 {
 			return errors.New("edge not found")
 		}
+
 		return nil
 	})
 

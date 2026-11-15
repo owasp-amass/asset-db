@@ -245,6 +245,8 @@ func (r *PostgresRepository) FindEntitiesByIds(ctx context.Context, ids []string
 		if err != nil {
 			return nil, err
 		}
+
+		r.remember(ents...)
 		for _, e := range ents {
 			found[e.ID] = e
 		}

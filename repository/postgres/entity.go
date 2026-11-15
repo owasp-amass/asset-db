@@ -91,7 +91,10 @@ func (r *PostgresRepository) CreateAsset(ctx context.Context, asset oam.Asset) (
 	if err != nil {
 		return nil, err
 	}
-	return r.idToEntity(ctx, eid)
+
+	etype := normalizeType(string(asset.AssetType()))
+	r.types.put(eid, etype)
+	return r.fetchEntityOfType(ctx, eid, etype)
 }
 
 // FindEntityById implements the Repository interface.
@@ -105,7 +108,16 @@ func (r *PostgresRepository) FindEntityById(ctx context.Context, id string) (*db
 }
 
 func (r *PostgresRepository) idToEntity(ctx context.Context, eid int64) (*dbt.Entity, error) {
-	return r.fetchCompleteRepoEntity(ctx, eid)
+	if etype, ok := r.types.get(eid); ok {
+		return r.fetchEntityOfType(ctx, eid, etype)
+	}
+
+	e, err := r.fetchCompleteRepoEntity(ctx, eid)
+	if err == nil {
+		r.remember(e)
+	}
+
+	return e, err
 }
 
 // FindEntitiesByContent implements the Repository interface.
@@ -114,9 +126,12 @@ func (r *PostgresRepository) FindEntitiesByContent(ctx context.Context, atype oa
 	if err != nil {
 		return nil, err
 	}
+
+	r.remember(ents...)
 	if len(ents) == 0 {
 		return nil, errors.New("zero entities found")
 	}
+
 	return ents, nil
 }
 
@@ -126,9 +141,12 @@ func (r *PostgresRepository) FindEntitiesByType(ctx context.Context, atype oam.A
 	if err != nil {
 		return nil, err
 	}
+
+	r.remember(ents...)
 	if len(ents) == 0 {
 		return nil, errors.New("zero entities found")
 	}
+
 	return ents, nil
 }
 
@@ -342,6 +360,7 @@ func (r *PostgresRepository) DeleteEntity(ctx context.Context, id string) error 
 	if err != nil {
 		return err
 	}
+
 	return r.deleteEntityByID(ctx, eid, true)
 }
 
@@ -373,6 +392,7 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 				if tag.RowsAffected() == 0 {
 					return fmt.Errorf("asset row %d not found in table %s", id, table)
 				}
+
 				return nil
 			})
 
@@ -390,9 +410,15 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 		if tag.RowsAffected() == 0 {
 			return fmt.Errorf("entity %d not found", eid)
 		}
+
 		return nil
 	})
 
 	r.wpool.Submit(j)
-	return j.Wait()
+	err := j.Wait()
+	if err == nil {
+		r.types.forget(eid)
+	}
+
+	return err
 }

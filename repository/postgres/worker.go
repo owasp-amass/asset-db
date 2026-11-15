@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/caffix/queue"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,6 +25,10 @@ type Worker struct {
 	cancel   context.CancelFunc
 	once     sync.Once
 	flushSem chan struct{} // limits concurrent flushes
+
+	// closeMu guards closed: a direct job is not started after Shutdown.
+	closeMu sync.RWMutex
+	closed  bool
 }
 
 // WorkerConfig controls batching and concurrency behavior.
@@ -61,6 +66,13 @@ type WorkerConfig struct {
 	// Each flush acquires a pooled connection (and can also use a TX).
 	// If 0, defaults to PoolMaxConns (or 8).
 	FlushParallelism int
+
+	// Direct runs each job at once on its own pooled connection, outside a
+	// transaction, instead of batching jobs into transactions. Reads use it:
+	// a batched read waits for the batch to fill and for every job before
+	// it, and pays for a savepoint and its release. The pool's MaxConns
+	// bounds how many direct jobs run at the same time.
+	Direct bool
 }
 
 func withDefaults(cfg WorkerConfig) WorkerConfig {
@@ -80,6 +92,7 @@ func withDefaults(cfg WorkerConfig) WorkerConfig {
 			cfg.FlushParallelism = 8
 		}
 	}
+
 	return cfg
 }
 
@@ -136,6 +149,7 @@ func NewWorker(ctx context.Context, connString string, cfg WorkerConfig) (*Worke
 			pool.Close()
 			return nil, fmt.Errorf("failed to connect to database: %w", err)
 		}
+
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -157,6 +171,9 @@ func NewWorkerWithPool(ctx context.Context, pool *pgxpool.Pool, cfg WorkerConfig
 	for range cfg.FlushParallelism {
 		w.flushSem <- struct{}{}
 	}
+	if cfg.Direct {
+		return w
+	}
 
 	w.wg.Add(1)
 	go func() {
@@ -175,7 +192,33 @@ func (w *Worker) Submit(j job) {
 	default:
 	}
 
+	if w.cfg.Direct {
+		w.closeMu.RLock()
+		defer w.closeMu.RUnlock()
+		if w.closed {
+			j.Done() <- errors.New("worker pool shutting down")
+			close(j.Done())
+			return
+		}
+
+		w.wg.Add(1)
+		go w.runDirect(j)
+		return
+	}
+
 	w.queue.Append(j)
+}
+
+// runDirect runs one job on a pooled connection, outside a transaction.
+func (w *Worker) runDirect(j job) {
+	defer w.wg.Done()
+
+	err := w.pool.AcquireFunc(j.GetCtx(), func(conn *pgxpool.Conn) error {
+		return j.RunTx(conn)
+	})
+
+	j.Done() <- err
+	close(j.Done())
 }
 
 // Shutdown stops the worker, flushes any remaining queued work, and waits for completion.
@@ -184,6 +227,9 @@ func (w *Worker) Shutdown(ctx context.Context) error {
 	var err error
 
 	w.once.Do(func() {
+		w.closeMu.Lock()
+		w.closed = true
+		w.closeMu.Unlock()
 		w.cancel()
 
 		done := make(chan struct{})
@@ -229,6 +275,7 @@ func (w *Worker) runAggregator(ctx context.Context) {
 				j.Done() <- errors.New("worker pool shutting down")
 				close(j.Done())
 			}
+
 			return
 		case <-w.flushSem:
 		}
@@ -237,6 +284,15 @@ func (w *Worker) runAggregator(ctx context.Context) {
 		go func(jobs []job) {
 			defer w.wg.Done()
 			defer func() { w.flushSem <- struct{}{} }()
+
+			// Most batches have no failing job, so they are first sent as
+			// one pipelined batch without savepoints (one round trip for the
+			// batch instead of three per job); a batch with a failing job is
+			// rolled back and run again with savepoints, which keep the other
+			// jobs' writes.
+			if w.flushBatchTx(ctx, jobs) {
+				return
+			}
 
 			for i := range 5 {
 				if err := w.flushBatchTxSavepoints(ctx, jobs); err == nil {
@@ -257,6 +313,7 @@ func (w *Worker) runAggregator(ctx context.Context) {
 			default:
 			}
 		}
+
 		timer.Reset(w.cfg.MaxBatchDelay)
 	}
 
@@ -321,6 +378,56 @@ func (w *Worker) runAggregator(ctx context.Context) {
 	}
 }
 
+// flushBatchTx sends the jobs in one transaction as one pipelined batch,
+// without savepoints, and reports whether it committed and published their
+// results. When any job
+// fails, or the commit does, nothing is published and the caller runs the
+// batch again with savepoints. Jobs only scan into their own variables, so
+// running a job again replaces what the first run scanned.
+func (w *Worker) flushBatchTx(ctx context.Context, items []job) bool {
+	ok := false
+	_ = w.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
+		sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+
+		tx, err := conn.Begin(sctx)
+		if err != nil {
+			return err
+		}
+
+		defer func() { _ = tx.Rollback(sctx) }()
+
+		results := make([]error, len(items))
+		batch := &pgx.Batch{}
+		for i, item := range items {
+			if err := item.GetCtx().Err(); err != nil {
+				results[i] = err
+				continue
+			}
+
+			item.Queue(batch)
+		}
+		if batch.Len() > 0 {
+			if err := tx.SendBatch(sctx, batch).Close(); err != nil {
+				return err
+			}
+		}
+		if err := tx.Commit(sctx); err != nil {
+			return err
+		}
+
+		ok = true
+		for i, item := range items {
+			item.Done() <- results[i]
+			close(item.Done())
+		}
+
+		return nil
+	})
+
+	return ok
+}
+
 func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error {
 	return w.pool.AcquireFunc(ctx, func(conn *pgxpool.Conn) error {
 		sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -330,6 +437,7 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 		if err != nil {
 			return err
 		}
+
 		defer func() { _ = tx.Rollback(sctx) }()
 
 		const sp = "sp_job"
@@ -357,6 +465,7 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 					for k := i; k < len(items); k++ {
 						results[k] = fErr
 					}
+
 					// We'll fall through to COMMIT (which should fail)
 					break
 				}
@@ -382,6 +491,7 @@ func (w *Worker) flushBatchTxSavepoints(ctx context.Context, items []job) error 
 			if commitErr != nil && errToSend == nil {
 				errToSend = commitErr
 			}
+
 			// Always send exactly one result per job
 			item.Done() <- errToSend
 			close(item.Done())
@@ -400,6 +510,7 @@ func errToJobs(err error, items []job) {
 		default:
 			item.Done() <- err
 		}
+
 		close(item.Done())
 	}
 }

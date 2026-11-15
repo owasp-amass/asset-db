@@ -19,7 +19,18 @@ type job interface {
 	GetArgs() pgx.NamedArgs
 	Done() chan error
 	Wait() error
-	RunTx(pgx.Tx) error
+	RunTx(querier) error
+	// Queue adds the job to a pipelined batch: its callback runs when the
+	// batch's results are read, and an error stops the batch.
+	Queue(*pgx.Batch)
+}
+
+// querier runs statements: a transaction (pgx.Tx) for batched writes, or a
+// pooled connection (*pgxpool.Conn) for reads that run on their own.
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 func NewExecJob(ctx context.Context, sqlText string, args pgx.NamedArgs, callback func(tag pgconn.CommandTag) error) job {
@@ -88,7 +99,7 @@ func (w *execJob) Wait() error {
 	}
 }
 
-func (w *execJob) RunTx(tx pgx.Tx) error {
+func (w *execJob) RunTx(tx querier) error {
 	tag, err := tx.Exec(w.Ctx, w.SQLText, w.Args)
 	if err != nil {
 		return wrapPgErr("tx exec", err)
@@ -98,6 +109,7 @@ func (w *execJob) RunTx(tx pgx.Tx) error {
 			return fmt.Errorf("tx exec callback: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -134,13 +146,26 @@ func (r *rowJob) Wait() error {
 	}
 }
 
-func (r *rowJob) RunTx(tx pgx.Tx) error {
+func (w *execJob) Queue(b *pgx.Batch) {
+	b.Queue(w.SQLText, w.Args).Exec(func(tag pgconn.CommandTag) error {
+		if w.Callback != nil {
+			if err := w.Callback(tag); err != nil {
+				return fmt.Errorf("batch exec callback: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *rowJob) RunTx(tx querier) error {
 	row := tx.QueryRow(r.Ctx, r.SQLText, r.Args)
 
 	if r.Callback != nil {
 		if err := r.Callback(row); err != nil {
 			return wrapPgErr("tx queryrow callback", err)
 		}
+
 		return nil
 	}
 
@@ -180,11 +205,32 @@ func (r *rowsJob) Wait() error {
 	}
 }
 
-func (r *rowsJob) RunTx(tx pgx.Tx) error {
+func (r *rowJob) Queue(b *pgx.Batch) {
+	b.Queue(r.SQLText, r.Args).QueryRow(func(row pgx.Row) error {
+		if r.Callback != nil {
+			return wrapPgErr("batch queryrow callback", r.Callback(row))
+		}
+
+		return wrapPgErr("batch queryrow scan", row.Scan())
+	})
+}
+
+func (r *rowsJob) Queue(b *pgx.Batch) {
+	b.Queue(r.SQLText, r.Args).Query(func(rows pgx.Rows) error {
+		if r.Callback != nil {
+			return wrapPgErr("batch rows callback", r.Callback(rows))
+		}
+
+		return nil
+	})
+}
+
+func (r *rowsJob) RunTx(tx querier) error {
 	rows, err := tx.Query(r.Ctx, r.SQLText, r.Args)
 	if err != nil {
 		return wrapPgErr("tx query", err)
 	}
+
 	defer rows.Close()
 
 	if r.Callback != nil {
@@ -192,6 +238,7 @@ func (r *rowsJob) RunTx(tx pgx.Tx) error {
 			return wrapPgErr("tx rows callback", err)
 		}
 	}
+
 	return nil
 }
 
@@ -199,10 +246,12 @@ func wrapPgErr(prefix string, err error) error {
 	if err == nil {
 		return nil
 	}
+
 	// Surface pgconn.PgError where possible.
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		return fmt.Errorf("%s (pg): %s (SQLSTATE %s): %w", prefix, pgErr.Message, pgErr.Code, err)
 	}
+
 	return fmt.Errorf("%s: %w", prefix, err)
 }

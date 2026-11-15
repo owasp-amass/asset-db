@@ -33,6 +33,7 @@ type PostgresRepository struct {
 	wcfg   WorkerConfig
 	dbtype string
 	cancel context.CancelFunc
+	types  *entityTypes
 }
 
 // New creates a new instance of the asset database repository.
@@ -49,6 +50,7 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 		HealthCheckPeriod: 1 * time.Minute,
 		StatementTimeout:  120 * time.Second,
 		ApplicationName:   "asset-db reader",
+		Direct:            true,
 	}
 
 	wcfg := WorkerConfig{
@@ -65,6 +67,7 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return repo, nil
 }
 
@@ -92,6 +95,7 @@ func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository,
 			_ = db.Close()
 			return nil, err
 		}
+
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -102,6 +106,7 @@ func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository,
 		rcfg:   withDefaults(rcfg),
 		wcfg:   withDefaults(wcfg),
 		dbtype: Postgres,
+		types:  newEntityTypes(),
 	}
 
 	if err := repo.migrate(); err != nil {
@@ -114,6 +119,7 @@ func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository,
 		cancel()
 		return nil, err
 	}
+
 	repo.rpool = r
 
 	w, err := NewWorker(ctx, repo.dsn, repo.wcfg)
@@ -152,6 +158,7 @@ func (pr *PostgresRepository) Close() error {
 	if pr.DB != nil {
 		return pr.DB.Close()
 	}
+
 	return errors.New("failed to obtain access to the database handle")
 }
 
