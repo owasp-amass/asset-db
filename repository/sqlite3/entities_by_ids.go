@@ -34,6 +34,7 @@ func (r *SqliteRepository) FindEntitiesByIds(ctx context.Context, ids []string) 
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity ID %q: %w", id, err)
 		}
+
 		args = append(args, eid)
 	}
 	if len(args) == 0 {
@@ -66,8 +67,10 @@ func (r *SqliteRepository) FindEntitiesByIds(ctx context.Context, ids []string) 
 			_ = result.Rows.Close()
 			return nil, err
 		}
+
 		cores = append(cores, c)
 	}
+
 	err := result.Rows.Err()
 	_ = result.Rows.Close()
 	if err != nil {
@@ -80,6 +83,7 @@ func (r *SqliteRepository) FindEntitiesByIds(ctx context.Context, ids []string) 
 		if err != nil {
 			return nil, err
 		}
+
 		found[strconv.FormatInt(c.eid, 10)] = e
 	}
 
@@ -89,5 +93,6 @@ func (r *SqliteRepository) FindEntitiesByIds(ctx context.Context, ids []string) 
 			out = append(out, e)
 		}
 	}
+
 	return out, nil
 }

@@ -57,10 +57,12 @@ func (neo *NeoRepository) FindEntitiesByIds(ctx context.Context, ids []string) (
 		if isnil {
 			return nil, errors.New("the record value for the node is nil")
 		}
+
 		e, err := nodeToEntity(node)
 		if err != nil {
 			return nil, err
 		}
+
 		found[e.ID] = e
 	}
 
@@ -70,6 +72,7 @@ func (neo *NeoRepository) FindEntitiesByIds(ctx context.Context, ids []string) (
 			out = append(out, e)
 		}
 	}
+
 	return out, nil
 }
 
@@ -112,8 +115,10 @@ func (neo *NeoRepository) ReadEdgesPerLabel(ctx context.Context, entity *types.E
 			if l == "" || len(l) > 128 {
 				return nil, nil, errors.New("invalid edge label")
 			}
+
 			rtypes = append(rtypes, strings.ToUpper(l))
 		}
+
 		params["types"] = rtypes
 		where = append(where, "type(r) IN $types")
 	}
@@ -122,6 +127,7 @@ func (neo *NeoRepository) ReadEdgesPerLabel(ctx context.Context, entity *types.E
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
+
 	query += ` WITH DISTINCT r ORDER BY r.updated_at DESC, elementId(r) DESC
 WITH type(r) AS t, collect(r)[0..$lim] AS rs
 UNWIND range(0, size(rs) - 1) AS i
@@ -144,6 +150,7 @@ RETURN t, i, r, startNode(r).entity_id AS fid, endNode(r).entity_id AS tid ORDER
 		if err != nil {
 			return nil, nil, err
 		}
+
 		i, _, err := neo4jdb.GetRecordValue[int64](record, "i")
 		if err != nil {
 			return nil, nil, err
@@ -157,10 +164,12 @@ RETURN t, i, r, startNode(r).entity_id AS fid, endNode(r).entity_id AS tid ORDER
 		if err != nil || isnil {
 			return nil, nil, errors.New("malformed Neo4j relationship")
 		}
+
 		fid, _, err := neo4jdb.GetRecordValue[string](record, "fid")
 		if err != nil {
 			return nil, nil, err
 		}
+
 		tid, _, err := neo4jdb.GetRecordValue[string](record, "tid")
 		if err != nil {
 			return nil, nil, err
@@ -170,6 +179,7 @@ RETURN t, i, r, startNode(r).entity_id AS fid, endNode(r).entity_id AS tid ORDER
 		if err != nil {
 			return nil, nil, err
 		}
+
 		edge.FromEntity = &types.Entity{ID: fid}
 		edge.ToEntity = &types.Entity{ID: tid}
 		out = append(out, edge)

@@ -62,9 +62,11 @@ func (r *PostgresRepository) ReadEdgesPerLabel(ctx context.Context, entity *type
 			if l == "" || len(l) > 128 {
 				return nil, nil, errors.New("invalid edge label")
 			}
+
 			args = append(args, strings.ToLower(l))
 			names = append(names, fmt.Sprintf("$%d", len(args)))
 		}
+
 		where = append(where, "e.label IN ("+strings.Join(names, ",")+")")
 	}
 
@@ -79,6 +81,7 @@ func (r *PostgresRepository) ReadEdgesPerLabel(ctx context.Context, entity *type
 	if err != nil {
 		return nil, nil, err
 	}
+
 	defer rows.Close()
 
 	var out []*types.Edge

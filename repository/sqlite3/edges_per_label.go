@@ -62,8 +62,10 @@ func (r *SqliteRepository) ReadEdgesPerLabel(ctx context.Context, entity *types.
 			if l == "" || len(l) > 128 {
 				return nil, nil, errors.New("invalid edge label")
 			}
+
 			args = append(args, strings.ToLower(l))
 		}
+
 		where = append(where, "e.label IN ("+strings.TrimSuffix(strings.Repeat("?,", len(labels)), ",")+")")
 	}
 
@@ -105,10 +107,12 @@ func (r *SqliteRepository) ReadEdgesPerLabel(ctx context.Context, entity *types.
 		if err != nil {
 			return nil, nil, err
 		}
+
 		created, err := parseTimestamp(c)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		updated, err := parseTimestamp(u)
 		if err != nil {
 			return nil, nil, err

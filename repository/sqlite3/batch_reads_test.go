@@ -15,65 +15,87 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSQLiteBatchReads(t *testing.T) {
 	db, dir, err := setupTempSQLite()
-	require.NoError(t, err)
+	if !assert.NoError(t, err, "opening a temporary SQLite database") {
+		return
+	}
+
 	defer teardownTempSQLite(db, dir)
 	ctx := context.Background()
 
 	root, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: "batch.example"})
-	require.NoError(t, err)
+	if !assert.NoError(t, err, "creating the root FQDN") {
+		return
+	}
 
 	var children []*dbt.Entity
 	for i := 0; i < 3; i++ {
 		child, err := db.CreateAsset(ctx, &oamdns.FQDN{Name: fmt.Sprintf("h%d.batch.example", i)})
-		require.NoError(t, err)
+		if !assert.NoError(t, err, "creating child FQDN %d", i) {
+			return
+		}
+
 		_, err = db.CreateEdge(ctx, &dbt.Edge{Relation: &oamgen.SimpleRelation{Name: "node"},
 			FromEntity: root, ToEntity: child})
-		require.NoError(t, err)
+		if !assert.NoError(t, err, "linking child FQDN %d", i) {
+			return
+		}
+
 		children = append(children, child)
 	}
 
 	ip, err := db.CreateAsset(ctx, &oamnet.IPAddress{Address: netip.MustParseAddr("192.0.2.7"), Type: "IPv4"})
-	require.NoError(t, err)
+	if !assert.NoError(t, err, "creating the IP address") {
+		return
+	}
+
 	_, err = db.CreateEdge(ctx, &dbt.Edge{Relation: &oamdns.BasicDNSRelation{Name: "dns_record",
 		Header: oamdns.RRHeader{RRType: 1, Class: 1}}, FromEntity: root, ToEntity: ip})
-	require.NoError(t, err)
+	if !assert.NoError(t, err, "linking the IP address") {
+		return
+	}
 
 	t.Run("entities by ids", func(t *testing.T) {
 		ents, err := db.FindEntitiesByIds(ctx, []string{children[2].ID, ip.ID, "987654321", root.ID})
-		require.NoError(t, err)
-		require.Len(t, ents, 3)
-		require.Equal(t, children[2].ID, ents[0].ID)
-		require.Equal(t, "h2.batch.example", ents[0].Asset.(*oamdns.FQDN).Name)
-		require.Equal(t, ip.ID, ents[1].ID)
-		require.Equal(t, "192.0.2.7", ents[1].Asset.(*oamnet.IPAddress).Address.String())
-		require.Equal(t, root.ID, ents[2].ID)
+		assert.NoError(t, err, "reading entities by ID")
+		if assert.Len(t, ents, 3, "an ID with no entity is left out") {
+			assert.Equal(t, children[2].ID, ents[0].ID, "entities come in the order of the IDs")
+			assert.Equal(t, "h2.batch.example", ents[0].Asset.(*oamdns.FQDN).Name, "the FQDN asset is read")
+			assert.Equal(t, ip.ID, ents[1].ID, "entities come in the order of the IDs")
+			assert.Equal(t, "192.0.2.7", ents[1].Asset.(*oamnet.IPAddress).Address.String(),
+				"the IP address asset is read")
+			assert.Equal(t, root.ID, ents[2].ID, "entities come in the order of the IDs")
+		}
 
 		none, err := db.FindEntitiesByIds(ctx, nil)
-		require.NoError(t, err)
-		require.Empty(t, none)
+		assert.NoError(t, err, "reading no IDs")
+		assert.Empty(t, none, "no IDs read no entities")
+
 		_, err = db.FindEntitiesByIds(ctx, []string{"not-a-number"})
-		require.Error(t, err)
+		assert.Error(t, err, "an invalid ID is refused")
 	})
 
 	t.Run("edges per label", func(t *testing.T) {
 		edges, more, err := db.ReadEdgesPerLabel(ctx, root, "out", time.Time{}, 2)
-		require.NoError(t, err)
-		require.Equal(t, []string{"node"}, more)
+		assert.NoError(t, err, "reading two edges per label")
+		assert.Equal(t, []string{"node"}, more, "only the node label has more than two edges")
+
 		count := map[string]int{}
 		for _, e := range edges {
 			count[e.Relation.Label()]++
-			require.Equal(t, root.ID, e.FromEntity.ID)
+			assert.Equal(t, root.ID, e.FromEntity.ID, "every out edge starts at the root")
 		}
-		require.Equal(t, map[string]int{"node": 2, "dns_record": 1}, count)
+
+		assert.Equal(t, map[string]int{"node": 2, "dns_record": 1}, count, "each label is capped on its own")
 
 		// Each label's edges are what ReadEdgesLimited returns for it alone.
 		alone, _, err := db.ReadEdgesLimited(ctx, root, "out", time.Time{}, 2, "node")
-		require.NoError(t, err)
+		assert.NoError(t, err, "reading the node label alone")
+
 		var want, got []string
 		for _, e := range alone {
 			want = append(want, e.ID)
@@ -83,21 +105,24 @@ func TestSQLiteBatchReads(t *testing.T) {
 				got = append(got, e.ID)
 			}
 		}
-		require.Equal(t, want, got)
+
+		assert.Equal(t, want, got, "a label's edges match ReadEdgesLimited for that label")
 
 		edges, more, err = db.ReadEdgesPerLabel(ctx, root, "out", time.Time{}, 5, "dns_record")
-		require.NoError(t, err)
-		require.Empty(t, more)
-		require.Len(t, edges, 1)
-		require.Equal(t, ip.ID, edges[0].ToEntity.ID)
+		assert.NoError(t, err, "reading one named label")
+		assert.Empty(t, more, "the dns_record label has no more edges")
+		if assert.Len(t, edges, 1, "only the named label is read") {
+			assert.Equal(t, ip.ID, edges[0].ToEntity.ID, "the dns_record edge leads to the IP address")
+		}
 
 		in, more, err := db.ReadEdgesPerLabel(ctx, children[0], "in", time.Time{}, 5)
-		require.NoError(t, err)
-		require.Empty(t, more)
-		require.Len(t, in, 1)
-		require.Equal(t, root.ID, in[0].FromEntity.ID)
+		assert.NoError(t, err, "reading in edges")
+		assert.Empty(t, more, "a child has one in edge")
+		if assert.Len(t, in, 1, "a child has one in edge") {
+			assert.Equal(t, root.ID, in[0].FromEntity.ID, "the in edge starts at the root")
+		}
 
 		_, _, err = db.ReadEdgesPerLabel(ctx, root, "sideways", time.Time{}, 5)
-		require.Error(t, err)
+		assert.Error(t, err, "an invalid direction is refused")
 	})
 }

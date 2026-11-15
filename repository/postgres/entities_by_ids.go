@@ -31,27 +31,163 @@ type entitiesByIdsReader struct {
 }
 
 var entitiesByIdsReaders = map[string]entitiesByIdsReader{
-	"account":          {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username, a.account_number, a.attrs FROM public.entity e CROSS JOIN LATERAL public.account_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanAccounts},
-	"autnumrecord":     {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.handle, a.asn, a.record_name, a.whois_server, a.attrs FROM public.entity e CROSS JOIN LATERAL public.autnumrecord_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanAutnumRecords},
-	"autonomoussystem": {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.asn, a.attrs FROM public.entity e CROSS JOIN LATERAL public.autonomoussystem_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanAutonomousSystems},
-	"contactrecord":    {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.discovered_at, a.attrs FROM public.entity e CROSS JOIN LATERAL public.contactrecord_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanContactRecords},
-	"domainrecord":     {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.domain, a.record_name, a.punycode, a.extension, a.whois_server, a.object_id, a.attrs FROM public.entity e CROSS JOIN LATERAL public.domainrecord_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanDomainRecords},
-	"file":             {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.file_url, a.basename, a.file_type, a.attrs FROM public.entity e CROSS JOIN LATERAL public.file_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanFiles},
-	"fqdn":             {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.fqdn, a.attrs FROM public.entity e CROSS JOIN LATERAL public.fqdn_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanFQDNs},
-	"fundstransfer":    {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.amount, a.reference_number, a.attrs FROM public.entity e CROSS JOIN LATERAL public.fundstransfer_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanFundsTransfers},
-	"identifier":       {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.id_value, a.id_type, a.attrs FROM public.entity e CROSS JOIN LATERAL public.identifier_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanIdentifiers},
-	"ipaddress":        {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.ip_address, a.attrs FROM public.entity e CROSS JOIN LATERAL public.ipaddress_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanIPAddresses},
-	"ipnetrecord":      {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.record_cidr, a.record_name, a.handle, a.whois_server, a.parent_handle, a.start_address, a.end_address, a.attrs FROM public.entity e CROSS JOIN LATERAL public.ipnetrecord_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanIPNetRecords},
-	"location":         {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit, a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs FROM public.entity e CROSS JOIN LATERAL public.location_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanLocations},
-	"netblock":         {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.netblock_cidr, a.attrs FROM public.entity e CROSS JOIN LATERAL public.netblock_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanNetblocks},
-	"organization":     {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.org_name, a.legal_name, a.jurisdiction, a.registration_id, a.attrs FROM public.entity e CROSS JOIN LATERAL public.organization_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanOrganizations},
-	"person":           {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.full_name, a.first_name, a.family_name, a.attrs FROM public.entity e CROSS JOIN LATERAL public.person_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanPersons},
-	"phone":            {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.e164, a.country_code, a.attrs FROM public.entity e CROSS JOIN LATERAL public.phone_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanPhones},
-	"product":          {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.product_name, a.product_type, a.attrs FROM public.entity e CROSS JOIN LATERAL public.product_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanProducts},
-	"productrelease":   {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.release_name, a.attrs FROM public.entity e CROSS JOIN LATERAL public.productrelease_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanProductReleases},
-	"service":          {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.service_type, a.attrs FROM public.entity e CROSS JOIN LATERAL public.service_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanServices},
-	"tlscertificate":   {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.serial_number, a.subject_common_name, a.attrs FROM public.entity e CROSS JOIN LATERAL public.tlscertificate_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanTLSCertificates},
-	"url":              {query: `SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.raw_url, a.scheme, a.attrs FROM public.entity e CROSS JOIN LATERAL public.url_get_by_id(e.row_id) AS a WHERE e.entity_id = ANY(@ids::bigint[]);`, scan: (*PostgresRepository).scanURLs},
+	"account": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.account_type, a.username,
+a.account_number, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.account_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanAccounts,
+	},
+	"autnumrecord": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.handle, a.asn, a.record_name,
+a.whois_server, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.autnumrecord_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanAutnumRecords,
+	},
+	"autonomoussystem": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.asn, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.autonomoussystem_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanAutonomousSystems,
+	},
+	"contactrecord": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.discovered_at, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.contactrecord_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanContactRecords,
+	},
+	"domainrecord": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.domain, a.record_name, a.punycode,
+a.extension, a.whois_server, a.object_id, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.domainrecord_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanDomainRecords,
+	},
+	"file": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.file_url, a.basename, a.file_type, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.file_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanFiles,
+	},
+	"fqdn": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.fqdn, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.fqdn_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanFQDNs,
+	},
+	"fundstransfer": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.amount, a.reference_number,
+a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.fundstransfer_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanFundsTransfers,
+	},
+	"identifier": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.id_value, a.id_type, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.identifier_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanIdentifiers,
+	},
+	"ipaddress": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.ip_address, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.ipaddress_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanIPAddresses,
+	},
+	"ipnetrecord": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.record_cidr, a.record_name, a.handle,
+a.whois_server, a.parent_handle, a.start_address, a.end_address, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.ipnetrecord_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanIPNetRecords,
+	},
+	"location": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit,
+a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.location_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanLocations,
+	},
+	"netblock": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.netblock_cidr, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.netblock_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanNetblocks,
+	},
+	"organization": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.org_name, a.legal_name,
+a.jurisdiction, a.registration_id, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.organization_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanOrganizations,
+	},
+	"person": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.full_name, a.first_name,
+a.family_name, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.person_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanPersons,
+	},
+	"phone": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.e164, a.country_code, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.phone_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanPhones,
+	},
+	"product": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.product_name, a.product_type,
+a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.product_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanProducts,
+	},
+	"productrelease": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.release_name, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.productrelease_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanProductReleases,
+	},
+	"service": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.service_type, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.service_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanServices,
+	},
+	"tlscertificate": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.serial_number, a.subject_common_name,
+a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.tlscertificate_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanTLSCertificates,
+	},
+	"url": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.raw_url, a.scheme, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.url_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanURLs,
+	},
 }
 
 // FindEntitiesByIds returns the entities with the given IDs, with their
@@ -72,6 +208,7 @@ func (r *PostgresRepository) FindEntitiesByIds(ctx context.Context, ids []string
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity ID %q: %w", id, err)
 		}
+
 		eids = append(eids, eid)
 	}
 	if len(eids) == 0 {
@@ -86,8 +223,10 @@ func (r *PostgresRepository) FindEntitiesByIds(ctx context.Context, ids []string
 			if err := rows.Scan(&eid, &etype); err != nil {
 				return err
 			}
+
 			byType[etype] = append(byType[etype], eid)
 		}
+
 		return rows.Err()
 	})
 	r.rpool.Submit(j)
@@ -101,6 +240,7 @@ func (r *PostgresRepository) FindEntitiesByIds(ctx context.Context, ids []string
 		if !ok {
 			return nil, fmt.Errorf("unhandled entity type %q", etype)
 		}
+
 		ents, err := reader.scan(r, ctx, reader.query, pgx.NamedArgs{"ids": group})
 		if err != nil {
 			return nil, err
@@ -116,5 +256,6 @@ func (r *PostgresRepository) FindEntitiesByIds(ctx context.Context, ids []string
 			out = append(out, e)
 		}
 	}
+
 	return out, nil
 }
