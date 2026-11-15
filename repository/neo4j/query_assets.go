@@ -254,7 +254,11 @@ func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
 	case *platform.Service:
 		filter["unique_id"] = v.ID
 	case *oamcert.TLSCertificate:
+		// a serial number is unique per issuer only (RFC 5280)
 		filter["serial_number"] = v.SerialNumber
+		filter["issuer_common_name"] = v.IssuerCommonName
+		filter["authority_key_id"] = v.AuthorityKeyID
+		filter["subject_key_id"] = v.SubjectKeyID
 	case *url.URL:
 		filter["url"] = v.Raw
 	}

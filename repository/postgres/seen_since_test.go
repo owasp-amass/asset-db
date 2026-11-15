@@ -12,6 +12,7 @@ import (
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
@@ -135,5 +136,36 @@ func TestPostgresEdgeAndTagIdentity(t *testing.T) {
 		if again != nil {
 			assert.Equal(t, tag.ID, again.ID, "the same long value should be the same tag")
 		}
+	}
+}
+
+// Certificates of unrelated hosts with the same serial number are two
+// certificates; the same certificate seen again is one.
+func TestPostgresTLSCertificateIdentity(t *testing.T) {
+	db := valueFinderRepo(t)
+	ctx := context.Background()
+
+	cert := func(name string) *oamcert.TLSCertificate {
+		return &oamcert.TLSCertificate{Version: "3", SerialNumber: "1", SubjectCommonName: name,
+			IssuerCommonName: name, NotBefore: "2020-01-01T00:00:00Z", NotAfter: "2030-01-01T00:00:00Z"}
+	}
+	printer, err := db.CreateAsset(ctx, cert("printer.example.edu"))
+	if !assert.NoError(t, err, "storing the printer's certificate") {
+		return
+	}
+	router, err := db.CreateAsset(ctx, cert("router.other.net"))
+	if !assert.NoError(t, err, "storing the router's certificate") {
+		return
+	}
+	again, err := db.CreateAsset(ctx, cert("printer.example.edu"))
+	assert.NoError(t, err, "storing the printer's certificate again")
+
+	assert.NotEqual(t, printer.ID, router.ID, "two issuers' certificates with one serial are two entities")
+	assert.Equal(t, printer.ID, again.ID, "the same certificate is the same entity")
+
+	found, err := db.FindEntityById(ctx, printer.ID)
+	if assert.NoError(t, err, "reading the printer's certificate") {
+		assert.Equal(t, "printer.example.edu", found.Asset.(*oamcert.TLSCertificate).SubjectCommonName,
+			"the printer's certificate keeps its own subject")
 	}
 }

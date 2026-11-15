@@ -209,7 +209,15 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
-	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_tls_content_serial_number IF NOT EXISTS FOR (n:TLSCertificate) REQUIRE n.serial_number IS UNIQUE")
+	// A serial number is unique per issuer only (RFC 5280): certificates are
+	// found by serial number, issuer and key identifiers, and the serial
+	// number is indexed, not unique.
+	err = executeQuery(driver, dbname, "DROP CONSTRAINT constraint_tls_content_serial_number IF EXISTS")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE INDEX tls_range_index_serial_number IF NOT EXISTS FOR (n:TLSCertificate) ON (n.serial_number)")
 	if err != nil {
 		return err
 	}

@@ -22,16 +22,21 @@ import (
 const upsertTLSCertificateText = `
 INSERT INTO tlscertificate(serial_number, subject_common_name, attrs) 
 VALUES (:serial_number, :subject_common_name, :attrs)
-ON CONFLICT(serial_number) DO UPDATE SET
+ON CONFLICT(cert_key) DO UPDATE SET
     subject_common_name = COALESCE(NULLIF(excluded.subject_common_name, ''), tlscertificate.subject_common_name),
     attrs               = json_patch(tlscertificate.attrs,       excluded.attrs),
     updated_at          = CURRENT_TIMESTAMP`
 
-// Param: :serial_number
+// Params: :serial_number, :attrs. A certificate is identified by its serial
+// number with its issuer's common name and key identifier and its own key
+// identifier (RFC 5280 makes serial numbers unique per issuer only): the
+// same expression as the table's cert_key column.
 const selectEntityIDByTLSCertificateText = `
 SELECT entity_id FROM entity
 WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'tlscertificate' LIMIT 1)
-  AND natural_key = :serial_number
+  AND natural_key = :serial_number || '|' || lower(coalesce(json_extract(:attrs, '$.issuer_common_name'), ''))
+    || '|' || lower(coalesce(json_extract(:attrs, '$.authority_key_id'), ''))
+    || '|' || lower(coalesce(json_extract(:attrs, '$.subject_key_id'), ''))
 LIMIT 1`
 
 // Param: :row_id
@@ -102,7 +107,7 @@ func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.
 		Args: []any{
 			sql.Named("serial_number", a.SerialNumber),
 			sql.Named("subject_common_name", a.SubjectCommonName),
-			sql.Named("attrs", attrsJSON),
+			sql.Named("attrs", string(attrsJSON)),
 		},
 		Result: done,
 	})
@@ -116,7 +121,7 @@ func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.
 		Ctx:     ctx,
 		Name:    "asset.tls_certificate.entity_id_by_tls_certificate",
 		SQLText: selectEntityIDByTLSCertificateText,
-		Args:    []any{sql.Named("serial_number", a.SerialNumber)},
+		Args:    []any{sql.Named("serial_number", a.SerialNumber), sql.Named("attrs", string(attrsJSON))},
 		Result:  ch,
 	})
 
