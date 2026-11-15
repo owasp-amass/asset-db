@@ -55,3 +55,14 @@ func extractOAMProperty(ttype string, content []byte) (oam.Property, error) {
 
 	return p, err
 }
+
+// storedValue is the value a tag is stored and found by: a source tag is one
+// row per source, its confidence kept in the content, which the latest
+// sighting updates.
+func storedValue(property oam.Property) string {
+	if property.PropertyType() == oam.SourceProperty {
+		return ""
+	}
+
+	return property.Value()
+}

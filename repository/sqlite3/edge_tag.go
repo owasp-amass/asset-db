@@ -161,7 +161,7 @@ func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID int64, property o
 			sql.Named("edge_id", edgeID),
 			sql.Named("ttype_name", ttype),
 			sql.Named("property_name", property.Name()),
-			sql.Named("property_value", property.Value()),
+			sql.Named("property_value", storedValue(property)),
 			sql.Named("content", content),
 		},
 		Result: done,
@@ -180,7 +180,7 @@ func (r *SqliteRepository) tagEdge(ctx context.Context, edgeID int64, property o
 			sql.Named("edge_id", edgeID),
 			sql.Named("ttype_name", ttype),
 			sql.Named("property_name", property.Name()),
-			sql.Named("property_value", property.Value()),
+			sql.Named("property_value", storedValue(property)),
 		},
 		Result: ch,
 	})

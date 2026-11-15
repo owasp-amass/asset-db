@@ -26,7 +26,7 @@ const ensureEdgeText = `
 INSERT INTO edge(etype_id, label, from_entity_id, to_entity_id, content)
 VALUES ((SELECT id FROM edge_type_lu WHERE name = lower(:etype_name) LIMIT 1), 
 	lower(:label), :from_entity_id, :to_entity_id, coalesce(:content, '{}'))
-ON CONFLICT(etype_id, from_entity_id, to_entity_id, label) DO UPDATE SET
+ON CONFLICT(from_entity_id, label, etype_id, to_entity_id, rr_type) DO UPDATE SET
     content = CASE
         WHEN json_patch(edge.content, coalesce(excluded.content, '{}')) IS NOT edge.content
         THEN json_patch(edge.content, coalesce(excluded.content, '{}'))
@@ -34,7 +34,8 @@ ON CONFLICT(etype_id, from_entity_id, to_entity_id, label) DO UPDATE SET
     END,
     updated_at = CURRENT_TIMESTAMP`
 
-// Params: :etype_name, :label, :from_entity_id, :to_entity_id
+// Params: :etype_name, :label, :from_entity_id, :to_entity_id, :content(JSON);
+// a DNS relation's record type is part of the edge's identity.
 const selectEdgeIDBetweenText = `
 SELECT e.edge_id
 FROM edge e
@@ -42,7 +43,8 @@ JOIN edge_type_lu t ON t.id = e.etype_id
 WHERE t.name = lower(:etype_name)
   AND e.label = lower(:label) 
   AND e.from_entity_id = :from_entity_id
-  AND e.to_entity_id = :to_entity_id`
+  AND e.to_entity_id = :to_entity_id
+  AND e.rr_type = CAST(coalesce(json_extract(:content, '$.header.rr_type'), '') AS TEXT)`
 
 // Params: edge_id
 const selectEdgeByIDText = `
@@ -130,6 +132,7 @@ func (r *SqliteRepository) CreateEdge(ctx context.Context, edge *dbt.Edge) (*dbt
 			sql.Named("label", edge.Relation.Label()),
 			sql.Named("from_entity_id", fromID),
 			sql.Named("to_entity_id", toID),
+			sql.Named("content", string(content)),
 		},
 		Result: ch,
 	})
