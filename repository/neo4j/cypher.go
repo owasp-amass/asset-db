@@ -169,36 +169,65 @@ func tagsOfQuery(kind, owner, id string, since time.Time) (string, map[string]an
 		params
 }
 
-// tagsByContentQuery finds the tags of a kind holding a property's
-// identifying values.
-func tagsByContentQuery(kind string, prop oam.Property, since time.Time) (string, map[string]any, error) {
+// tagIdentity is what makes a tag the same tag on its owner: a DNS record's
+// name and data, a simple property's name and value, a source's name (its
+// confidence is updated, not a second tag, as in the SQL repositories), and
+// a vulnerability's ID and description.
+func tagIdentity(prop oam.Property) (map[string]any, error) {
+	switch v := prop.(type) {
+	case *dns.DNSRecordProperty:
+		return map[string]any{"property_name": v.PropertyName, "data": v.Data}, nil
+	case *general.SimpleProperty:
+		return map[string]any{"property_name": v.PropertyName, "property_value": v.PropertyValue}, nil
+	case *general.SourceProperty:
+		return map[string]any{"name": v.Source}, nil
+	case *platform.VulnProperty:
+		return map[string]any{"vuln_id": v.ID, "desc": v.Description}, nil
+	case nil:
+		return nil, errors.New("the property is nil")
+	}
+
+	return nil, errors.New("property type not supported")
+}
+
+// mergeTagQuery creates an EntityTag or EdgeTag node for its owner (owner is
+// entity_id or edge_id) the first time the property is seen, and after that
+// updates it, keeping its tag_id and created_at.
+func mergeTagQuery(kind, owner, ownerID string, prop oam.Property, props map[string]any) (string, map[string]any,
+	error) {
 	if prop == nil {
 		return "", nil, errors.New("the property is nil")
 	}
 
-	var match map[string]any
-	switch v := prop.(type) {
-	case *dns.DNSRecordProperty:
-		match = map[string]any{"property_name": v.PropertyName, "data": v.Data}
-	case *general.SimpleProperty:
-		match = map[string]any{"property_name": v.PropertyName, "property_value": v.PropertyValue}
-	case *general.SourceProperty:
-		match = map[string]any{"name": v.Source, "confidence": v.Confidence}
-	case *platform.VulnProperty:
-		match = map[string]any{"vuln_id": v.ID, "desc": v.Description}
-	default:
-		return "", nil, errors.New("property type not supported")
+	match, err := tagIdentity(prop)
+	if err != nil {
+		return "", nil, err
+	}
+	label, err := identifier(string(prop.PropertyType()))
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err := identifier(owner); err != nil {
+		return "", nil, err
 	}
 
-	params := map[string]any{}
-	var pairs []string
-	for _, k := range slices.Sorted(mapKeys(match)) {
-		params[k] = match[k]
-		pairs = append(pairs, k+": $"+k)
+	seen := make(map[string]any, len(props))
+	for k, v := range props {
+		if k != "tag_id" && k != "created_at" {
+			seen[k] = v
+		}
 	}
 
-	query := "MATCH (p:" + kind + " {" + strings.Join(pairs, ", ") + "})" + where(sinceClause("p", since, params)) +
-		" RETURN p"
+	params := map[string]any{"owner": ownerID, "props": props, "seen": seen}
+	pairs := []string{owner + ": $owner"}
+	for i, k := range slices.Sorted(mapKeys(match)) {
+		p := "i" + strconv.Itoa(i)
+		params[p] = match[k]
+		pairs = append(pairs, k+": $"+p)
+	}
+
+	query := "MERGE (p:" + kind + ":" + label + " {" + strings.Join(pairs, ", ") + "}) ON CREATE SET p = $props " +
+		"ON MATCH SET p += $seen RETURN p"
 	return query, params, nil
 }
 

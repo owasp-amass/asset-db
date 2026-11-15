@@ -94,29 +94,38 @@ func TestTagQueries(t *testing.T) {
 		"the tags query is not as expected")
 	assert.Equal(t, hostile, params["id"], "the entity ID should be a parameter")
 
-	query, params, err := tagsByContentQuery("EdgeTag", &general.SimpleProperty{PropertyName: "title",
-		PropertyValue: hostile}, time.Time{})
-	assert.NoError(t, err, "a simple property query should build")
-	assert.Equal(t, "MATCH (p:EdgeTag {property_name: $property_name, property_value: $property_value}) RETURN p",
-		query, "the simple property query is not as expected")
-	assert.Equal(t, hostile, params["property_value"], "the property value should be a parameter")
+	props := map[string]any{"tag_id": "t1", "created_at": "c", "updated_at": "u", "property_name": "title",
+		"property_value": hostile}
+	query, params, err := mergeTagQuery("EdgeTag", "edge_id", "e1", &general.SimpleProperty{PropertyName: "title",
+		PropertyValue: hostile}, props)
+	assert.NoError(t, err, "a simple property merge should build")
+	assert.Equal(t, "MERGE (p:EdgeTag:SimpleProperty {edge_id: $owner, property_name: $i0, property_value: $i1}) "+
+		"ON CREATE SET p = $props ON MATCH SET p += $seen RETURN p", query, "the simple property merge is not as expected")
+	assert.Equal(t, hostile, params["i1"], "the property value should be a parameter")
+	seen := params["seen"].(map[string]any)
+	assert.NotContains(t, seen, "tag_id", "a stored tag keeps its id")
+	assert.NotContains(t, seen, "created_at", "a stored tag keeps its first-seen time")
+	assert.Equal(t, "u", seen["updated_at"], "a stored tag records the sighting")
+
+	// a source is one tag per owner: its confidence is not part of the identity
+	query, params, err = mergeTagQuery("EntityTag", "entity_id", "7", &general.SourceProperty{Source: "DNS",
+		Confidence: 100}, map[string]any{})
+	assert.NoError(t, err, "a source property merge should build")
+	assert.Equal(t, "MERGE (p:EntityTag:SourceProperty {entity_id: $owner, name: $i0}) ON CREATE SET p = $props "+
+		"ON MATCH SET p += $seen RETURN p", query, "the source property merge is not as expected")
+	assert.Equal(t, "7", params["owner"], "the owner should be a parameter")
 
 	// DNS record data was written unquoted before
-	query, params, err = tagsByContentQuery("EntityTag", &dns.DNSRecordProperty{PropertyName: "dns_record",
-		Data: "v=spf1 include:_spf.example.com ~all"}, since)
-	assert.NoError(t, err, "a DNS record property query should build")
-	assert.Contains(t, query, "data: $data", "the record data should be a parameter")
-	assert.Equal(t, "v=spf1 include:_spf.example.com ~all", params["data"], "the record data should be kept as is")
+	_, params, err = mergeTagQuery("EntityTag", "entity_id", "7", &dns.DNSRecordProperty{PropertyName: "dns_record",
+		Data: "v=spf1 include:_spf.example.com ~all"}, map[string]any{})
+	assert.NoError(t, err, "a DNS record property merge should build")
+	assert.Equal(t, "v=spf1 include:_spf.example.com ~all", params["i0"], "the record data should be a parameter")
 
-	query, params, err = tagsByContentQuery("EntityTag", &general.SourceProperty{Source: "DNS", Confidence: 100},
-		time.Time{})
-	assert.NoError(t, err, "a source property query should build")
-	assert.Equal(t, "MATCH (p:EntityTag {confidence: $confidence, name: $name}) RETURN p", query,
-		"the source property query is not as expected")
-	assert.Equal(t, 100, params["confidence"], "the confidence should keep its type")
-
-	_, _, err = tagsByContentQuery("EntityTag", nil, since)
+	_, _, err = mergeTagQuery("EntityTag", "entity_id", "7", nil, map[string]any{})
 	assert.Error(t, err, "a nil property must be refused")
+	_, _, err = mergeTagQuery("EntityTag", "entity_id) DETACH DELETE (x", "7", &general.SourceProperty{Source: "DNS"},
+		map[string]any{})
+	assert.Error(t, err, "an owner key that is not an identifier must be refused")
 
 	query, _, err = createTagQuery("EntityTag", "SimpleProperty", nil)
 	assert.NoError(t, err, "a tag creation query should build")

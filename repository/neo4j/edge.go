@@ -15,6 +15,7 @@ import (
 	neo4jdb "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 // CreateEdge implements the Repository interface.
@@ -100,7 +101,7 @@ func (neo *NeoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (
 
 	if outs, err := neo.OutgoingEdges(ctx, edge.FromEntity, time.Time{}, edge.Relation.Label()); err == nil {
 		for _, out := range outs {
-			if edge.ToEntity.ID == out.ToEntity.ID && reflect.DeepEqual(edge.Relation, out.Relation) {
+			if edge.ToEntity.ID == out.ToEntity.ID && sameRelation(edge.Relation, out.Relation) {
 				_ = neo.edgeSeen(out, updated)
 
 				e, err = neo.FindEdgeById(ctx, out.ID)
@@ -115,6 +116,40 @@ func (neo *NeoRepository) isDuplicateEdge(edge *types.Edge, updated time.Time) (
 	}
 
 	return e, dup
+}
+
+// sameRelation reports whether two relations are the same edge, as the SQL
+// repositories identify one: the same type and label, and for a DNS relation
+// the same record type. A resolver's TTL counts down, and a record's other
+// fields can change, without making it another record.
+func sameRelation(a, b oam.Relation) bool {
+	if a == nil || b == nil || a.RelationType() != b.RelationType() || a.Label() != b.Label() {
+		return false
+	}
+
+	if ra, ok := dnsRecordType(a); ok {
+		rb, ok := dnsRecordType(b)
+		return ok && ra == rb
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+func dnsRecordType(r oam.Relation) (int, bool) {
+	switch v := r.(type) {
+	case *oamdns.BasicDNSRelation:
+		return v.Header.RRType, true
+	case oamdns.BasicDNSRelation:
+		return v.Header.RRType, true
+	case *oamdns.PrefDNSRelation:
+		return v.Header.RRType, true
+	case oamdns.PrefDNSRelation:
+		return v.Header.RRType, true
+	case *oamdns.SRVDNSRelation:
+		return v.Header.RRType, true
+	case oamdns.SRVDNSRelation:
+		return v.Header.RRType, true
+	}
+	return 0, false
 }
 
 // edgeSeen updates the updated_at timestamp for the specified edge.
