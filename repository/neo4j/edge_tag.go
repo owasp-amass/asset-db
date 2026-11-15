@@ -105,9 +105,12 @@ func (neo *NeoRepository) CreateEdgeTag(ctx context.Context, edge *types.Edge, i
 		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		query := fmt.Sprintf("CREATE (p:EdgeTag:%s $props) RETURN p", input.Property.PropertyType())
-		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query,
-			map[string]interface{}{"props": props},
+		query, params, err := createTagQuery("EdgeTag", string(input.Property.PropertyType()), props)
+		if err != nil {
+			return nil, err
+		}
+
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, params,
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 		)
@@ -188,20 +191,15 @@ func (neo *NeoRepository) FindEdgeTagById(ctx context.Context, id string) (*type
 // The property data is serialized to JSON and compared against the Content field of the EdgeTag struct.
 // Returns a slice of matching edge tags as []*types.EdgeTag or an error if the search fails.
 func (neo *NeoRepository) findEdgeTagsByContent(ctx context.Context, prop oam.Property, since time.Time) ([]*types.EdgeTag, error) {
-	qnode, err := queryNodeByPropertyKeyValue("p", "EdgeTag", prop)
+	query, params, err := tagsByContentQuery("EdgeTag", prop, since)
 	if err != nil {
 		return nil, err
-	}
-
-	query := "MATCH " + qnode + " RETURN p"
-	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH %s WHERE p.updated_at >= localDateTime('%s') RETURN p", qnode, timeToNeo4jTime(since))
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, params,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -232,15 +230,12 @@ func (neo *NeoRepository) findEdgeTagsByContent(ctx context.Context, prop oam.Pr
 
 // FindEdgeTags implements the Repository interface.
 func (neo *NeoRepository) FindEdgeTags(ctx context.Context, edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
-	query := fmt.Sprintf("MATCH (p:EdgeTag {edge_id: '%s'}) RETURN p", edge.ID)
-	if !since.IsZero() {
-		query = fmt.Sprintf("MATCH (p:EdgeTag {edge_id: '%s'}) WHERE p.updated_at >= localDateTime('%s') RETURN p", edge.ID, timeToNeo4jTime(since))
-	}
+	query, params := tagsOfQuery("EdgeTag", "edge_id", edge.ID, since)
 
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, params,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)

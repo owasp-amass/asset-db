@@ -6,7 +6,6 @@ package neo4j
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -101,27 +100,4 @@ func propertyPropsMap(prop oam.Property) (map[string]interface{}, error) {
 	}
 
 	return m, nil
-}
-
-func queryNodeByPropertyKeyValue(varname, label string, prop oam.Property) (string, error) {
-	if prop == nil {
-		return "", errors.New("the property is nil")
-	}
-
-	var node string
-	switch v := prop.(type) {
-	case *dns.DNSRecordProperty:
-		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %s})", varname, label, "property_name", v.PropertyName, "data", v.Data)
-	case *general.SimpleProperty:
-		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: '%s'})", varname, label, "property_name", v.PropertyName, "property_value", v.PropertyValue)
-	case *general.SourceProperty:
-		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: %d})", varname, label, "name", v.Source, "confidence", v.Confidence)
-	case *platform.VulnProperty:
-		node = fmt.Sprintf("(%s:%s {%s: '%s', %s: '%s'})", varname, label, "vuln_id", v.ID, "desc", v.Description)
-	}
-	if node == "" {
-		return "", errors.New("asset type not supported")
-	}
-
-	return node, nil
 }

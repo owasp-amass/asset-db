@@ -14,7 +14,7 @@ import (
 	neomigrations "github.com/owasp-amass/asset-db/migrations/neo4j"
 )
 
-var store *neoRepository
+var store *NeoRepository
 
 func TestMain(m *testing.M) {
 	var err error
@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestGetDBType(t *testing.T) {
-	if db := store.GetDBType(); db != Neo4j {
+	if db := store.Type(); db != Neo4j {
 		t.Errorf("Failed to return the correct database type")
 	}
 }

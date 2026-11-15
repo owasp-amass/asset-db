@@ -100,9 +100,12 @@ func (neo *NeoRepository) CreateEntity(ctx context.Context, input *types.Entity)
 		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		query := fmt.Sprintf("CREATE (a:Entity:%s $props) RETURN a", input.Asset.AssetType())
-		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query,
-			map[string]interface{}{"props": props},
+		query, params, err := createEntityQuery(input.Asset.AssetType(), props)
+		if err != nil {
+			return nil, err
+		}
+
+		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, params,
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 		)
@@ -179,28 +182,17 @@ func (neo *NeoRepository) FindEntityById(ctx context.Context, id string) (*types
 
 // FindEntitiesByContent implements the Repository interface.
 func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, atype oam.AssetType, since time.Time, limit int, filters types.ContentFilters) ([]*types.Entity, error) {
-	var field, value string
-	for k, v := range filters {
-		field = k
-		value = fmt.Sprintf("%v", v)
-		break
+	// a query whose RETURN follows ORDER BY is not valid Cypher, and a value
+	// written into the query could change it: both are parameters now
+	query, params, err := entitiesByContentQuery(atype, filters, since, limit)
+	if err != nil {
+		return nil, err
 	}
-
-	// Build the query node based on the asset type and filter
-	query := "MATCH " + fmt.Sprintf("(%s:%s {%s: '%s'})", "a", string(atype), field, value)
-	if !since.IsZero() {
-		query += fmt.Sprintf(" WHERE a.updated_at >= localDateTime('%s')", timeToNeo4jTime(since))
-	}
-	query += " ORDER BY a.updated_at DESC"
-	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit)
-	}
-	query += " RETURN a"
 
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, params,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
@@ -235,20 +227,15 @@ func (neo *NeoRepository) FindEntitiesByContent(ctx context.Context, atype oam.A
 }
 
 func (neo *NeoRepository) FindEntitiesByType(ctx context.Context, atype oam.AssetType, since time.Time, limit int) ([]*types.Entity, error) {
-	query := fmt.Sprintf("MATCH (a:%s)", string(atype))
-	if !since.IsZero() {
-		query += fmt.Sprintf(" WHERE a.updated_at >= localDateTime('%s')", timeToNeo4jTime(since))
+	query, params, err := entitiesByTypeQuery(atype, since, limit)
+	if err != nil {
+		return nil, err
 	}
-	query += " ORDER BY a.updated_at DESC"
-	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit)
-	}
-	query += " RETURN a"
 
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, nil,
+	result, err := neo4jdb.ExecuteQuery(tctx, neo.DB, query, params,
 		neo4jdb.EagerResultTransformer,
 		neo4jdb.ExecuteQueryWithDatabase(neo.dbname),
 	)
