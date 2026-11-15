@@ -34,6 +34,8 @@ type PostgresRepository struct {
 	dbtype string
 	cancel context.CancelFunc
 	types  *entityTypes
+	// wset holds the settings applied to the writer's connections.
+	wset *connSettings
 }
 
 // New creates a new instance of the asset database repository.
@@ -107,6 +109,7 @@ func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository,
 		wcfg:   withDefaults(wcfg),
 		dbtype: Postgres,
 		types:  newEntityTypes(),
+		wset:   newConnSettings(),
 	}
 
 	if err := repo.migrate(); err != nil {
@@ -122,7 +125,9 @@ func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository,
 
 	repo.rpool = r
 
-	w, err := NewWorker(ctx, repo.dsn, repo.wcfg)
+	writer := repo.wcfg
+	writer.Settings = repo.wset
+	w, err := NewWorker(ctx, repo.dsn, writer)
 	if err != nil {
 		cancel()
 		return nil, err

@@ -17,6 +17,17 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
+// SeenSince is implemented by repositories that can tell a new sighting of
+// an asset, edge or tag from a repeat within one enumeration. After
+// SetSeenSince(start), one last seen before start records the sighting
+// (updates its last-seen time), while one already seen since start, with
+// nothing about it changed, is not written again for a short while: its
+// last-seen time can lag by that long, but never falls before start. Without
+// the call, every sighting is recorded.
+type SeenSince interface {
+	SetSeenSince(start time.Time)
+}
+
 // Repository defines the methods for interacting with the asset database.
 // It provides operations for creating, retrieving, tagging, linking, and deleting assets.
 type Repository interface {

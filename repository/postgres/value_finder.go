@@ -26,9 +26,11 @@ func (r *PostgresRepository) FindEntitiesByTagValue(ctx context.Context, atype o
 		return nil, false, err
 	}
 
-	// lower(property_value) LIKE matches the trigram index on the same
-	// expression.
-	match, arg := "g.property_value = $3", any(value)
+	// An exact value matches the index on the value's SHA-256 (values can be
+	// longer than a B-tree entry); lower(property_value) LIKE matches the
+	// trigram index on the same expression.
+	match, arg := "public.tag_value_key(g.property_value) = public.tag_value_key($3::text) AND g.property_value = $3",
+		any(value)
 	if contains {
 		match, arg = `lower(g.property_value) LIKE $3 ESCAPE '\'`, valuequery.LikePattern(value)
 	}

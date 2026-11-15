@@ -53,7 +53,7 @@ func edgesForEntityText(dir string) string {
 FROM public.edge e JOIN public.edge_type_lu te ON te.id = e.etype_id
 WHERE ` + where + `
   AND (@since::timestamp IS NULL OR e.updated_at >= @since::timestamp)
-  AND (@labels::text[] IS NULL OR e.label = ANY(@labels::text[]))
+  AND (@labels::citext[] IS NULL OR e.label = ANY(@labels::citext[]))
 ORDER BY e.updated_at DESC, e.edge_id DESC;`
 }
 

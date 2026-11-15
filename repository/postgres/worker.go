@@ -73,6 +73,9 @@ type WorkerConfig struct {
 	// it, and pays for a savepoint and its release. The pool's MaxConns
 	// bounds how many direct jobs run at the same time.
 	Direct bool
+
+	// Settings, when set, are applied to each connection before it is used.
+	Settings *connSettings
 }
 
 func withDefaults(cfg WorkerConfig) WorkerConfig {
@@ -124,6 +127,10 @@ func NewWorker(ctx context.Context, connString string, cfg WorkerConfig) (*Worke
 	}
 	if cfg.ApplicationName != "" {
 		pcfg.ConnConfig.RuntimeParams["application_name"] = cfg.ApplicationName
+	}
+	if cfg.Settings != nil {
+		pcfg.PrepareConn = cfg.Settings.prepare
+		pcfg.BeforeClose = cfg.Settings.forget
 	}
 
 	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
