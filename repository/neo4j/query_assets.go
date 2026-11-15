@@ -7,6 +7,7 @@ package neo4j
 import (
 	"encoding/json"
 	"errors"
+	"github.com/owasp-amass/asset-db/internal/iprange"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -99,6 +100,8 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 	case *oamnet.IPAddress:
 		m["address"] = v.Address.String()
 		m["type"] = v.Type
+		// a key that sorts as the address, for range searches
+		m["ip_key"] = iprange.Hex(iprange.Key(v.Address))
 	case *oamreg.IPNetRecord:
 		m["raw"] = v.Raw
 		m["cidr"] = v.CIDR.String()
@@ -130,6 +133,8 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 	case *oamnet.Netblock:
 		m["cidr"] = v.CIDR.String()
 		m["type"] = v.Type
+		first, last := iprange.Range(v.CIDR)
+		m["first_key"], m["last_key"] = iprange.Hex(first), iprange.Hex(last)
 	case *org.Organization:
 		m["unique_id"] = v.ID
 		m["name"] = v.Name

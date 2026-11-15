@@ -129,14 +129,26 @@ func (r *PostgresRepository) entitiesByID(ctx context.Context, query string, arg
 		ids = ids[:limit]
 	}
 
-	out := make([]*types.Entity, 0, len(ids))
+	// the entities in one read, in the query's order
+	strs := make([]string, 0, len(ids))
 	for _, id := range ids {
-		ent, err := r.FindEntityById(ctx, strconv.FormatInt(id, 10))
-		if err != nil {
-			return nil, false, err
-		}
+		strs = append(strs, strconv.FormatInt(id, 10))
+	}
+	ents, err := r.FindEntitiesByIds(ctx, strs)
+	if err != nil {
+		return nil, false, err
+	}
 
-		out = append(out, ent)
+	byID := make(map[string]*types.Entity, len(ents))
+	for _, e := range ents {
+		byID[e.ID] = e
+	}
+
+	out := make([]*types.Entity, 0, len(strs))
+	for _, id := range strs {
+		if e, ok := byID[id]; ok {
+			out = append(out, e)
+		}
 	}
 
 	return out, more, nil

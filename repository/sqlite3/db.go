@@ -81,6 +81,9 @@ func sqliteDatabase(dsn string) (*SqliteRepository, error) {
 	if err := repo.migrate(); err != nil {
 		return nil, err
 	}
+	if err := repo.fillRangeKeys(); err != nil {
+		return nil, err
+	}
 	return repo, repo.prepareWorkers()
 }
 

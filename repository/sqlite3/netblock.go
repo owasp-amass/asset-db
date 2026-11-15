@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/owasp-amass/asset-db/internal/iprange"
 	"net/netip"
 	"strconv"
 	"time"
@@ -20,10 +21,12 @@ import (
 
 // Params: :netblock_cidr, :attrs
 const upsertNetblockText = `
-INSERT INTO netblock (netblock_cidr, attrs)
-VALUES (:netblock_cidr, :attrs)
+INSERT INTO netblock (netblock_cidr, attrs, first_key, last_key)
+VALUES (:netblock_cidr, :attrs, :first_key, :last_key)
 ON CONFLICT(netblock_cidr) DO UPDATE SET
   attrs      = json_patch(netblock.attrs, excluded.attrs),
+  first_key  = excluded.first_key,
+  last_key   = excluded.last_key,
   updated_at = CURRENT_TIMESTAMP`
 
 // Param: :netblock_cidr
@@ -78,6 +81,7 @@ func (r *SqliteRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbloc
 		return 0, err
 	}
 
+	first, last := iprange.Range(a.CIDR)
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
@@ -86,6 +90,8 @@ func (r *SqliteRepository) upsertNetblock(ctx context.Context, a *oamnet.Netbloc
 		Args: []any{
 			sql.Named("netblock_cidr", a.CIDR.String()),
 			sql.Named("attrs", attrsJSON),
+			sql.Named("first_key", first),
+			sql.Named("last_key", last),
 		},
 		Result: done,
 	})

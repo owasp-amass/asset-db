@@ -52,10 +52,15 @@ func New(dbtype, dsn string) (*NeoRepository, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return &NeoRepository{
+	neo := &NeoRepository{
 		DB:     driver,
 		dbname: dbname,
-	}, driver.VerifyConnectivity(ctx)
+	}
+	if err := driver.VerifyConnectivity(ctx); err != nil {
+		return neo, err
+	}
+
+	return neo, neo.fillRangeKeys(context.Background())
 }
 
 // Type implements the Repository interface.

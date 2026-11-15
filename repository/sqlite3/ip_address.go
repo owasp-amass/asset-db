@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/owasp-amass/asset-db/internal/iprange"
 	"net/netip"
 	"strconv"
 	"time"
@@ -20,10 +21,11 @@ import (
 
 // Params: :ip_address_text, :attrs
 const upsertIPAddressText = `
-INSERT INTO ipaddress(ip_address, attrs)
-VALUES (:ip_address_text, :attrs)
+INSERT INTO ipaddress(ip_address, attrs, ip_key)
+VALUES (:ip_address_text, :attrs, :ip_key)
 ON CONFLICT(ip_address) DO UPDATE SET
 	attrs      = json_patch(ipaddress.attrs, excluded.attrs),
+	ip_key     = excluded.ip_key,
     updated_at = CURRENT_TIMESTAMP`
 
 // Param: :ip_address_text
@@ -86,6 +88,7 @@ func (r *SqliteRepository) upsertIPAddress(ctx context.Context, a *oamnet.IPAddr
 		Args: []any{
 			sql.Named("ip_address_text", a.Address.String()),
 			sql.Named("attrs", attrsJSON),
+			sql.Named("ip_key", iprange.Key(a.Address)),
 		},
 		Result: done,
 	})
