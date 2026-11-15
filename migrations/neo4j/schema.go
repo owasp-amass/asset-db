@@ -212,6 +212,17 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 	// A serial number is unique per issuer only (RFC 5280): certificates are
 	// found by serial number, issuer and key identifiers, and the serial
 	// number is indexed, not unique.
+	// collection runs, from any tool
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_collection_run_id IF NOT EXISTS FOR (n:CollectionRun) REQUIRE n.run_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE INDEX collection_run_range_index_started_at IF NOT EXISTS FOR (n:CollectionRun) ON (n.started_at)")
+	if err != nil {
+		return err
+	}
+
 	err = executeQuery(driver, dbname, "DROP CONSTRAINT constraint_tls_content_serial_number IF EXISTS")
 	if err != nil {
 		return err
