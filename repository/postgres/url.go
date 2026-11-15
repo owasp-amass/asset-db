@@ -170,11 +170,17 @@ func (r *PostgresRepository) getURLsUpdatedSince(ctx context.Context, since time
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectURLSinceText, pgx.NamedArgs{
+	return r.scanURLs(ctx, selectURLSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanURLs runs a query whose rows are an entity ID followed by the
+// columns of the URLs updated-since query, and builds the entities.
+func (r *PostgresRepository) scanURLs(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var a oamurl.URL
 			var eid, rid int64

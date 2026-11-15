@@ -155,11 +155,17 @@ func (r *PostgresRepository) getIdentifiersUpdatedSince(ctx context.Context, sin
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectIdentifierSinceText, pgx.NamedArgs{
+	return r.scanIdentifiers(ctx, selectIdentifierSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanIdentifiers runs a query whose rows are an entity ID followed by the
+// columns of the Identifiers updated-since query, and builds the entities.
+func (r *PostgresRepository) scanIdentifiers(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

@@ -191,11 +191,17 @@ func (r *PostgresRepository) getDomainRecordsUpdatedSince(ctx context.Context, s
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectDomainRecordSinceText, pgx.NamedArgs{
+	return r.scanDomainRecords(ctx, selectDomainRecordSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanDomainRecords runs a query whose rows are an entity ID followed by the
+// columns of the DomainRecords updated-since query, and builds the entities.
+func (r *PostgresRepository) scanDomainRecords(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

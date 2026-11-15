@@ -206,11 +206,17 @@ func (r *PostgresRepository) getLocationsUpdatedSince(ctx context.Context, since
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectLocationSinceText, pgx.NamedArgs{
+	return r.scanLocations(ctx, selectLocationSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanLocations runs a query whose rows are an entity ID followed by the
+// columns of the Locations updated-since query, and builds the entities.
+func (r *PostgresRepository) scanLocations(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

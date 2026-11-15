@@ -156,11 +156,17 @@ func (r *PostgresRepository) getProductsUpdatedSince(ctx context.Context, since 
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectProductSinceText, pgx.NamedArgs{
+	return r.scanProducts(ctx, selectProductSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanProducts runs a query whose rows are an entity ID followed by the
+// columns of the Products updated-since query, and builds the entities.
+func (r *PostgresRepository) scanProducts(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

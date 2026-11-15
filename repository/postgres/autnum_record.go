@@ -182,11 +182,17 @@ func (r *PostgresRepository) getAutnumRecordsUpdatedSince(ctx context.Context, s
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectAutnumSinceText, pgx.NamedArgs{
+	return r.scanAutnumRecords(ctx, selectAutnumSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanAutnumRecords runs a query whose rows are an entity ID followed by the
+// columns of the AutnumRecords updated-since query, and builds the entities.
+func (r *PostgresRepository) scanAutnumRecords(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

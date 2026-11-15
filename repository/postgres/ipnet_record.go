@@ -228,11 +228,17 @@ func (r *PostgresRepository) getIPNetRecordsUpdatedSince(ctx context.Context, si
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectIPNetRecordSinceText, pgx.NamedArgs{
+	return r.scanIPNetRecords(ctx, selectIPNetRecordSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanIPNetRecords runs a query whose rows are an entity ID followed by the
+// columns of the IPNetRecords updated-since query, and builds the entities.
+func (r *PostgresRepository) scanIPNetRecords(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

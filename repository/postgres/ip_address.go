@@ -166,11 +166,17 @@ func (r *PostgresRepository) getIPAddressesUpdatedSince(ctx context.Context, sin
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectIPAddressSinceText, pgx.NamedArgs{
+	return r.scanIPAddresses(ctx, selectIPAddressSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanIPAddresses runs a query whose rows are an entity ID followed by the
+// columns of the IPAddresses updated-since query, and builds the entities.
+func (r *PostgresRepository) scanIPAddresses(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

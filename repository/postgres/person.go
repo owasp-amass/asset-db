@@ -175,11 +175,17 @@ func (r *PostgresRepository) getPersonsUpdatedSince(ctx context.Context, since t
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectPersonSinceText, pgx.NamedArgs{
+	return r.scanPersons(ctx, selectPersonSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanPersons runs a query whose rows are an entity ID followed by the
+// columns of the Persons updated-since query, and builds the entities.
+func (r *PostgresRepository) scanPersons(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time

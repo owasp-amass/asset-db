@@ -179,11 +179,17 @@ func (r *PostgresRepository) getOrganizationsUpdatedSince(ctx context.Context, s
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectOrganizationSinceText, pgx.NamedArgs{
+	return r.scanOrganizations(ctx, selectOrganizationSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
-	}, func(rows pgx.Rows) error {
+	})
+}
+
+// scanOrganizations runs a query whose rows are an entity ID followed by the
+// columns of the Organizations updated-since query, and builds the entities.
+func (r *PostgresRepository) scanOrganizations(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+	var out []*dbt.Entity
+	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
