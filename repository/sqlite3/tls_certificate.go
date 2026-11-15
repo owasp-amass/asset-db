@@ -23,7 +23,7 @@ const upsertTLSCertificateText = `
 INSERT INTO tlscertificate(serial_number, subject_common_name, attrs) 
 VALUES (:serial_number, :subject_common_name, :attrs)
 ON CONFLICT(serial_number) DO UPDATE SET
-    subject_common_name = COALESCE(excluded.subject_common_name, tlscertificate.subject_common_name),
+    subject_common_name = COALESCE(NULLIF(excluded.subject_common_name, ''), tlscertificate.subject_common_name),
     attrs               = json_patch(tlscertificate.attrs,       excluded.attrs),
     updated_at          = CURRENT_TIMESTAMP`
 
@@ -67,12 +67,6 @@ func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.
 	}
 	if a.SerialNumber == "" {
 		return 0, fmt.Errorf("the TLS certificate serial number cannot be empty")
-	}
-	if a.SubjectCommonName == "" {
-		return 0, fmt.Errorf("the TLS certificate subject common name cannot be empty")
-	}
-	if a.IssuerCommonName == "" {
-		return 0, fmt.Errorf("the TLS certificate issuer common name cannot be empty")
 	}
 	if _, err := parseTimestamp(a.NotBefore); err != nil {
 		return 0, fmt.Errorf("the TLS certificate must have a valid NotBefore date: %v", err)
@@ -166,9 +160,6 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 	if a.SerialNumber == "" {
 		return nil, errors.New("TLS certificate serial number is missing")
 	}
-	if a.SubjectCommonName == "" {
-		return nil, errors.New("TLS certificate subject common name is missing")
-	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
 	if created, err := parseTimestamp(c); err != nil {
@@ -203,9 +194,6 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 		return nil, fmt.Errorf("the TLS certificate version is missing")
 	} else if v, err := strconv.Atoi(a.Version); err != nil || v > 3 {
 		return nil, fmt.Errorf("the TLS certificate version is not a valid integer <= 3: %v", err)
-	}
-	if a.IssuerCommonName == "" {
-		return nil, fmt.Errorf("the TLS certificate issuer common name is missing")
 	}
 	if _, err := parseTimestamp(a.NotBefore); err != nil {
 		return nil, fmt.Errorf("the TLS certificate does not have a valid NotBefore date: %v", err)

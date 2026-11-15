@@ -299,3 +299,46 @@ func TestFindEntitiesByTypeForTLSCertificate(t *testing.T) {
 		)
 	}
 }
+
+// A certificate that names its subject only in the subject alternative name
+// extension, and its issuer only by other attributes, is stored; a later
+// write without a subject common name keeps the one already stored.
+func TestTLSCertificateWithoutCommonNames(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cert := func(serial, subject string) *oamcert.TLSCertificate {
+		return &oamcert.TLSCertificate{
+			Version:           "3",
+			SerialNumber:      serial,
+			SubjectCommonName: subject,
+			NotBefore:         time.Now().Add(-time.Hour).UTC().Format("2006-01-02T15:04:05Z07:00"),
+			NotAfter:          time.Now().Add(24 * time.Hour).UTC().Format("2006-01-02T15:04:05Z07:00"),
+		}
+	}
+
+	e, err := db.CreateAsset(ctx, cert("4242", ""))
+	assert.NoError(t, err, "a certificate without common names was refused")
+	if assert.NotNil(t, e, "the certificate entity should not be nil") {
+		found, err := db.FindEntityById(ctx, e.ID)
+		assert.NoError(t, err, "the certificate without common names could not be read back")
+		if c, ok := found.Asset.(*oamcert.TLSCertificate); assert.True(t, ok, "the asset is not a TLSCertificate") {
+			assert.Equal(t, "4242", c.SerialNumber, "the serial number did not round-trip")
+			assert.Empty(t, c.SubjectCommonName, "the subject common name should be empty")
+			assert.Empty(t, c.IssuerCommonName, "the issuer common name should be empty")
+		}
+	}
+
+	named, err := db.CreateAsset(ctx, cert("4343", "www.example.com"))
+	assert.NoError(t, err, "a certificate with a subject common name was refused")
+	_, err = db.CreateAsset(ctx, cert("4343", ""))
+	assert.NoError(t, err, "a second write of the certificate was refused")
+	found, err := db.FindEntityById(ctx, named.ID)
+	assert.NoError(t, err, "the named certificate could not be read back")
+	assert.Equal(t, "www.example.com", found.Asset.(*oamcert.TLSCertificate).SubjectCommonName,
+		"a write without a subject common name erased the stored one")
+}

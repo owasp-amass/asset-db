@@ -63,12 +63,6 @@ func (r *PostgresRepository) upsertTLSCertificate(ctx context.Context, a *oamcer
 	if a.SerialNumber == "" {
 		return 0, fmt.Errorf("the TLS certificate serial number cannot be empty")
 	}
-	if a.SubjectCommonName == "" {
-		return 0, fmt.Errorf("the TLS certificate subject common name cannot be empty")
-	}
-	if a.IssuerCommonName == "" {
-		return 0, fmt.Errorf("the TLS certificate issuer common name cannot be empty")
-	}
 	if _, err := parseTimestamp(a.NotBefore); err != nil {
 		return 0, fmt.Errorf("the TLS certificate must have a valid NotBefore date: %v", err)
 	}
@@ -231,9 +225,6 @@ func (r *PostgresRepository) buildTLSCertificateEntity(eid, rid int64, createdAt
 	if a.SerialNumber == "" {
 		return nil, errors.New("TLS certificate serial number is missing")
 	}
-	if a.SubjectCommonName == "" {
-		return nil, errors.New("TLS certificate subject common name is missing")
-	}
 
 	var attrs tlsCertificateAttributes
 	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
@@ -256,9 +247,6 @@ func (r *PostgresRepository) buildTLSCertificateEntity(eid, rid int64, createdAt
 		return nil, fmt.Errorf("the TLS certificate version is missing")
 	} else if v, err := strconv.Atoi(a.Version); err != nil || v > 3 {
 		return nil, fmt.Errorf("the TLS certificate version is not a valid integer <= 3: %v", err)
-	}
-	if a.IssuerCommonName == "" {
-		return nil, fmt.Errorf("the TLS certificate issuer common name is missing")
 	}
 
 	if _, err := parseTimestamp(a.NotBefore); err != nil {
