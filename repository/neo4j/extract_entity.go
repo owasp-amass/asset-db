@@ -1011,6 +1011,10 @@ func nodeToTLSCertificate(node neo4jdb.Node) (*oamcert.TLSCertificate, error) {
 		return nil, err
 	}
 
+	// public_key_sha256 was added later; nodes written before it lack the
+	// property, so a missing value is empty rather than an error.
+	publicKeyHash, _ := neo4jdb.GetProperty[string](node, "public_key_sha256")
+
 	return &oamcert.TLSCertificate{
 		Version:               version,
 		SerialNumber:          serial,
@@ -1026,6 +1030,7 @@ func nodeToTLSCertificate(node neo4jdb.Node) (*oamcert.TLSCertificate, error) {
 		CRLDistributionPoints: dist,
 		SubjectKeyID:          subjectKey,
 		AuthorityKeyID:        autorityKey,
+		PublicKeySHA256:       publicKeyHash,
 	}, nil
 }
 

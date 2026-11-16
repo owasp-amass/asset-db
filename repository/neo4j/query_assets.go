@@ -199,6 +199,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["crl_distribution_points"] = v.CRLDistributionPoints
 		m["subject_key_id"] = v.SubjectKeyID
 		m["authority_key_id"] = v.AuthorityKeyID
+		m["public_key_sha256"] = v.PublicKeySHA256
 	case *url.URL:
 		m["url"] = v.Raw
 		m["scheme"] = v.Scheme

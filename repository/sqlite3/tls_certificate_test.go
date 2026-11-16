@@ -342,3 +342,37 @@ func TestTLSCertificateWithoutCommonNames(t *testing.T) {
 	assert.Equal(t, "www.example.com", found.Asset.(*oamcert.TLSCertificate).SubjectCommonName,
 		"a write without a subject common name erased the stored one")
 }
+
+func TestTLSCertificatePublicKeyHashRoundTrip(t *testing.T) {
+	db, dir, err := setupTempSQLite()
+	assert.NoError(t, err, "Failed to create the sqlite database")
+	defer teardownTempSQLite(db, dir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	notbefore := time.Now().Add(-time.Hour).UTC().Format("2006-01-02T15:04:05Z07:00")
+	notafter := time.Now().Add(24 * time.Hour).UTC().Format("2006-01-02T15:04:05Z07:00")
+	hash := "1f2e3d4c5b6a79887766554433221100ffeeddccbbaa99887766554433221100"
+
+	ent, err := db.CreateAsset(ctx, &oamcert.TLSCertificate{
+		Version:           "3",
+		SerialNumber:      "77",
+		SubjectCommonName: "www.example.com",
+		NotBefore:         notbefore,
+		NotAfter:          notafter,
+		PublicKeySHA256:   hash,
+	})
+	assert.NoError(t, err, "Failed to create the TLSCertificate")
+
+	found, err := db.FindEntityById(ctx, ent.ID)
+	assert.NoError(t, err, "Failed to find the TLSCertificate by ID")
+	c, ok := found.Asset.(*oamcert.TLSCertificate)
+	assert.True(t, ok, "found asset is not a TLSCertificate")
+	assert.Equal(t, hash, c.PublicKeySHA256, "PublicKeySHA256 did not round-trip")
+
+	// The ownership signal finds certificates by this attribute.
+	ents, _, err := db.FindEntitiesByAttribute(ctx, oam.TLSCertificate, "public_key_sha256", hash, false, time.Time{}, 10)
+	assert.NoError(t, err, "FindEntitiesByAttribute on public_key_sha256 failed")
+	assert.Len(t, ents, 1, "the certificate was not found by its public key hash")
+}

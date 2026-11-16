@@ -59,6 +59,7 @@ type tlsCertificateAttributes struct {
 	CRLDistributionPoints []string `json:"crl_distribution_points,omitempty"`
 	SubjectKeyID          string   `json:"subject_key_id,omitempty"`
 	AuthorityKeyID        string   `json:"authority_key_id,omitempty"`
+	PublicKeySHA256       string   `json:"public_key_sha256,omitempty"`
 }
 
 func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.TLSCertificate) (int64, error) {
@@ -93,6 +94,7 @@ func (r *SqliteRepository) upsertTLSCertificate(ctx context.Context, a *oamcert.
 		CRLDistributionPoints: a.CRLDistributionPoints,
 		SubjectKeyID:          a.SubjectKeyID,
 		AuthorityKeyID:        a.AuthorityKeyID,
+		PublicKeySHA256:       a.PublicKeySHA256,
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	if err != nil {
@@ -194,6 +196,7 @@ func (r *SqliteRepository) fetchTLSCertificateByRowID(ctx context.Context, eid, 
 	a.CRLDistributionPoints = attrs.CRLDistributionPoints
 	a.SubjectKeyID = attrs.SubjectKeyID
 	a.AuthorityKeyID = attrs.AuthorityKeyID
+	a.PublicKeySHA256 = attrs.PublicKeySHA256
 
 	if a.Version == "" {
 		return nil, fmt.Errorf("the TLS certificate version is missing")
