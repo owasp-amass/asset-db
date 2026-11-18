@@ -25,7 +25,11 @@ const (
 
 // PostgresRepository is a repository implementation.
 type PostgresRepository struct {
-	DB     *sql.DB
+	DB *sql.DB
+	// lockDB is a small connection pool reserved for advisory locks
+	// (WithCanonicalLock), kept separate from DB and the worker pools so
+	// holding a lock across a caller's work never starves the query paths.
+	lockDB *sql.DB
 	dsn    string
 	rpool  *Worker
 	rcfg   WorkerConfig
@@ -134,6 +138,20 @@ func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository,
 	}
 
 	repo.wpool = w
+
+	// A small, dedicated pool for advisory locks, so a lock held across a
+	// caller's create work never contends with DB or the worker pools.
+	ldb, err := sql.Open("pgx", dsn)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	ldb.SetMaxOpenConns(4)
+	ldb.SetMaxIdleConns(1)
+	ldb.SetConnMaxIdleTime(time.Minute)
+	ldb.SetConnMaxLifetime(30 * time.Minute)
+	repo.lockDB = ldb
+
 	repo.cancel = cancel
 	return repo, nil
 }
@@ -159,6 +177,9 @@ func (pr *PostgresRepository) Close() error {
 	}
 	if pr.wpool != nil {
 		_ = pr.wpool.Shutdown(context.TODO())
+	}
+	if pr.lockDB != nil {
+		_ = pr.lockDB.Close()
 	}
 	if pr.DB != nil {
 		return pr.DB.Close()

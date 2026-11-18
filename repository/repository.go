@@ -144,6 +144,18 @@ type Repository interface {
 	// Returns an error if the tag is not found.
 	DeleteEdgeTag(ctx context.Context, id string) error
 
+	// WithCanonicalLock runs fn while holding an exclusive lock identified by
+	// canonicalKey, so that creators of the same logical entity (callers using
+	// the same key) are serialized rather than racing to create duplicates.
+	// Within a process the lock is a per-key mutex. Where the backend supports
+	// it (PostgreSQL), the lock is also held across the processes sharing the
+	// database, so concurrent engine sessions converge on one record. fn's own
+	// database operations run normally inside the lock, which is released when
+	// fn returns. An empty canonicalKey runs fn without locking. If a
+	// cross-process lock cannot be taken, fn still runs under the in-process
+	// lock rather than failing. The error returned is fn's.
+	WithCanonicalLock(ctx context.Context, canonicalKey string, fn func() error) error
+
 	// Close terminates connections to the database and cleans up allocated resources.
 	// Returns an error if unable to cleanly perform the process.
 	Close() error
