@@ -9,6 +9,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -77,10 +79,46 @@ func New(dbtype, dsn string) (*PostgresRepository, error) {
 	return repo, nil
 }
 
+// applyConnParams adds the connection parameters asset-db needs. It merges them
+// into whatever query the dsn already carries — a testcontainer ConnectionString
+// (and some configured DSNs) include one, so string-appending "?..." would emit
+// a second "?" (which pgx cannot parse) and duplicate keys. Parameters the
+// caller already set are left as-is; application_name is always asset-db's.
+func applyConnParams(dsn string) string {
+	defaults := map[string]string{
+		"sslmode":                  "disable",
+		"statement_cache_capacity": "256",
+		"timezone":                 "UTC",
+		"connect_timeout":          "5",
+		"statement_timeout":        "60000",
+		"lock_timeout":             "5000",
+	}
+
+	if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
+		q := u.Query()
+		for k, v := range defaults {
+			if q.Get(k) == "" {
+				q.Set(k, v)
+			}
+		}
+		q.Set("application_name", "asset-db")
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+
+	// Not a URL DSN: append with the correct separator rather than assuming
+	// there is no existing query.
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + "sslmode=disable&statement_cache_capacity=256&timezone=UTC&connect_timeout=5" +
+		"&application_name=asset-db&statement_timeout=60000&lock_timeout=5000"
+}
+
 // postgresDatabase creates a new PostgreSQL database connection using the provided data source name (dsn).
 func postgresDatabase(dsn string, rcfg, wcfg WorkerConfig) (*PostgresRepository, error) {
-	dsn = dsn + "?sslmode=disable&statement_cache_capacity=256&timezone=UTC&connect_timeout=5"
-	dsn = dsn + "&application_name=asset-db&statement_timeout=60000&lock_timeout=5000"
+	dsn = applyConnParams(dsn)
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
