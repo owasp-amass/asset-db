@@ -13,7 +13,9 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamplat "github.com/owasp-amass/open-asset-model/platform"
+	oamurl "github.com/owasp-amass/open-asset-model/url"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,4 +119,31 @@ func TestPostgresFindEntitiesByAttributeContains(t *testing.T) {
 	assert.False(t, more)
 	require.Len(t, ents, 1)
 	assert.Equal(t, "vfs1", ents[0].Asset.(*oamplat.Service).ID)
+}
+
+// Identifier.id and URL.url are promoted out of attrs into dedicated columns
+// (id_value, raw_url), so a value search must query the column; querying attrs
+// matches nothing. Regression test for that fix.
+func TestPostgresFindEntitiesByAttributePromotedColumns(t *testing.T) {
+	db := valueFinderRepo(t)
+	ctx := context.Background()
+
+	_, err := db.CreateAsset(ctx, &oamgen.Identifier{
+		UniqueID: "vf-ident:vf-owasp.org", ID: "vf-owasp.org", Type: "domain"})
+	require.NoError(t, err)
+	_, err = db.CreateAsset(ctx, &oamurl.URL{
+		Raw: "https://www.vf-owasp.org/landing", Scheme: "https", Host: "www.vf-owasp.org", Path: "/landing"})
+	require.NoError(t, err)
+
+	ids, more, err := db.FindEntitiesByAttribute(ctx, oam.Identifier, "id", "vf-owasp.org", true, time.Time{}, 10)
+	require.NoError(t, err)
+	assert.False(t, more)
+	require.Len(t, ids, 1)
+	assert.Equal(t, "vf-owasp.org", ids[0].Asset.(*oamgen.Identifier).ID)
+
+	urls, more, err := db.FindEntitiesByAttribute(ctx, oam.URL, "url", "vf-owasp.org", true, time.Time{}, 10)
+	require.NoError(t, err)
+	assert.False(t, more)
+	require.Len(t, urls, 1)
+	assert.Equal(t, "https://www.vf-owasp.org/landing", urls[0].Asset.(*oamurl.URL).Raw)
 }

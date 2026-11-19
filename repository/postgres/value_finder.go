@@ -66,11 +66,18 @@ func (r *PostgresRepository) FindEntitiesByAttribute(ctx context.Context, atype 
 		return nil, false, fmt.Errorf("unknown asset type %q", atype)
 	}
 
-	// The table and key are validated and written into the query so an
-	// index on (attrs->>'key') applies.
-	match, arg := fmt.Sprintf("(a.attrs->>'%s') = $2", key), any(value)
+	// A few asset values are promoted out of attrs into dedicated, indexed
+	// columns (e.g. Identifier.id -> id_value, URL.url -> raw_url), so attrs
+	// does not carry them; query the column so the search actually matches and
+	// uses the column's index (exact) or trigram index (contains). Everything
+	// else lives in attrs, where the (attrs->>'key') index applies.
+	valueExpr := fmt.Sprintf("a.attrs->>'%s'", key)
+	if col := promotedColumn(table, key); col != "" {
+		valueExpr = "a." + col
+	}
+	match, arg := fmt.Sprintf("(%s) = $2", valueExpr), any(value)
 	if contains {
-		match = fmt.Sprintf(`lower(a.attrs->>'%s') LIKE $2 ESCAPE '\'`, key)
+		match = fmt.Sprintf(`lower(%s) LIKE $2 ESCAPE '\'`, valueExpr)
 		arg = valuequery.LikePattern(value)
 	}
 
@@ -95,6 +102,22 @@ func assetTable(atype oam.AssetType) string {
 		if strings.EqualFold(string(t), string(atype)) {
 			return normalizeType(string(t))
 		}
+	}
+
+	return ""
+}
+
+// promotedColumn maps an OAM logical field that FindEntitiesByContent already
+// resolves to a dedicated column (because the writer promotes it out of attrs)
+// to that column name, or "" when the field lives in attrs. Keeping this list
+// beside the attrs fallback keeps value lookups matching whichever place the
+// writer actually stores the field.
+func promotedColumn(table, key string) string {
+	switch table + "." + key {
+	case "identifier.id":
+		return "id_value"
+	case "url.url":
+		return "raw_url"
 	}
 
 	return ""

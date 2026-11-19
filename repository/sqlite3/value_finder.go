@@ -60,11 +60,17 @@ func (r *SqliteRepository) FindEntitiesByAttribute(ctx context.Context, atype oa
 		return nil, false, fmt.Errorf("unknown asset type %q", atype)
 	}
 
-	// The key is validated and written into the expression so an index on
-	// json_extract(attrs, '$.key') applies.
-	match, arg := fmt.Sprintf("json_extract(a.attrs, '$.%s') = ?", key), any(value)
+	// A few asset values are promoted out of attrs into dedicated columns
+	// (Identifier.id -> id_value, URL.url -> raw_url), so attrs does not carry
+	// them; query the column so the search actually matches. Everything else
+	// lives in attrs, where the json_extract index applies.
+	valueExpr := fmt.Sprintf("json_extract(a.attrs, '$.%s')", key)
+	if col := promotedColumn(table, key); col != "" {
+		valueExpr = "a." + col
+	}
+	match, arg := valueExpr+" = ?", any(value)
 	if contains {
-		match = fmt.Sprintf(`lower(json_extract(a.attrs, '$.%s')) LIKE ? ESCAPE '\'`, key)
+		match = fmt.Sprintf(`lower(%s) LIKE ? ESCAPE '\'`, valueExpr)
 		arg = valuequery.LikePattern(value)
 	}
 
@@ -79,6 +85,21 @@ func (r *SqliteRepository) FindEntitiesByAttribute(ctx context.Context, atype oa
 	}
 
 	return r.entitiesByID(ctx, query+" ORDER BY e.entity_id LIMIT ?", append(args, limit+1), limit)
+}
+
+// promotedColumn maps an OAM logical field that the writer promotes out of
+// attrs into a dedicated column (so attrs does not carry it) to that column
+// name, or "" when the field lives in attrs. Mirrors the column resolution in
+// FindEntitiesByContent so value lookups match wherever the field is stored.
+func promotedColumn(table, key string) string {
+	switch table + "." + key {
+	case "identifier.id":
+		return "id_value"
+	case "url.url":
+		return "raw_url"
+	}
+
+	return ""
 }
 
 // entitiesByID runs a query selecting entity IDs and loads up to limit of
