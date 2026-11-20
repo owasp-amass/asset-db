@@ -59,3 +59,11 @@ type EdgeCursor struct {
 	// unchanged rather than rebuilt from UpdatedAt.
 	SortKey string
 }
+
+// EntityCursor marks the last entity of a page read by a repository's
+// EntitiesPage. Pages run by entity_id ascending, which is a stable unique
+// key, so entities written while a caller pages never shift earlier pages and
+// an entity already returned is not returned again.
+type EntityCursor struct {
+	EntityID string
+}
