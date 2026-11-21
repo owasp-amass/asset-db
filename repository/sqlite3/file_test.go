@@ -34,6 +34,7 @@ func TestCreateAssetForFile(t *testing.T) {
 		URL:  url,
 		Name: name,
 		Type: fileType,
+		Size: 482133,
 	})
 	assert.NoError(t, err, "Failed to create asset for the File")
 	assert.NotNil(t, fasset, "Entity for the File should not be nil")
@@ -59,6 +60,7 @@ func TestCreateAssetForFile(t *testing.T) {
 	assert.Equal(t, fasset2.URL, url, "File found by ID does not have a matching URL")
 	assert.Equal(t, fasset2.Name, name, "File found by ID does not have a matching Name")
 	assert.Equal(t, fasset2.Type, fileType, "File found by ID does not have a matching Type")
+	assert.Equal(t, int64(482133), fasset2.Size, "File found by ID does not have a matching Size")
 
 	err = db.DeleteEntity(ctx, fasset.ID)
 	assert.NoError(t, err, "Failed to delete entity by ID for the File")
@@ -85,6 +87,7 @@ func TestFindEntitiesByContentForFile(t *testing.T) {
 		URL:  url,
 		Name: name,
 		Type: fileType,
+		Size: 482133,
 	})
 	assert.NoError(t, err, "Failed to create asset for the File")
 	assert.NotNil(t, fasset, "Entity for the File should not be nil")
@@ -109,6 +112,7 @@ func TestFindEntitiesByContentForFile(t *testing.T) {
 	assert.Equal(t, fasset2.URL, url, "File found by ID does not have a matching URL")
 	assert.Equal(t, fasset2.Name, name, "File found by ID does not have a matching Name")
 	assert.Equal(t, fasset2.Type, fileType, "File found by ID does not have a matching Type")
+	assert.Equal(t, int64(482133), fasset2.Size, "File found by ID does not have a matching Size")
 
 	ents, err = db.FindEntitiesByContent(ctx, oam.File, before, 0, dbt.ContentFilters{
 		"name": name,

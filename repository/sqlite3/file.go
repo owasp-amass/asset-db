@@ -7,6 +7,7 @@ package sqlite3
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -40,12 +41,22 @@ FROM file
 WHERE id = :row_id
 LIMIT 1`
 
+// fileAttributes are the File fields kept in the row's attrs.
+type fileAttributes struct {
+	Size int64 `json:"size,omitempty"`
+}
+
 func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
 	if a == nil {
 		return 0, errors.New("invalid file provided")
 	}
 	if a.URL == "" {
 		return 0, errors.New("file URL cannot be empty")
+	}
+
+	attrsJSON, err := json.Marshal(fileAttributes{Size: a.Size})
+	if err != nil {
+		return 0, err
 	}
 
 	done := make(chan error, 1)
@@ -57,12 +68,11 @@ func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int
 			sql.Named("file_url", a.URL),
 			sql.Named("basename", a.Name),
 			sql.Named("file_type", a.Type),
-			sql.Named("attrs", "{}"),
+			sql.Named("attrs", string(attrsJSON)),
 		},
 		Result: done,
 	})
-	err := <-done
-	if err != nil {
+	if err := <-done; err != nil {
 		return 0, err
 	}
 
@@ -115,6 +125,14 @@ func (r *SqliteRepository) fetchFileByRowID(ctx context.Context, eid, rowID int6
 	if a.URL == "" {
 		return nil, errors.New("file URL is missing")
 	}
+
+	var attrs fileAttributes
+	if attrsJSON != "" {
+		if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+			return nil, err
+		}
+	}
+	a.Size = attrs.Size
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
 	if created, err := parseTimestamp(c); err != nil {

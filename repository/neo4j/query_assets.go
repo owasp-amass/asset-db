@@ -79,6 +79,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["url"] = v.URL
 		m["name"] = v.Name
 		m["type"] = v.Type
+		m["size"] = v.Size
 	case *dns.FQDN:
 		m["name"] = v.Name
 	case *financial.FundsTransfer:

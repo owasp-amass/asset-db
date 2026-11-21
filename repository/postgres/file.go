@@ -36,6 +36,11 @@ const selectFileSinceText = `
 SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.file_url, a.basename, a.file_type, a.attrs 
 FROM public.file_updated_since(@since::timestamp, @limit::integer) AS a;`
 
+// fileAttributes are the File fields kept in the row's attrs.
+type fileAttributes struct {
+	Size int64 `json:"size,omitempty"`
+}
+
 func (r *PostgresRepository) upsertFile(ctx context.Context, a *oamfile.File) (int64, error) {
 	if a == nil {
 		return 0, errors.New("invalid file provided")
@@ -211,6 +216,14 @@ func (r *PostgresRepository) buildFileEntity(eid, rid int64, createdAt, updatedA
 	if a.URL == "" {
 		return nil, errors.New("file URL is missing")
 	}
+
+	var attrs fileAttributes
+	if attrsJSON != "" {
+		if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
+			return nil, err
+		}
+	}
+	a.Size = attrs.Size
 
 	return &dbt.Entity{
 		ID:        strconv.FormatInt(eid, 10),

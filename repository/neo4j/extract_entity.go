@@ -330,10 +330,17 @@ func nodeToFile(node neo4jdb.Node) (*file.File, error) {
 		return nil, err
 	}
 
+	// size was added later; a node stored before it has none
+	var size int64
+	if v, ok := node.Props["size"].(int64); ok {
+		size = v
+	}
+
 	return &file.File{
 		URL:  url,
 		Name: name,
 		Type: ftype,
+		Size: size,
 	}, nil
 }
 
