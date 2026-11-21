@@ -64,8 +64,8 @@ func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*d
 		eid, err = r.upsertIPAddress(ctx, asset.(*oamnet.IPAddress))
 	case oam.IPNetRecord:
 		eid, err = r.upsertIPNetRecord(ctx, asset.(*oamreg.IPNetRecord))
-	case oam.Location:
-		eid, err = r.upsertLocation(ctx, asset.(*contact.Location))
+	case oam.StreetAddress:
+		eid, err = r.upsertStreetAddress(ctx, asset.(*contact.StreetAddress))
 	case oam.Netblock:
 		eid, err = r.upsertNetblock(ctx, asset.(*oamnet.Netblock))
 	case oam.Organization:
@@ -114,7 +114,6 @@ func validateAssetTable(tableName string) string {
 		"identifier",
 		"ipaddress",
 		"ipnetrecord",
-		"location",
 		"netblock",
 		"organization",
 		"person",
@@ -123,6 +122,7 @@ func validateAssetTable(tableName string) string {
 		"productrelease",
 		"service",
 		"storagebucket",
+		"streetaddress",
 		"tlscertificate",
 		"url":
 		return strings.ToLower(strings.TrimSpace(tableName))
@@ -218,8 +218,8 @@ func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity
 		return r.fetchIPAddressByRowID(ctx, entity_id, id)
 	case "ipnetrecord":
 		return r.fetchIPNetRecordByRowID(ctx, entity_id, id)
-	case "location":
-		return r.fetchLocationByRowID(ctx, entity_id, id)
+	case "streetaddress":
+		return r.fetchStreetAddressByRowID(ctx, entity_id, id)
 	case "netblock":
 		return r.fetchNetblockByRowID(ctx, entity_id, id)
 	case "organization":

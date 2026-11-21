@@ -50,14 +50,14 @@ func (r *PostgresRepository) CoKeyedGroups(ctx context.Context, atype oam.AssetT
 			JOIN public.entity dst ON dst.entity_id = e.to_entity_id
 			JOIN public.entity_type_lu t ON t.id = dst.etype_id AND t.name = $1
 			WHERE e.label = 'organization'`
-	case types.CoKeyLocation:
-		// Entities pointing at the same Location through an address edge.
+	case types.CoKeyStreetAddress:
+		// Entities pointing at the same StreetAddress through an address edge.
 		sinceCol = "e.updated_at"
 		base = `SELECT DISTINCT e.to_entity_id::text AS k, e.from_entity_id::text AS id
 			FROM public.edge e
 			JOIN public.entity src ON src.entity_id = e.from_entity_id
 			JOIN public.entity_type_lu t ON t.id = src.etype_id AND t.name = $1
-			WHERE e.label IN ('legal_address', 'hq_address', 'location')`
+			WHERE e.label IN ('legal_address', 'hq_address', 'street_address')`
 	case types.CoKeyRegistration:
 		// Organizations sharing a normalized (jurisdiction, registration_id):
 		// jurisdiction upper+trim, registration_id upper with whitespace removed.

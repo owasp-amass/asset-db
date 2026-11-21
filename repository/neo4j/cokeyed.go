@@ -62,9 +62,9 @@ func (neo *NeoRepository) CoKeyedGroups(ctx context.Context, atype oam.AssetType
 		query = "MATCH (a:Entity:" + label + ")<-[r:ORGANIZATION]-(k:Entity)" + edgeWhere +
 			" WITH k.entity_id AS key, collect(DISTINCT a.entity_id) AS ids" +
 			" WHERE size(ids) >= 2 AND size(ids) <= $max RETURN key AS k, ids"
-	case types.CoKeyLocation:
+	case types.CoKeyStreetAddress:
 		// Address edges are stored as the uppercased relationship types.
-		edgeWhere := " WHERE type(r) IN ['LEGAL_ADDRESS', 'HQ_ADDRESS', 'LOCATION']"
+		edgeWhere := " WHERE type(r) IN ['LEGAL_ADDRESS', 'HQ_ADDRESS', 'STREET_ADDRESS']"
 		if sinceOK {
 			edgeWhere += " AND r.updated_at >= $since"
 		}

@@ -149,7 +149,26 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
-	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_location_content_name IF NOT EXISTS FOR (n:Location) REQUIRE n.address IS UNIQUE")
+	// Location was renamed StreetAddress: relabel the nodes stored under the
+	// old name, replace its constraint, and give the plain address relations
+	// their one label, STREET_ADDRESS (they were LOCATION and, from a Person,
+	// ADDRESS). Each statement is idempotent.
+	err = executeQuery(driver, dbname, "DROP CONSTRAINT constraint_location_content_name IF EXISTS")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "MATCH (n:Location) SET n:StreetAddress, n.etype = 'StreetAddress' REMOVE n:Location")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_streetaddress_content_name IF NOT EXISTS FOR (n:StreetAddress) REQUIRE n.address IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
+	err = executeQuery(driver, dbname, "MATCH (a)-[r:LOCATION|ADDRESS]->(b:StreetAddress) CREATE (a)-[n:STREET_ADDRESS]->(b) SET n = properties(r) DELETE r")
 	if err != nil {
 		return err
 	}

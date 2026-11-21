@@ -285,8 +285,6 @@ func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
 		filter["address"] = addr.String()
 	case strings.EqualFold(subtype, string(oam.IPNetRecord)):
 		filter["handle"] = subject.Key
-	case strings.EqualFold(subtype, string(oam.Location)):
-		filter["address"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.Netblock)):
 		prefix, err := netip.ParsePrefix(subject.Key)
 		if err != nil {
@@ -308,6 +306,8 @@ func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
 		filter["unique_id"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.StorageBucket)):
 		filter["unique_id"] = subject.Key
+	case strings.EqualFold(subtype, string(oam.StreetAddress)):
+		filter["address"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.TLSCertificate)):
 		filter["serial_number"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.URL)):

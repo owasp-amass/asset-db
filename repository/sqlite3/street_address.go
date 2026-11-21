@@ -19,54 +19,54 @@ import (
 
 // Params: :city, :street_address, :country, :unit, :building,
 // :province, :locality, :postal_code, :street_name, :building_number, :attrs
-const upsertLocationText = `
-INSERT INTO location(city, street_address, country, unit, building, province, locality, postal_code, street_name, building_number, attrs)
+const upsertStreetAddressText = `
+INSERT INTO streetaddress(city, street_address, country, unit, building, province, locality, postal_code, street_name, building_number, attrs)
 VALUES (:city, :street_address, :country, :unit, :building, :province, :locality, :postal_code, :street_name, :building_number, :attrs)
 ON CONFLICT(street_address_norm) DO UPDATE SET
-    city            = COALESCE(excluded.city,            location.city),
-    country         = COALESCE(excluded.country,         location.country),
-    unit            = COALESCE(excluded.unit,            location.unit),
-    building        = COALESCE(excluded.building,        location.building),
-    province        = COALESCE(excluded.province,        location.province),
-    locality        = COALESCE(excluded.locality,        location.locality),
-    postal_code     = COALESCE(excluded.postal_code,     location.postal_code),
-    street_name     = COALESCE(excluded.street_name,     location.street_name),
-    building_number = COALESCE(excluded.building_number, location.building_number),
-    attrs           = json_patch(location.attrs,         excluded.attrs),
+    city            = COALESCE(excluded.city,            streetaddress.city),
+    country         = COALESCE(excluded.country,         streetaddress.country),
+    unit            = COALESCE(excluded.unit,            streetaddress.unit),
+    building        = COALESCE(excluded.building,        streetaddress.building),
+    province        = COALESCE(excluded.province,        streetaddress.province),
+    locality        = COALESCE(excluded.locality,        streetaddress.locality),
+    postal_code     = COALESCE(excluded.postal_code,     streetaddress.postal_code),
+    street_name     = COALESCE(excluded.street_name,     streetaddress.street_name),
+    building_number = COALESCE(excluded.building_number, streetaddress.building_number),
+    attrs           = json_patch(streetaddress.attrs,    excluded.attrs),
     updated_at      = CURRENT_TIMESTAMP`
 
 // Param: :street_address
-const selectEntityIDByLocationText = `
+const selectEntityIDByStreetAddressText = `
 SELECT entity_id FROM entity
-WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'location' LIMIT 1)
+WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'streetaddress' LIMIT 1)
   AND natural_key = lower(:street_address)
 LIMIT 1`
 
 // Param: :row_id
-const selectLocationByID = `
+const selectStreetAddressByID = `
 SELECT id, created_at, updated_at, city, unit, street_address, country, 
 	   building, province, locality, postal_code, street_name, building_number, attrs
-FROM location 
+FROM streetaddress 
 WHERE id = :row_id
 LIMIT 1`
 
-type locationAttributes struct {
+type streetAddressAttributes struct {
 	POBox string `json:"po_box,omitempty"`
 	GLN   int    `json:"gln,omitempty"`
 }
 
-func (r *SqliteRepository) upsertLocation(ctx context.Context, a *contact.Location) (int64, error) {
+func (r *SqliteRepository) upsertStreetAddress(ctx context.Context, a *contact.StreetAddress) (int64, error) {
 	if a == nil {
-		return 0, errors.New("invalid location provided")
+		return 0, errors.New("invalid street address provided")
 	}
 	if a.Address == "" {
-		return 0, errors.New("location street address cannot be empty")
+		return 0, errors.New("the street address cannot be empty")
 	}
 	if a.City == "" {
-		return 0, errors.New("location city cannot be empty")
+		return 0, errors.New("street address city cannot be empty")
 	}
 
-	attrs := locationAttributes{
+	attrs := streetAddressAttributes{
 		POBox: a.POBox,
 		GLN:   a.GLN,
 	}
@@ -78,8 +78,8 @@ func (r *SqliteRepository) upsertLocation(ctx context.Context, a *contact.Locati
 	done := make(chan error, 1)
 	r.ww.Submit(&writeJob{
 		Ctx:     ctx,
-		Name:    "asset.location.upsert",
-		SQLText: upsertLocationText,
+		Name:    "asset.streetaddress.upsert",
+		SQLText: upsertStreetAddressText,
 		Args: []any{
 			sql.Named("city", a.City),
 			sql.Named("unit", a.Unit),
@@ -103,8 +103,8 @@ func (r *SqliteRepository) upsertLocation(ctx context.Context, a *contact.Locati
 	ch := make(chan *rowReadResult, 1)
 	r.rpool.Submit(&rowReadJob{
 		Ctx:     ctx,
-		Name:    "asset.location.entity_id_by_location",
-		SQLText: selectEntityIDByLocationText,
+		Name:    "asset.streetaddress.entity_id_by_streetaddress",
+		SQLText: selectEntityIDByStreetAddressText,
 		Args:    []any{sql.Named("street_address", a.Address)},
 		Result:  ch,
 	})
@@ -121,12 +121,12 @@ func (r *SqliteRepository) upsertLocation(ctx context.Context, a *contact.Locati
 	return id, nil
 }
 
-func (r *SqliteRepository) fetchLocationByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
+func (r *SqliteRepository) fetchStreetAddressByRowID(ctx context.Context, eid, rowID int64) (*types.Entity, error) {
 	ch := make(chan *rowReadResult, 1)
 	r.rpool.Submit(&rowReadJob{
 		Ctx:     ctx,
-		Name:    "asset.location.by_id",
-		SQLText: selectLocationByID,
+		Name:    "asset.streetaddress.by_id",
+		SQLText: selectStreetAddressByID,
 		Args:    []any{sql.Named("row_id", rowID)},
 		Result:  ch,
 	})
@@ -137,7 +137,7 @@ func (r *SqliteRepository) fetchLocationByRowID(ctx context.Context, eid, rowID 
 	}
 
 	var row_id int64
-	var a contact.Location
+	var a contact.StreetAddress
 	var c, u, attrsJSON string
 	if err := result.Row.Scan(&row_id, &c, &u, &a.City, &a.Unit,
 		&a.Address, &a.Country, &a.Building, &a.Province, &a.Locality,
@@ -146,13 +146,13 @@ func (r *SqliteRepository) fetchLocationByRowID(ctx context.Context, eid, rowID 
 	}
 
 	if row_id == 0 {
-		return nil, errors.New("no location found")
+		return nil, errors.New("no street address found")
 	}
 	if a.Address == "" {
-		return nil, errors.New("location street address is missing")
+		return nil, errors.New("the street address is missing")
 	}
 	if a.City == "" {
-		return nil, errors.New("location city is missing")
+		return nil, errors.New("street address city is missing")
 	}
 
 	e := &types.Entity{ID: strconv.FormatInt(eid, 10), Asset: &a}
@@ -167,7 +167,7 @@ func (r *SqliteRepository) fetchLocationByRowID(ctx context.Context, eid, rowID 
 		e.LastSeen = updated.In(time.UTC).Local()
 	}
 
-	var attrs locationAttributes
+	var attrs streetAddressAttributes
 	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
 		return nil, err
 	}

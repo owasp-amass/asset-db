@@ -77,8 +77,8 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 		asset, err = nodeToIPAddress(node)
 	case oam.IPNetRecord:
 		asset, err = nodeToIPNetRecord(node)
-	case oam.Location:
-		asset, err = nodeToLocation(node)
+	case oam.StreetAddress:
+		asset, err = nodeToStreetAddress(node)
 	case oam.Netblock:
 		asset, err = nodeToNetblock(node)
 	case oam.Organization:
@@ -609,7 +609,7 @@ func nodeToIPNetRecord(node neo4jdb.Node) (*oamreg.IPNetRecord, error) {
 	}, nil
 }
 
-func nodeToLocation(node neo4jdb.Node) (*contact.Location, error) {
+func nodeToStreetAddress(node neo4jdb.Node) (*contact.StreetAddress, error) {
 	addr, err := neo4jdb.GetProperty[string](node, "address")
 	if err != nil {
 		return nil, err
@@ -671,7 +671,7 @@ func nodeToLocation(node neo4jdb.Node) (*contact.Location, error) {
 	}
 	gln := int(num)
 
-	return &contact.Location{
+	return &contact.StreetAddress{
 		Address:        addr,
 		Building:       building,
 		BuildingNumber: bnum,

@@ -362,24 +362,6 @@ var contentRegistry = map[string]regEntry{
 			"parent_handle": "a.parent_handle",
 		},
 	},
-	"location": {
-		keys: []string{
-			"address", "building", "building_number", "province",
-			"street_name", "unit", "locality", "city", "country", "postal_code",
-		},
-		colMap: map[string]string{
-			"address":         "a.street_address_norm",
-			"building":        "a.building_norm",
-			"building_number": "a.building_number_norm",
-			"province":        "a.province_norm",
-			"street_name":     "a.street_name_norm",
-			"unit":            "a.unit_norm",
-			"locality":        "a.locality_norm",
-			"city":            "a.city_norm",
-			"country":         "a.country_norm",
-			"postal_code":     "a.postal_code",
-		},
-	},
 	"netblock": {
 		keys: []string{"cidr"},
 		colMap: map[string]string{
@@ -442,6 +424,24 @@ var contentRegistry = map[string]regEntry{
 			"service":     "a.service",
 			"exists":      "a.bucket_exists",
 			"public":      "a.is_public",
+		},
+	},
+	"streetaddress": {
+		keys: []string{
+			"address", "building", "building_number", "province",
+			"street_name", "unit", "locality", "city", "country", "postal_code",
+		},
+		colMap: map[string]string{
+			"address":         "a.street_address_norm",
+			"building":        "a.building_norm",
+			"building_number": "a.building_number_norm",
+			"province":        "a.province_norm",
+			"street_name":     "a.street_name_norm",
+			"unit":            "a.unit_norm",
+			"locality":        "a.locality_norm",
+			"city":            "a.city_norm",
+			"country":         "a.country_norm",
+			"postal_code":     "a.postal_code",
 		},
 	},
 	"tlscertificate": {

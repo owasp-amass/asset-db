@@ -19,17 +19,17 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type PostgresLocationTestSuite struct {
+type PostgresStreetAddressTestSuite struct {
 	suite.Suite
 	container *testhelpers.PostgresContainer
 	db        *PostgresRepository
 }
 
-func TestPostgresLocationTestSuite(t *testing.T) {
-	suite.Run(t, new(PostgresLocationTestSuite))
+func TestPostgresStreetAddressTestSuite(t *testing.T) {
+	suite.Run(t, new(PostgresStreetAddressTestSuite))
 }
 
-func (suite *PostgresLocationTestSuite) SetupSuite() {
+func (suite *PostgresStreetAddressTestSuite) SetupSuite() {
 	var err error
 	suite.container, suite.db, err = setupContainerAndPostgresRepo()
 	if err != nil {
@@ -37,13 +37,13 @@ func (suite *PostgresLocationTestSuite) SetupSuite() {
 	}
 }
 
-func (suite *PostgresLocationTestSuite) TearDownSuite() {
+func (suite *PostgresStreetAddressTestSuite) TearDownSuite() {
 	if err := suite.container.Terminate(context.Background()); err != nil {
 		log.Fatalf("error terminating postgres container: %s", err)
 	}
 }
 
-func (suite *PostgresLocationTestSuite) TestCreateAssetForLocation() {
+func (suite *PostgresStreetAddressTestSuite) TestCreateAssetForStreetAddress() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -64,7 +64,7 @@ func (suite *PostgresLocationTestSuite) TestCreateAssetForLocation() {
 	postalCode := "91911"
 	gln := 00012345600012
 
-	loc, err := suite.db.CreateAsset(ctx, &oamcon.Location{
+	loc, err := suite.db.CreateAsset(ctx, &oamcon.StreetAddress{
 		Address:        address,
 		Building:       building,
 		BuildingNumber: buildingNum,
@@ -78,48 +78,48 @@ func (suite *PostgresLocationTestSuite) TestCreateAssetForLocation() {
 		PostalCode:     postalCode,
 		GLN:            gln,
 	})
-	assert.NoError(t, err, "Failed to create asset for the Location")
-	assert.NotNil(t, loc, "Entity for the Location should not be nil")
+	assert.NoError(t, err, "Failed to create asset for the StreetAddress")
+	assert.NotNil(t, loc, "Entity for the StreetAddress should not be nil")
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	assert.WithinRange(t, loc.CreatedAt, before, after, "Location entity CreatedAt is incorrect")
-	assert.WithinRange(t, loc.LastSeen, before, after, "Location entity LastSeen is incorrect")
+	assert.WithinRange(t, loc.CreatedAt, before, after, "StreetAddress entity CreatedAt is incorrect")
+	assert.WithinRange(t, loc.LastSeen, before, after, "StreetAddress entity LastSeen is incorrect")
 
 	id, err := strconv.ParseInt(loc.ID, 10, 64)
-	assert.NoError(t, err, "Location entity ID is not a valid integer")
-	assert.Greater(t, id, int64(0), "Location entity ID is not greater than zero")
+	assert.NoError(t, err, "StreetAddress entity ID is not a valid integer")
+	assert.Greater(t, id, int64(0), "StreetAddress entity ID is not greater than zero")
 
 	found, err := suite.db.FindEntityById(ctx, loc.ID)
-	assert.NoError(t, err, "Failed to find entity by ID for the Location")
-	assert.NotNil(t, found, "Entity found by ID for the Location should not be nil")
-	assert.Equal(t, loc.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the Location does not match")
-	assert.Equal(t, loc.LastSeen, found.LastSeen, "Entity LastSeen found by ID for the Location does not match")
+	assert.NoError(t, err, "Failed to find entity by ID for the StreetAddress")
+	assert.NotNil(t, found, "Entity found by ID for the StreetAddress should not be nil")
+	assert.Equal(t, loc.CreatedAt, found.CreatedAt, "Entity CreatedAt found by ID for the StreetAddress does not match")
+	assert.Equal(t, loc.LastSeen, found.LastSeen, "Entity LastSeen found by ID for the StreetAddress does not match")
 
-	loc2, ok := found.Asset.(*oamcon.Location)
-	assert.True(t, ok, "Location found by ID is not of type *oamcon.Location")
-	assert.Equal(t, found.ID, loc.ID, "Location found by Entity ID does not have matching IDs")
-	assert.Equal(t, loc2.Address, address, "Location found by ID does not have matching address")
-	assert.Equal(t, loc2.Building, building, "Location found by ID does not have matching building")
-	assert.Equal(t, loc2.BuildingNumber, buildingNum, "Location found by ID does not have matching building number")
-	assert.Equal(t, loc2.StreetName, streetName, "Location found by ID does not have matching street name")
-	assert.Equal(t, loc2.Unit, unit, "Location found by ID does not have matching unit")
-	assert.Equal(t, loc2.POBox, poBox, "Location found by ID does not have matching PO Box")
-	assert.Equal(t, loc2.City, city, "Location found by ID does not have matching city")
-	assert.Equal(t, loc2.Locality, locality, "Location found by ID does not have matching locality")
-	assert.Equal(t, loc2.Province, province, "Location found by ID does not have matching province")
-	assert.Equal(t, loc2.Country, country, "Location found by ID does not have matching country")
-	assert.Equal(t, loc2.PostalCode, postalCode, "Location found by ID does not have matching postal code")
-	assert.Equal(t, loc2.GLN, gln, "Location found by ID does not have matching GLN")
+	loc2, ok := found.Asset.(*oamcon.StreetAddress)
+	assert.True(t, ok, "StreetAddress found by ID is not of type *oamcon.StreetAddress")
+	assert.Equal(t, found.ID, loc.ID, "StreetAddress found by Entity ID does not have matching IDs")
+	assert.Equal(t, loc2.Address, address, "StreetAddress found by ID does not have matching address")
+	assert.Equal(t, loc2.Building, building, "StreetAddress found by ID does not have matching building")
+	assert.Equal(t, loc2.BuildingNumber, buildingNum, "StreetAddress found by ID does not have matching building number")
+	assert.Equal(t, loc2.StreetName, streetName, "StreetAddress found by ID does not have matching street name")
+	assert.Equal(t, loc2.Unit, unit, "StreetAddress found by ID does not have matching unit")
+	assert.Equal(t, loc2.POBox, poBox, "StreetAddress found by ID does not have matching PO Box")
+	assert.Equal(t, loc2.City, city, "StreetAddress found by ID does not have matching city")
+	assert.Equal(t, loc2.Locality, locality, "StreetAddress found by ID does not have matching locality")
+	assert.Equal(t, loc2.Province, province, "StreetAddress found by ID does not have matching province")
+	assert.Equal(t, loc2.Country, country, "StreetAddress found by ID does not have matching country")
+	assert.Equal(t, loc2.PostalCode, postalCode, "StreetAddress found by ID does not have matching postal code")
+	assert.Equal(t, loc2.GLN, gln, "StreetAddress found by ID does not have matching GLN")
 
 	err = suite.db.DeleteEntity(ctx, loc.ID)
-	assert.NoError(t, err, "Failed to delete entity by ID for the Location")
+	assert.NoError(t, err, "Failed to delete entity by ID for the StreetAddress")
 
 	_, err = suite.db.FindEntityById(ctx, loc.ID)
-	assert.Error(t, err, "Expected error when finding deleted entity by ID for the Location")
+	assert.Error(t, err, "Expected error when finding deleted entity by ID for the StreetAddress")
 }
 
-func (suite *PostgresLocationTestSuite) TestFindEntitiesByContentForLocation() {
+func (suite *PostgresStreetAddressTestSuite) TestFindEntitiesByContentForStreetAddress() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -140,7 +140,7 @@ func (suite *PostgresLocationTestSuite) TestFindEntitiesByContentForLocation() {
 	postalCode := "91911"
 	gln := 00012345600012
 
-	loc, err := suite.db.CreateAsset(ctx, &oamcon.Location{
+	loc, err := suite.db.CreateAsset(ctx, &oamcon.StreetAddress{
 		Address:        address,
 		Building:       building,
 		BuildingNumber: buildingNum,
@@ -154,38 +154,38 @@ func (suite *PostgresLocationTestSuite) TestFindEntitiesByContentForLocation() {
 		PostalCode:     postalCode,
 		GLN:            gln,
 	})
-	assert.NoError(t, err, "Failed to create asset for the Location")
-	assert.NotNil(t, loc, "Entity for the Location should not be nil")
+	assert.NoError(t, err, "Failed to create asset for the StreetAddress")
+	assert.NotNil(t, loc, "Entity for the StreetAddress should not be nil")
 	time.Sleep(100 * time.Millisecond)
 	after := time.Now()
 
-	_, err = suite.db.FindEntitiesByContent(ctx, oam.Location, after, 1, dbt.ContentFilters{
+	_, err = suite.db.FindEntitiesByContent(ctx, oam.StreetAddress, after, 1, dbt.ContentFilters{
 		"address": address,
 	})
 	assert.Error(t, err, "Expected error when finding entity with CreatedAt after its creation time")
 
-	ents, err := suite.db.FindEntitiesByContent(ctx, oam.Location, before, 1, dbt.ContentFilters{
+	ents, err := suite.db.FindEntitiesByContent(ctx, oam.StreetAddress, before, 1, dbt.ContentFilters{
 		"address": address,
 	})
-	assert.NoError(t, err, "Failed to find entity by content for the Location")
+	assert.NoError(t, err, "Failed to find entity by content for the StreetAddress")
 	found := ents[0]
-	assert.NotNil(t, found, "Entity found by content for the Location should not be nil")
+	assert.NotNil(t, found, "Entity found by content for the StreetAddress should not be nil")
 
-	loc2, ok := found.Asset.(*oamcon.Location)
-	assert.True(t, ok, "Location found by content is not of type *oamcon.Location")
-	assert.Equal(t, found.ID, loc.ID, "Location found by content does not have matching IDs")
-	assert.Equal(t, loc2.Address, address, "Location found by content does not have matching address")
-	assert.Equal(t, loc2.Building, building, "Location found by content does not have matching building")
-	assert.Equal(t, loc2.BuildingNumber, buildingNum, "Location found by content does not have matching building number")
-	assert.Equal(t, loc2.StreetName, streetName, "Location found by content does not have matching street name")
-	assert.Equal(t, loc2.Unit, unit, "Location found by content does not have matching unit")
-	assert.Equal(t, loc2.POBox, poBox, "Location found by content does not have matching PO Box")
-	assert.Equal(t, loc2.City, city, "Location found by content does not have matching city")
-	assert.Equal(t, loc2.Locality, locality, "Location found by content does not have matching locality")
-	assert.Equal(t, loc2.Province, province, "Location found by content does not have matching province")
-	assert.Equal(t, loc2.Country, country, "Location found by content does not have matching country")
-	assert.Equal(t, loc2.PostalCode, postalCode, "Location found by content does not have matching postal code")
-	assert.Equal(t, loc2.GLN, gln, "Location found by content does not have matching GLN")
+	loc2, ok := found.Asset.(*oamcon.StreetAddress)
+	assert.True(t, ok, "StreetAddress found by content is not of type *oamcon.StreetAddress")
+	assert.Equal(t, found.ID, loc.ID, "StreetAddress found by content does not have matching IDs")
+	assert.Equal(t, loc2.Address, address, "StreetAddress found by content does not have matching address")
+	assert.Equal(t, loc2.Building, building, "StreetAddress found by content does not have matching building")
+	assert.Equal(t, loc2.BuildingNumber, buildingNum, "StreetAddress found by content does not have matching building number")
+	assert.Equal(t, loc2.StreetName, streetName, "StreetAddress found by content does not have matching street name")
+	assert.Equal(t, loc2.Unit, unit, "StreetAddress found by content does not have matching unit")
+	assert.Equal(t, loc2.POBox, poBox, "StreetAddress found by content does not have matching PO Box")
+	assert.Equal(t, loc2.City, city, "StreetAddress found by content does not have matching city")
+	assert.Equal(t, loc2.Locality, locality, "StreetAddress found by content does not have matching locality")
+	assert.Equal(t, loc2.Province, province, "StreetAddress found by content does not have matching province")
+	assert.Equal(t, loc2.Country, country, "StreetAddress found by content does not have matching country")
+	assert.Equal(t, loc2.PostalCode, postalCode, "StreetAddress found by content does not have matching postal code")
+	assert.Equal(t, loc2.GLN, gln, "StreetAddress found by content does not have matching GLN")
 
 	for k, v := range map[string]string{
 		"address":         address,
@@ -199,13 +199,13 @@ func (suite *PostgresLocationTestSuite) TestFindEntitiesByContentForLocation() {
 		"country":         country,
 		"postal_code":     postalCode,
 	} {
-		ents, err := suite.db.FindEntitiesByContent(ctx, oam.Location, before, 0, dbt.ContentFilters{k: v})
-		assert.NoError(t, err, "Failed to find entities by content for the Location with filter %s=%s", k, v)
-		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the Location")
+		ents, err := suite.db.FindEntitiesByContent(ctx, oam.StreetAddress, before, 0, dbt.ContentFilters{k: v})
+		assert.NoError(t, err, "Failed to find entities by content for the StreetAddress with filter %s=%s", k, v)
+		assert.Len(t, ents, 1, "Expected to find exactly one entity by content for the StreetAddress")
 	}
 }
 
-func (suite *PostgresLocationTestSuite) TestFindEntitiesByTypeForLocation() {
+func (suite *PostgresStreetAddressTestSuite) TestFindEntitiesByTypeForStreetAddress() {
 	t := suite.T()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -215,9 +215,9 @@ func (suite *PostgresLocationTestSuite) TestFindEntitiesByTypeForLocation() {
 	time.Sleep(100 * time.Millisecond)
 
 	key1 := "123 Fake Street, New York City, US"
-	atype := oam.Location
-	atypestr := "Location"
-	ent, err := suite.db.CreateAsset(ctx, &oamcon.Location{
+	atype := oam.StreetAddress
+	atypestr := "StreetAddress"
+	ent, err := suite.db.CreateAsset(ctx, &oamcon.StreetAddress{
 		Address: key1,
 		City:    "New York City",
 		Country: "US",
@@ -232,7 +232,7 @@ func (suite *PostgresLocationTestSuite) TestFindEntitiesByTypeForLocation() {
 	time.Sleep(100 * time.Millisecond)
 
 	key2 := "123 Fake Road, Boston, US"
-	ent, err = suite.db.CreateAsset(ctx, &oamcon.Location{
+	ent, err = suite.db.CreateAsset(ctx, &oamcon.StreetAddress{
 		Address: key2,
 		City:    "Boston",
 		Country: "US",
@@ -241,7 +241,7 @@ func (suite *PostgresLocationTestSuite) TestFindEntitiesByTypeForLocation() {
 	assert.NotNil(t, ent, "Entity for the second %s should not be nil", atypestr)
 
 	key3 := "123 Fake Ave, Albany, US"
-	ent, err = suite.db.CreateAsset(ctx, &oamcon.Location{
+	ent, err = suite.db.CreateAsset(ctx, &oamcon.StreetAddress{
 		Address: key3,
 		City:    "Albany",
 		Country: "US",

@@ -121,14 +121,6 @@ FROM public.entity e CROSS JOIN LATERAL public.ipnetrecord_get_by_id(e.row_id) A
 WHERE e.entity_id = ANY(@ids::bigint[]);`,
 		scan: (*PostgresRepository).scanIPNetRecords,
 	},
-	"location": {
-		query: `
-SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit,
-a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
-FROM public.entity e CROSS JOIN LATERAL public.location_get_by_id(e.row_id) AS a
-WHERE e.entity_id = ANY(@ids::bigint[]);`,
-		scan: (*PostgresRepository).scanLocations,
-	},
 	"netblock": {
 		query: `
 SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.netblock_cidr, a.attrs
@@ -188,6 +180,14 @@ a.service, a.bucket_exists, a.is_public
 FROM public.entity e CROSS JOIN LATERAL public.storagebucket_get_by_id(e.row_id) AS a
 WHERE e.entity_id = ANY(@ids::bigint[]);`,
 		scan: (*PostgresRepository).scanStorageBuckets,
+	},
+	"streetaddress": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit,
+a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
+FROM public.entity e CROSS JOIN LATERAL public.streetaddress_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanStreetAddresses,
 	},
 	"tlscertificate": {
 		query: `

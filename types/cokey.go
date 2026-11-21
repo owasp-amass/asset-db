@@ -25,12 +25,12 @@ const (
 	// CoKeyTag groups source entities sharing a (property_name, property_value)
 	// entity tag. The property name is the CoKeyedGroups param (e.g. brand_key).
 	CoKeyTag
-	// CoKeyLocation groups source entities that point at the same Location
-	// entity through an outgoing edge labeled legal_address, hq_address or
-	// location. It groups by shared Location node, so it is exact when Locations
-	// are de-duplicated by address and otherwise misses two entities at the same
-	// address held as separate Location nodes.
-	CoKeyLocation
+	// CoKeyStreetAddress groups source entities that point at the same
+	// StreetAddress entity through an outgoing edge labeled legal_address,
+	// hq_address or street_address. It groups by shared StreetAddress node, so it is
+	// exact when addresses are de-duplicated and otherwise misses two entities
+	// at the same address held as separate StreetAddress nodes.
+	CoKeyStreetAddress
 )
 
 // CoKeyGroup is a set of at least two entity ids of one asset type that share a

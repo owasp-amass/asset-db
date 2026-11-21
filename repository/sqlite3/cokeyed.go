@@ -50,14 +50,14 @@ func (r *SqliteRepository) CoKeyedGroups(ctx context.Context, atype oam.AssetTyp
 			JOIN entity dst ON dst.entity_id = e.to_entity_id
 			JOIN entity_type_lu t ON t.id = dst.etype_id AND t.name = ?
 			WHERE e.label = 'organization'`
-	case types.CoKeyLocation:
-		// Entities pointing at the same Location through an address edge.
+	case types.CoKeyStreetAddress:
+		// Entities pointing at the same StreetAddress through an address edge.
 		sinceCol = "e.updated_at"
 		base = `SELECT DISTINCT CAST(e.to_entity_id AS TEXT) AS k, CAST(e.from_entity_id AS TEXT) AS id
 			FROM edge e
 			JOIN entity src ON src.entity_id = e.from_entity_id
 			JOIN entity_type_lu t ON t.id = src.etype_id AND t.name = ?
-			WHERE e.label IN ('legal_address', 'hq_address', 'location')`
+			WHERE e.label IN ('legal_address', 'hq_address', 'street_address')`
 	case types.CoKeyRegistration:
 		// Organizations sharing a normalized (jurisdiction, registration_id):
 		// jurisdiction upper+trim, registration_id upper with whitespace removed.

@@ -124,7 +124,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["created_date"] = v.CreatedDate
 		m["updated_date"] = v.UpdatedDate
 		m["status"] = v.Status
-	case *contact.Location:
+	case *contact.StreetAddress:
 		m["address"] = v.Address
 		m["building"] = v.Building
 		m["building_number"] = v.BuildingNumber
@@ -259,7 +259,7 @@ func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
 		filter["address"] = v.Address.String()
 	case *oamreg.IPNetRecord:
 		filter["handle"] = v.Handle
-	case *contact.Location:
+	case *contact.StreetAddress:
 		filter["address"] = v.Address
 	case *oamnet.Netblock:
 		filter["cidr"] = v.CIDR.String()

@@ -66,8 +66,8 @@ func (r *PostgresRepository) CreateAsset(ctx context.Context, asset oam.Asset) (
 		eid, err = r.upsertIPAddress(ctx, asset.(*oamnet.IPAddress))
 	case oam.IPNetRecord:
 		eid, err = r.upsertIPNetRecord(ctx, asset.(*oamreg.IPNetRecord))
-	case oam.Location:
-		eid, err = r.upsertLocation(ctx, asset.(*contact.Location))
+	case oam.StreetAddress:
+		eid, err = r.upsertStreetAddress(ctx, asset.(*contact.StreetAddress))
 	case oam.Netblock:
 		eid, err = r.upsertNetblock(ctx, asset.(*oamnet.Netblock))
 	case oam.Organization:
@@ -190,8 +190,8 @@ func (r *PostgresRepository) findByContent(ctx context.Context, atype string, si
 		return r.findIPAddressesByContent(ctx, filters, since, limit)
 	case "ipnetrecord":
 		return r.findIPNetRecordsByContent(ctx, filters, since, limit)
-	case "location":
-		return r.findLocationsByContent(ctx, filters, since, limit)
+	case "streetaddress":
+		return r.findStreetAddressesByContent(ctx, filters, since, limit)
 	case "netblock":
 		return r.findNetblocksByContent(ctx, filters, since, limit)
 	case "organization":
@@ -258,8 +258,8 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 		return r.getIPAddressesUpdatedSince(ctx, since, limit)
 	case "ipnetrecord":
 		return r.getIPNetRecordsUpdatedSince(ctx, since, limit)
-	case "location":
-		return r.getLocationsUpdatedSince(ctx, since, limit)
+	case "streetaddress":
+		return r.getStreetAddressesUpdatedSince(ctx, since, limit)
 	case "netblock":
 		return r.getNetblocksUpdatedSince(ctx, since, limit)
 	case "organization":
@@ -343,8 +343,8 @@ func (r *PostgresRepository) fetchEntityAssetByTableID(ctx context.Context, enti
 		return r.fetchIPAddressByRowID(ctx, entity_id, id)
 	case "ipnetrecord":
 		return r.fetchIPNetRecordByRowID(ctx, entity_id, id)
-	case "location":
-		return r.fetchLocationByRowID(ctx, entity_id, id)
+	case "streetaddress":
+		return r.fetchStreetAddressByRowID(ctx, entity_id, id)
 	case "netblock":
 		return r.fetchNetblockByRowID(ctx, entity_id, id)
 	case "organization":

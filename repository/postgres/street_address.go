@@ -19,41 +19,41 @@ import (
 )
 
 // Params: @record::jsonb
-const upsertLocationText = `SELECT public.location_upsert_entity_json(@record::jsonb);`
+const upsertStreetAddressText = `SELECT public.streetaddress_upsert_entity_json(@record::jsonb);`
 
 // Param: @row_id::bigint
-const selectLocationByIDText = `
+const selectStreetAddressByIDText = `
 SELECT a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit,
 	   a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
-FROM public.location_get_by_id(@row_id::bigint) AS a;`
+FROM public.streetaddress_get_by_id(@row_id::bigint) AS a;`
 
 // Params: @filters::jsonb, @since::timestamp, @limit::integer
-const selectLocationFindByContentText = `
+const selectStreetAddressFindByContentText = `
 SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit, a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
-FROM public.location_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
+FROM public.streetaddress_find_by_content(@filters::jsonb, @since::timestamp, @limit::integer) AS a;`
 
 // Params: @since::timestamp, @limit::integer
-const selectLocationSinceText = `
+const selectStreetAddressSinceText = `
 SELECT a.entity_id, a.id, a.created_at, a.updated_at, a.street_address, a.city, a.country, a.unit, a.building, a.province, a.locality, a.postal_code, a.street_name, a.building_number, a.attrs
-FROM public.location_updated_since(@since::timestamp, @limit::integer) AS a;`
+FROM public.streetaddress_updated_since(@since::timestamp, @limit::integer) AS a;`
 
-type locationAttributes struct {
+type streetAddressAttributes struct {
 	POBox string `json:"po_box,omitempty"`
 	GLN   int    `json:"gln,omitempty"`
 }
 
-func (r *PostgresRepository) upsertLocation(ctx context.Context, a *contact.Location) (int64, error) {
+func (r *PostgresRepository) upsertStreetAddress(ctx context.Context, a *contact.StreetAddress) (int64, error) {
 	if a == nil {
-		return 0, errors.New("invalid location provided")
+		return 0, errors.New("invalid street address provided")
 	}
 	if a.Address == "" {
-		return 0, errors.New("location street address cannot be empty")
+		return 0, errors.New("the street address cannot be empty")
 	}
 	if a.City == "" {
-		return 0, errors.New("location city cannot be empty")
+		return 0, errors.New("street address city cannot be empty")
 	}
 	if a.Country == "" {
-		return 0, errors.New("location country cannot be empty")
+		return 0, errors.New("street address country cannot be empty")
 	}
 
 	record, err := a.JSON()
@@ -62,7 +62,7 @@ func (r *PostgresRepository) upsertLocation(ctx context.Context, a *contact.Loca
 	}
 
 	var id int64
-	j := NewRowJob(ctx, upsertLocationText, pgx.NamedArgs{
+	j := NewRowJob(ctx, upsertStreetAddressText, pgx.NamedArgs{
 		"record": string(record),
 	}, func(row pgx.Row) error {
 		return row.Scan(&id)
@@ -72,15 +72,15 @@ func (r *PostgresRepository) upsertLocation(ctx context.Context, a *contact.Loca
 	return id, j.Wait()
 }
 
-func (r *PostgresRepository) fetchLocationByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
+func (r *PostgresRepository) fetchStreetAddressByRowID(ctx context.Context, eid, rowID int64) (*dbt.Entity, error) {
 	var rid int64
 	var c, u time.Time
 	var attrsJSON string
-	var a contact.Location
+	var a contact.StreetAddress
 	var unit, building, province, locality pgtype.Text
 	var postalCode, streetName, buildingNumber pgtype.Text
 
-	j := NewRowJob(ctx, selectLocationByIDText, pgx.NamedArgs{
+	j := NewRowJob(ctx, selectStreetAddressByIDText, pgx.NamedArgs{
 		"row_id": rowID,
 	}, func(row pgx.Row) error {
 		return row.Scan(&rid, &c, &u, &a.Address, &a.City, &a.Country, &unit, &building,
@@ -114,14 +114,14 @@ func (r *PostgresRepository) fetchLocationByRowID(ctx context.Context, eid, rowI
 		a.BuildingNumber = buildingNumber.String
 	}
 
-	e, err := r.buildLocationEntity(eid, rid, c, u, attrsJSON, &a)
+	e, err := r.buildStreetAddressEntity(eid, rid, c, u, attrsJSON, &a)
 	if err != nil {
 		return nil, err
 	}
 	return e, nil
 }
 
-func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
+func (r *PostgresRepository) findStreetAddressesByContent(ctx context.Context, filters dbt.ContentFilters, since time.Time, limit int) ([]*dbt.Entity, error) {
 	if !since.IsZero() {
 		since = since.UTC()
 	}
@@ -142,7 +142,7 @@ func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters
 	lmt := zeronull.Int4(int32(limit))
 
 	var out []*dbt.Entity
-	j := NewRowsJob(ctx, selectLocationFindByContentText, pgx.NamedArgs{
+	j := NewRowsJob(ctx, selectStreetAddressFindByContentText, pgx.NamedArgs{
 		"filters": string(filtersJSON),
 		"since":   ts,
 		"limit":   lmt,
@@ -151,7 +151,7 @@ func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters
 			var eid, rid int64
 			var c, u time.Time
 			var attrsJSON string
-			var a contact.Location
+			var a contact.StreetAddress
 			var unit, building, province, locality pgtype.Text
 			var postalCode, streetName, buildingNumber pgtype.Text
 
@@ -182,7 +182,7 @@ func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters
 				a.BuildingNumber = buildingNumber.String
 			}
 
-			if ent, err := r.buildLocationEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			if ent, err := r.buildStreetAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)
 			}
 		}
@@ -197,7 +197,7 @@ func (r *PostgresRepository) findLocationsByContent(ctx context.Context, filters
 	return out, nil
 }
 
-func (r *PostgresRepository) getLocationsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
+func (r *PostgresRepository) getStreetAddressesUpdatedSince(ctx context.Context, since time.Time, limit int) ([]*dbt.Entity, error) {
 	if since.IsZero() {
 		return nil, errors.New("invalid since time provided")
 	}
@@ -206,22 +206,22 @@ func (r *PostgresRepository) getLocationsUpdatedSince(ctx context.Context, since
 	}
 	lmt := zeronull.Int4(int32(limit))
 
-	return r.scanLocations(ctx, selectLocationSinceText, pgx.NamedArgs{
+	return r.scanStreetAddresses(ctx, selectStreetAddressSinceText, pgx.NamedArgs{
 		"since": since.UTC(),
 		"limit": lmt,
 	})
 }
 
-// scanLocations runs a query whose rows are an entity ID followed by the
-// columns of the Locations updated-since query, and builds the entities.
-func (r *PostgresRepository) scanLocations(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
+// scanStreetAddresses runs a query whose rows are an entity ID followed by the
+// columns of the StreetAddresses updated-since query, and builds the entities.
+func (r *PostgresRepository) scanStreetAddresses(ctx context.Context, query string, args pgx.NamedArgs) ([]*dbt.Entity, error) {
 	var out []*dbt.Entity
 	j := NewRowsJob(ctx, query, args, func(rows pgx.Rows) error {
 		for rows.Next() {
 			var eid, rid int64
 			var c, u time.Time
 			var attrsJSON string
-			var a contact.Location
+			var a contact.StreetAddress
 			var unit, building, province, locality pgtype.Text
 			var postalCode, streetName, buildingNumber pgtype.Text
 
@@ -252,7 +252,7 @@ func (r *PostgresRepository) scanLocations(ctx context.Context, query string, ar
 				a.BuildingNumber = buildingNumber.String
 			}
 
-			if ent, err := r.buildLocationEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
+			if ent, err := r.buildStreetAddressEntity(eid, rid, c, u, attrsJSON, &a); err == nil {
 				out = append(out, ent)
 			}
 		}
@@ -267,21 +267,21 @@ func (r *PostgresRepository) scanLocations(ctx context.Context, query string, ar
 	return out, nil
 }
 
-func (r *PostgresRepository) buildLocationEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *contact.Location) (*dbt.Entity, error) {
+func (r *PostgresRepository) buildStreetAddressEntity(eid, rid int64, createdAt, updatedAt time.Time, attrsJSON string, a *contact.StreetAddress) (*dbt.Entity, error) {
 	if rid == 0 {
-		return nil, errors.New("no location found")
+		return nil, errors.New("no street address found")
 	}
 	if a.Address == "" {
-		return nil, errors.New("location street address is missing")
+		return nil, errors.New("the street address is missing")
 	}
 	if a.City == "" {
-		return nil, errors.New("location city is missing")
+		return nil, errors.New("street address city is missing")
 	}
 	if a.Country == "" {
-		return nil, errors.New("location country is missing")
+		return nil, errors.New("street address country is missing")
 	}
 
-	var attrs locationAttributes
+	var attrs streetAddressAttributes
 	if err := json.Unmarshal([]byte(attrsJSON), &attrs); err != nil {
 		return nil, err
 	}
