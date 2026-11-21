@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.1-0.20241114170450-2d3c2a9cc518
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.6
-	github.com/owasp-amass/open-asset-model v0.15.2-0.20261121202604-c48387f38da3
+	github.com/owasp-amass/open-asset-model v0.15.2-0.20261121203534-5e1b959eeafd
 	github.com/rubenv/sql-migrate v1.8.1
 	github.com/stretchr/testify v1.12.2-0.20260924145934-87a7b9d57689
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
