@@ -184,6 +184,13 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 			}
 			m["attributes"] = string(attrs)
 		}
+	case *platform.StorageBucket:
+		m["unique_id"] = v.ID
+		m["bucket_name"] = v.Name
+		m["provider"] = v.Provider
+		m["service"] = v.Service
+		m["bucket_exists"] = v.Exists
+		m["is_public"] = v.Public
 	case *oamcert.TLSCertificate:
 		m["version"] = v.Version
 		m["serial_number"] = v.SerialNumber
@@ -258,6 +265,8 @@ func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
 	case *platform.ProductRelease:
 		filter["name"] = v.Name
 	case *platform.Service:
+		filter["unique_id"] = v.ID
+	case *platform.StorageBucket:
 		filter["unique_id"] = v.ID
 	case *oamcert.TLSCertificate:
 		// a serial number is unique per issuer only (RFC 5280)

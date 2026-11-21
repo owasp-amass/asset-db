@@ -173,6 +173,14 @@ FROM public.entity e CROSS JOIN LATERAL public.service_get_by_id(e.row_id) AS a
 WHERE e.entity_id = ANY(@ids::bigint[]);`,
 		scan: (*PostgresRepository).scanServices,
 	},
+	"storagebucket": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.bucket_name, a.provider,
+a.service, a.bucket_exists, a.is_public
+FROM public.entity e CROSS JOIN LATERAL public.storagebucket_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanStorageBuckets,
+	},
 	"tlscertificate": {
 		query: `
 SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.serial_number, a.subject_common_name,

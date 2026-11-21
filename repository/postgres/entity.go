@@ -80,6 +80,8 @@ func (r *PostgresRepository) CreateAsset(ctx context.Context, asset oam.Asset) (
 		eid, err = r.upsertProductRelease(ctx, asset.(*oamplat.ProductRelease))
 	case oam.Service:
 		eid, err = r.upsertService(ctx, asset.(*oamplat.Service))
+	case oam.StorageBucket:
+		eid, err = r.upsertStorageBucket(ctx, asset.(*oamplat.StorageBucket))
 	case oam.TLSCertificate:
 		eid, err = r.upsertTLSCertificate(ctx, asset.(*oamcert.TLSCertificate))
 	case oam.URL:
@@ -200,6 +202,8 @@ func (r *PostgresRepository) findByContent(ctx context.Context, atype string, si
 		return r.findProductReleasesByContent(ctx, filters, since, limit)
 	case "service":
 		return r.findServicesByContent(ctx, filters, since, limit)
+	case "storagebucket":
+		return r.findStorageBucketsByContent(ctx, filters, since, limit)
 	case "tlscertificate":
 		return r.findTLSCertificatesByContent(ctx, filters, since, limit)
 	case "url":
@@ -264,6 +268,8 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 		return r.getProductReleasesUpdatedSince(ctx, since, limit)
 	case "service":
 		return r.getServicesUpdatedSince(ctx, since, limit)
+	case "storagebucket":
+		return r.getStorageBucketsUpdatedSince(ctx, since, limit)
 	case "tlscertificate":
 		return r.getTLSCertificatesUpdatedSince(ctx, since, limit)
 	case "url":
@@ -345,6 +351,8 @@ func (r *PostgresRepository) fetchEntityAssetByTableID(ctx context.Context, enti
 		return r.fetchProductReleaseByRowID(ctx, entity_id, id)
 	case "service":
 		return r.fetchServiceByRowID(ctx, entity_id, id)
+	case "storagebucket":
+		return r.fetchStorageBucketByRowID(ctx, entity_id, id)
 	case "tlscertificate":
 		return r.fetchTLSCertificateByRowID(ctx, entity_id, id)
 	case "url":

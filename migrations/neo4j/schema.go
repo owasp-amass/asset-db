@@ -209,6 +209,11 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_storagebucket_content_id IF NOT EXISTS FOR (n:StorageBucket) REQUIRE n.unique_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
 	// A serial number is unique per issuer only (RFC 5280): certificates are
 	// found by serial number, issuer and key identifiers, and the serial
 	// number is indexed, not unique.

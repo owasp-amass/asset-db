@@ -304,6 +304,8 @@ func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
 		filter["name"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.Service)):
 		filter["unique_id"] = subject.Key
+	case strings.EqualFold(subtype, string(oam.StorageBucket)):
+		filter["unique_id"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.TLSCertificate)):
 		filter["serial_number"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.URL)):

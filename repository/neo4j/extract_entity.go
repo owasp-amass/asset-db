@@ -91,6 +91,8 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 		asset, err = nodeToProductRelease(node)
 	case oam.Service:
 		asset, err = nodeToService(node)
+	case oam.StorageBucket:
+		asset, err = nodeToStorageBucket(node)
 	case oam.TLSCertificate:
 		asset, err = nodeToTLSCertificate(node)
 	case oam.URL:
@@ -922,6 +924,47 @@ func nodeToService(node neo4jdb.Node) (*platform.Service, error) {
 		Output:     output,
 		OutputLen:  olen,
 		Attributes: m,
+	}, nil
+}
+
+func nodeToStorageBucket(node neo4jdb.Node) (*platform.StorageBucket, error) {
+	ident, err := neo4jdb.GetProperty[string](node, "unique_id")
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := neo4jdb.GetProperty[string](node, "bucket_name")
+	if err != nil {
+		return nil, err
+	}
+
+	provider, err := neo4jdb.GetProperty[string](node, "provider")
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := neo4jdb.GetProperty[string](node, "service")
+	if err != nil {
+		return nil, err
+	}
+
+	exists, err := neo4jdb.GetProperty[bool](node, "bucket_exists")
+	if err != nil {
+		return nil, err
+	}
+
+	public, err := neo4jdb.GetProperty[bool](node, "is_public")
+	if err != nil {
+		return nil, err
+	}
+
+	return &platform.StorageBucket{
+		ID:       ident,
+		Name:     name,
+		Provider: provider,
+		Service:  service,
+		Exists:   exists,
+		Public:   public,
 	}, nil
 }
 

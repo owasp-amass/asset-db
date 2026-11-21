@@ -78,6 +78,8 @@ func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*d
 		eid, err = r.upsertProductRelease(ctx, asset.(*oamplat.ProductRelease))
 	case oam.Service:
 		eid, err = r.upsertService(ctx, asset.(*oamplat.Service))
+	case oam.StorageBucket:
+		eid, err = r.upsertStorageBucket(ctx, asset.(*oamplat.StorageBucket))
 	case oam.TLSCertificate:
 		eid, err = r.upsertTLSCertificate(ctx, asset.(*oamcert.TLSCertificate))
 	case oam.URL:
@@ -117,6 +119,7 @@ func validateAssetTable(tableName string) string {
 		"product",
 		"productrelease",
 		"service",
+		"storagebucket",
 		"tlscertificate",
 		"url":
 		return strings.ToLower(strings.TrimSpace(tableName))
@@ -226,6 +229,8 @@ func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity
 		return r.fetchProductReleaseByRowID(ctx, entity_id, id)
 	case "service":
 		return r.fetchServiceByRowID(ctx, entity_id, id)
+	case "storagebucket":
+		return r.fetchStorageBucketByRowID(ctx, entity_id, id)
 	case "tlscertificate":
 		return r.fetchTLSCertificateByRowID(ctx, entity_id, id)
 	case "url":

@@ -425,6 +425,17 @@ var contentRegistry = map[string]regEntry{
 			"service_type": "a.service_type",
 		},
 	},
+	"storagebucket": {
+		keys: []string{"unique_id", "bucket_name", "provider", "service", "exists", "public"},
+		colMap: map[string]string{
+			"unique_id":   "a.unique_id",
+			"bucket_name": "a.bucket_name",
+			"provider":    "a.provider",
+			"service":     "a.service",
+			"exists":      "a.bucket_exists",
+			"public":      "a.is_public",
+		},
+	},
 	"tlscertificate": {
 		keys: []string{
 			"serial_number", "subject_common_name",

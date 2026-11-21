@@ -12,6 +12,7 @@ import (
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
@@ -167,7 +168,7 @@ func TestPostgresBatchReads(t *testing.T) {
 // one parses and its columns exist.
 func TestPostgresEntitiesByIdsQueries(t *testing.T) {
 	db := valueFinderRepo(t)
-	assert.Len(t, entitiesByIdsReaders, 21, "every asset type has a batch query")
+	assert.Len(t, entitiesByIdsReaders, len(oam.AssetList), "every asset type has a batch query")
 
 	for etype, reader := range entitiesByIdsReaders {
 		ents, err := reader.scan(db, context.Background(), reader.query, map[string]any{"ids": []int64{-1}})
