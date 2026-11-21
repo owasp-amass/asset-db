@@ -56,6 +56,8 @@ func (r *SqliteRepository) CreateAsset(ctx context.Context, asset oam.Asset) (*d
 		eid, err = r.upsertFQDN(ctx, asset.(*oamdns.FQDN))
 	case oam.FundsTransfer:
 		eid, err = r.upsertFundsTransfer(ctx, asset.(*oamfin.FundsTransfer))
+	case oam.GeoLocation:
+		eid, err = r.upsertGeoLocation(ctx, asset.(*contact.GeoLocation))
 	case oam.Identifier:
 		eid, err = r.upsertIdentifier(ctx, asset.(*oamgen.Identifier))
 	case oam.IPAddress:
@@ -108,6 +110,7 @@ func validateAssetTable(tableName string) string {
 		"file",
 		"fqdn",
 		"fundstransfer",
+		"geolocation",
 		"identifier",
 		"ipaddress",
 		"ipnetrecord",
@@ -207,6 +210,8 @@ func (r *SqliteRepository) fetchEntityAssetByTableID(ctx context.Context, entity
 		return r.fetchFQDNByRowID(ctx, entity_id, id)
 	case "fundstransfer":
 		return r.fetchFundsTransferByRowID(ctx, entity_id, id)
+	case "geolocation":
+		return r.fetchGeoLocationByRowID(ctx, entity_id, id)
 	case "identifier":
 		return r.fetchIdentifierByRowID(ctx, entity_id, id)
 	case "ipaddress":

@@ -69,6 +69,8 @@ func nodeToEntity(node neo4jdb.Node) (*types.Entity, error) {
 		asset, err = nodeToFQDN(node)
 	case oam.FundsTransfer:
 		asset, err = nodeToFundsTransfer(node)
+	case oam.GeoLocation:
+		asset, err = nodeToGeoLocation(node)
 	case oam.Identifier:
 		asset, err = nodeToIdentifier(node)
 	case oam.IPAddress:
@@ -397,6 +399,35 @@ func nodeToFundsTransfer(node neo4jdb.Node) (*financial.FundsTransfer, error) {
 		Method:          method,
 		ExchangeDate:    date,
 		ExchangeRate:    rate,
+	}, nil
+}
+
+func nodeToGeoLocation(node neo4jdb.Node) (*contact.GeoLocation, error) {
+	lat, err := neo4jdb.GetProperty[float64](node, "latitude")
+	if err != nil {
+		return nil, err
+	}
+
+	lon, err := neo4jdb.GetProperty[float64](node, "longitude")
+	if err != nil {
+		return nil, err
+	}
+
+	alt, err := neo4jdb.GetProperty[float64](node, "altitude")
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := neo4jdb.GetProperty[float64](node, "uncertainty")
+	if err != nil {
+		return nil, err
+	}
+
+	return &contact.GeoLocation{
+		Latitude:    lat,
+		Longitude:   lon,
+		Altitude:    alt,
+		Uncertainty: u,
 	}, nil
 }
 

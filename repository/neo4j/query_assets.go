@@ -90,6 +90,12 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["transfer_method"] = v.Method
 		m["exchange_date"] = v.ExchangeDate
 		m["exchange_rate"] = v.ExchangeRate
+	case *contact.GeoLocation:
+		m["unique_id"] = v.Key()
+		m["latitude"] = v.Latitude
+		m["longitude"] = v.Longitude
+		m["altitude"] = v.Altitude
+		m["uncertainty"] = v.Uncertainty
 	case *general.Identifier:
 		m["unique_id"] = v.UniqueID
 		m["id"] = v.ID
@@ -245,6 +251,8 @@ func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
 		filter["name"] = v.Name
 	case *financial.FundsTransfer:
 		filter["unique_id"] = v.ID
+	case *contact.GeoLocation:
+		filter["unique_id"] = v.Key()
 	case *general.Identifier:
 		filter["unique_id"] = v.UniqueID
 	case *oamnet.IPAddress:

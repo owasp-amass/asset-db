@@ -124,6 +124,11 @@ func entitiesContentIndexes(driver neo4jdb.DriverWithContext, dbname string) err
 		return err
 	}
 
+	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_geolocation_content_unique_id IF NOT EXISTS FOR (n:GeoLocation) REQUIRE n.unique_id IS UNIQUE")
+	if err != nil {
+		return err
+	}
+
 	err = executeQuery(driver, dbname, "CREATE CONSTRAINT constraint_identifier_content_unique_id IF NOT EXISTS FOR (n:Identifier) REQUIRE n.unique_id IS UNIQUE")
 	if err != nil {
 		return err

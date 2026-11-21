@@ -273,6 +273,8 @@ func subjectToAsset(subject *Node) (dbt.ContentFilters, error) {
 		filter["name"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.FundsTransfer)):
 		filter["unique_id"] = subject.Key
+	case strings.EqualFold(subtype, string(oam.GeoLocation)):
+		filter["unique_id"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.Identifier)):
 		filter["unique_id"] = subject.Key
 	case strings.EqualFold(subtype, string(oam.IPAddress)):

@@ -91,6 +91,14 @@ FROM public.entity e CROSS JOIN LATERAL public.fundstransfer_get_by_id(e.row_id)
 WHERE e.entity_id = ANY(@ids::bigint[]);`,
 		scan: (*PostgresRepository).scanFundsTransfers,
 	},
+	"geolocation": {
+		query: `
+SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.latitude, a.longitude,
+a.altitude, a.uncertainty
+FROM public.entity e CROSS JOIN LATERAL public.geolocation_get_by_id(e.row_id) AS a
+WHERE e.entity_id = ANY(@ids::bigint[]);`,
+		scan: (*PostgresRepository).scanGeoLocations,
+	},
 	"identifier": {
 		query: `
 SELECT e.entity_id, a.id, a.created_at, a.updated_at, a.unique_id, a.id_value, a.id_type, a.attrs

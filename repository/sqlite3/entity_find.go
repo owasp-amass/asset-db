@@ -325,6 +325,14 @@ var contentRegistry = map[string]regEntry{
 			"reference_number": "a.reference_number",
 		},
 	},
+	"geolocation": {
+		keys: []string{"unique_id", "latitude", "longitude"},
+		colMap: map[string]string{
+			"unique_id": "a.unique_id",
+			"latitude":  "a.latitude",
+			"longitude": "a.longitude",
+		},
+	},
 	"identifier": {
 		keys: []string{"unique_id", "id", "id_type"},
 		colMap: map[string]string{

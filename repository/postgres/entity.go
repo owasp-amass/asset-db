@@ -58,6 +58,8 @@ func (r *PostgresRepository) CreateAsset(ctx context.Context, asset oam.Asset) (
 		eid, err = r.upsertFQDN(ctx, asset.(*oamdns.FQDN))
 	case oam.FundsTransfer:
 		eid, err = r.upsertFundsTransfer(ctx, asset.(*oamfin.FundsTransfer))
+	case oam.GeoLocation:
+		eid, err = r.upsertGeoLocation(ctx, asset.(*contact.GeoLocation))
 	case oam.Identifier:
 		eid, err = r.upsertIdentifier(ctx, asset.(*oamgen.Identifier))
 	case oam.IPAddress:
@@ -180,6 +182,8 @@ func (r *PostgresRepository) findByContent(ctx context.Context, atype string, si
 		return r.findFQDNsByContent(ctx, filters, since, limit)
 	case "fundstransfer":
 		return r.findFundsTransfersByContent(ctx, filters, since, limit)
+	case "geolocation":
+		return r.findGeoLocationsByContent(ctx, filters, since, limit)
 	case "identifier":
 		return r.findIdentifiersByContent(ctx, filters, since, limit)
 	case "ipaddress":
@@ -246,6 +250,8 @@ func (r *PostgresRepository) findByType(ctx context.Context, atype string, since
 		return r.getFQDNsUpdatedSince(ctx, since, limit)
 	case "fundstransfer":
 		return r.getFundsTransfersUpdatedSince(ctx, since, limit)
+	case "geolocation":
+		return r.getGeoLocationsUpdatedSince(ctx, since, limit)
 	case "identifier":
 		return r.getIdentifiersUpdatedSince(ctx, since, limit)
 	case "ipaddress":
@@ -329,6 +335,8 @@ func (r *PostgresRepository) fetchEntityAssetByTableID(ctx context.Context, enti
 		return r.fetchFQDNByRowID(ctx, entity_id, id)
 	case "fundstransfer":
 		return r.fetchFundsTransferByRowID(ctx, entity_id, id)
+	case "geolocation":
+		return r.fetchGeoLocationByRowID(ctx, entity_id, id)
 	case "identifier":
 		return r.fetchIdentifierByRowID(ctx, entity_id, id)
 	case "ipaddress":
