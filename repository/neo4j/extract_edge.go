@@ -16,6 +16,11 @@ import (
 )
 
 func relationshipToEdge(rel neo4jdb.Relationship) (*types.Edge, error) {
+	id, err := neo4jdb.GetProperty[string](rel, "edge_id")
+	if err != nil {
+		return nil, err
+	}
+	
 	t, err := neo4jdb.GetProperty[neo4jdb.LocalDateTime](rel, "created_at")
 	if err != nil {
 		return nil, err
@@ -55,7 +60,7 @@ func relationshipToEdge(rel neo4jdb.Relationship) (*types.Edge, error) {
 	}
 
 	return &types.Edge{
-		ID:        rel.GetElementId(),
+		ID:        id,
 		CreatedAt: created,
 		LastSeen:  updated,
 		Relation:  r,
