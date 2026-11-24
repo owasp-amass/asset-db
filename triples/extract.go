@@ -236,6 +236,28 @@ func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, err
 		return nil, errors.New("subject cannot be nil")
 	}
 
+	// A regular expression key cannot be expressed as an exact content filter, so
+	// fetch the entities of the subject's type and match them in Go, the same way
+	// regex matching is already handled for the object of a triple.
+	if subject.Regexp != nil {
+		since := subject.Since
+		if since.IsZero() {
+			since = time.Unix(0, 0)
+		}
+
+		ents, err := db.FindEntitiesByType(context.Background(), subject.Type, since, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find the subject in the database: %v", err)
+		}
+
+		for _, ent := range ents {
+			if valueMatch(ent.Asset.Key(), subject.Key, subject.Regexp) {
+				return ent, nil
+			}
+		}
+		return nil, errors.New("failed to find a subject matching the regular expression")
+	}
+
 	filter, err := subjectToAsset(subject)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert subject to asset: %v", err)
