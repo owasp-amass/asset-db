@@ -62,7 +62,7 @@ func (neo *NeoRepository) CreateEntityTag(ctx context.Context, entity *types.Ent
 		defer cancel()
 		// update the existing tag
 		result, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-			"MATCH (n:EntityTag {tag_id: $tid}) SET p = $props RETURN p",
+			"MATCH (p:EntityTag {tag_id: $tid}) SET p = $props RETURN p",
 			map[string]interface{}{"tid": tag.ID, "props": props},
 			neo4jdb.EagerResultTransformer,
 			neo4jdb.ExecuteQueryWithDatabase(neo.dbname),

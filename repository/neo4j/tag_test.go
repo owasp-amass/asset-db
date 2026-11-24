@@ -89,13 +89,16 @@ func TestEntityTag(t *testing.T) {
 }
 
 func TestEdgeTag(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	e1, err := store.CreateAsset(ctx, &dns.FQDN{Name: "owasp.org"})
 	assert.NoError(t, err)
 
 	e2, err := store.CreateAsset(ctx, &dns.FQDN{Name: "www.owasp.org"})
 	assert.NoError(t, err)
 
-	edge, err := store.CreateEdge(&types.Edge{
+	edge, err := store.CreateEdge(ctx, &types.Edge{
 		Relation: &dns.BasicDNSRelation{
 			Name:   "dns_record",
 			Header: dns.RRHeader{RRType: 5},
