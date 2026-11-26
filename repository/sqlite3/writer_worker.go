@@ -22,7 +22,11 @@ type writeJob struct {
 	Name    string
 	SQLText string
 	Args    []any
-	Result  chan error
+	// Returning, when set, receives the columns of the row the statement
+	// returns (a RETURNING clause); a statement that returns no row fails
+	// the job with sql.ErrNoRows.
+	Returning []any
+	Result    chan error
 }
 
 type writeWorker struct {
@@ -249,7 +253,11 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 		}
 		defer lease.Release()
 
-		_, err = tx.StmtContext(job.Ctx, lease.Stmt).Exec(job.Args...)
+		if job.Returning != nil {
+			err = tx.StmtContext(job.Ctx, lease.Stmt).QueryRow(job.Args...).Scan(job.Returning...)
+		} else {
+			_, err = tx.StmtContext(job.Ctx, lease.Stmt).Exec(job.Args...)
+		}
 		if err != nil {
 			// Roll back just this job, keep going
 			_, _ = tx.ExecContext(job.Ctx, "ROLLBACK TO SAVEPOINT "+sp)
