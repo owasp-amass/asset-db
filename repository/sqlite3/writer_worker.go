@@ -26,7 +26,10 @@ type writeJob struct {
 	// returns (a RETURNING clause); a statement that returns no row fails
 	// the job with sql.ErrNoRows.
 	Returning []any
-	Result    chan error
+	// Rows, when set, reads every row the statement returns (a RETURNING
+	// clause that may return several); it is used instead of Returning.
+	Rows   func(*sql.Rows) error
+	Result chan error
 }
 
 type writeWorker struct {
@@ -253,9 +256,12 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 		}
 		defer lease.Release()
 
-		if job.Returning != nil {
+		switch {
+		case job.Rows != nil:
+			err = readRows(tx.StmtContext(job.Ctx, lease.Stmt), job)
+		case job.Returning != nil:
 			err = tx.StmtContext(job.Ctx, lease.Stmt).QueryRow(job.Args...).Scan(job.Returning...)
-		} else {
+		default:
 			_, err = tx.StmtContext(job.Ctx, lease.Stmt).Exec(job.Args...)
 		}
 		if err != nil {
@@ -292,6 +298,23 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 	// Now we can mark all "pendingCommit" jobs as successful
 	errToJobs(pendingCommit, nil)
 	return nil, nil
+}
+
+// readRows runs a job's statement and gives its rows to job.Rows.
+func readRows(stmt *sql.Stmt, job *writeJob) error {
+	rows, err := stmt.QueryContext(job.Ctx, job.Args...)
+	if err != nil {
+		return err
+	}
+	if err := job.Rows(rows); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	return rows.Close()
 }
 
 func errToJobs(jobs []*writeJob, err error) {
