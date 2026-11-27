@@ -263,10 +263,10 @@ func TestFindEntitiesByTypeForIPNetRecord(t *testing.T) {
 	key2 := "NET-FAKE-2"
 	ent, err = db.CreateAsset(ctx, &oamreg.IPNetRecord{
 		Raw:          "fake ipnet record 2",
-		CIDR:         netip.MustParsePrefix("150.156.0.0/16"),
+		CIDR:         netip.MustParsePrefix("198.51.100.0/24"),
 		Handle:       key2,
-		StartAddress: netip.MustParseAddr("150.156.0.0"),
-		EndAddress:   netip.MustParseAddr("150.156.255.255"),
+		StartAddress: netip.MustParseAddr("198.51.100.0"),
+		EndAddress:   netip.MustParseAddr("198.51.100.255"),
 		Type:         iptype,
 		Name:         "fake ipnet name 2",
 		CreatedDate:  created,

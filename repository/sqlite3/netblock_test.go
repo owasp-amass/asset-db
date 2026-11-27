@@ -143,7 +143,7 @@ func TestFindEntitiesByTypeForNetblock(t *testing.T) {
 	since23 := time.Now()
 	time.Sleep(100 * time.Millisecond)
 
-	cidr = netip.MustParsePrefix("150.156.0.0/16")
+	cidr = netip.MustParsePrefix("198.51.100.0/24")
 	key2 := cidr.String()
 	ent, err = db.CreateAsset(ctx, &oamnet.Netblock{
 		CIDR: cidr,

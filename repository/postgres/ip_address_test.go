@@ -159,7 +159,7 @@ func (suite *PostgresIPAddressTestSuite) TestFindEntitiesByTypeForIPAddress() {
 	since23 := time.Now()
 	time.Sleep(100 * time.Millisecond)
 
-	ip = netip.MustParseAddr("72.128.4.1")
+	ip = netip.MustParseAddr("203.0.113.1")
 	key2 := ip.String()
 	ent, err = suite.db.CreateAsset(ctx, &oamnet.IPAddress{
 		Address: ip,
@@ -168,7 +168,7 @@ func (suite *PostgresIPAddressTestSuite) TestFindEntitiesByTypeForIPAddress() {
 	assert.NoError(t, err, "Failed to create asset for the second %s", atypestr)
 	assert.NotNil(t, ent, "Entity for the second %s should not be nil", atypestr)
 
-	ip = netip.MustParseAddr("150.156.0.1")
+	ip = netip.MustParseAddr("198.51.100.1")
 	key3 := ip.String()
 	ent, err = suite.db.CreateAsset(ctx, &oamnet.IPAddress{
 		Address: ip,
