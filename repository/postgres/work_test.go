@@ -63,6 +63,10 @@ func TestPostgresWorkQueue(t *testing.T) {
 	n, err := db.RenewWork(ctx, q, "w2", time.Hour)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), n, "renewing every lease the owner holds")
+	byOwner, err := db.CountWorkByOwner(ctx, q)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]types.WorkCounts{"w1": {Done: 1}, "w2": {Leased: 2}}, byOwner,
+		"an acked item keeps the owner that did it")
 
 	// an expired lease is counted as queued and claimed by another owner
 	require.NoError(t, db.EnqueueWork(ctx, q, "IPAddress", "d"))

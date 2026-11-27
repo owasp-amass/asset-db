@@ -144,7 +144,7 @@ func (r *PostgresRepository) AckWork(ctx context.Context, queue, key, owner stri
 	}
 
 	var n int64
-	j := NewExecJob(ctx, `UPDATE public.work_item SET state = 2, owner = '', lease_until = NULL,
+	j := NewExecJob(ctx, `UPDATE public.work_item SET state = 2, lease_until = NULL,
           updated_at = timezone('utc', now())
         WHERE queue = @queue AND key = @key AND (@owner::text = '' OR (state = 1 AND owner = @owner::text))`,
 		pgx.NamedArgs{"queue": queue, "key": key, "owner": owner}, func(tag pgconn.CommandTag) error {
@@ -192,6 +192,33 @@ func (r *PostgresRepository) CountWork(ctx context.Context, queue, kind string) 
 		return types.WorkCounts{}, err
 	}
 	return c, nil
+}
+
+// CountWorkByOwner implements repository.WorkQueue.
+func (r *PostgresRepository) CountWorkByOwner(ctx context.Context, queue string) (map[string]types.WorkCounts, error) {
+	out := map[string]types.WorkCounts{}
+	j := NewRowsJob(ctx, `SELECT owner,
+          COALESCE(SUM(CASE WHEN state = 1 AND lease_until <= timezone('utc', now()) THEN 1 ELSE 0 END), 0),
+          COALESCE(SUM(CASE WHEN state = 1 AND (lease_until IS NULL OR lease_until > timezone('utc', now()))
+            THEN 1 ELSE 0 END), 0),
+          COALESCE(SUM(CASE WHEN state = 2 THEN 1 ELSE 0 END), 0)
+        FROM public.work_item WHERE queue = @queue AND owner <> '' GROUP BY owner`,
+		pgx.NamedArgs{"queue": queue}, func(rows pgx.Rows) error {
+			for rows.Next() {
+				var owner string
+				var c types.WorkCounts
+				if err := rows.Scan(&owner, &c.Queued, &c.Leased, &c.Done); err != nil {
+					return err
+				}
+				out[owner] = c
+			}
+			return rows.Err()
+		})
+	r.rpool.Submit(j)
+	if err := j.Wait(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // DeleteQueue implements repository.WorkQueue.

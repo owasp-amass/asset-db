@@ -31,8 +31,9 @@ type WorkQueue interface {
 	// RenewWork extends every lease owner holds in the queue to ttl from now
 	// (0: until acked or released) and returns how many it extended.
 	RenewWork(ctx context.Context, queue, owner string, ttl time.Duration) (int64, error)
-	// AckWork marks an item done. Given an owner, it marks only an item the
-	// owner leases, and returns types.ErrWorkNotLeased otherwise.
+	// AckWork marks an item done, keeping the owner that leased it as the
+	// one that did it. Given an owner, it marks only an item the owner
+	// leases, and returns types.ErrWorkNotLeased otherwise.
 	AckWork(ctx context.Context, queue, key, owner string) error
 	// ReleaseWork returns a leased item to queued; given an owner, only an
 	// item the owner leases. Releasing an item not leased does nothing.
@@ -40,6 +41,9 @@ type WorkQueue interface {
 	// CountWork counts the queue's items of the kind, or of every kind when
 	// kind is empty, in each state.
 	CountWork(ctx context.Context, queue, kind string) (types.WorkCounts, error)
+	// CountWorkByOwner counts, by owner, the queue's items each leases (an
+	// expired lease counted as queued) and those each did.
+	CountWorkByOwner(ctx context.Context, queue string) (map[string]types.WorkCounts, error)
 	// DeleteQueue removes every item of the queue.
 	DeleteQueue(ctx context.Context, queue string) error
 }

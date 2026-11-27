@@ -167,7 +167,7 @@ func (r *SqliteRepository) AckWork(ctx context.Context, queue, key, owner string
 	var id int64
 	now, _ := workTimes(0)
 	done := make(chan error, 1)
-	r.ww.Submit(&writeJob{Ctx: ctx, Name: "work.ack", SQLText: `UPDATE work_item SET state = 2, owner = '',
+	r.ww.Submit(&writeJob{Ctx: ctx, Name: "work.ack", SQLText: `UPDATE work_item SET state = 2,
           lease_until = NULL, updated_at = :now
         WHERE queue = :queue AND key = :key AND (:owner = '' OR (state = 1 AND owner = :owner))
         RETURNING id`,
@@ -220,6 +220,34 @@ func (r *SqliteRepository) CountWork(ctx context.Context, queue, kind string) (t
 		}
 	}
 	return c, result.Rows.Err()
+}
+
+// CountWorkByOwner implements repository.WorkQueue.
+func (r *SqliteRepository) CountWorkByOwner(ctx context.Context, queue string) (map[string]types.WorkCounts, error) {
+	now, _ := workTimes(0)
+	ch := make(chan *rowsReadResult, 1)
+	r.rpool.Submit(&rowsReadJob{Ctx: ctx, Name: "work.count_by_owner", SQLText: `SELECT owner,
+          COALESCE(SUM(CASE WHEN state = 1 AND lease_until <= :now THEN 1 ELSE 0 END), 0),
+          COALESCE(SUM(CASE WHEN state = 1 AND (lease_until IS NULL OR lease_until > :now) THEN 1 ELSE 0 END), 0),
+          COALESCE(SUM(CASE WHEN state = 2 THEN 1 ELSE 0 END), 0)
+        FROM work_item WHERE queue = :queue AND owner <> '' GROUP BY owner`,
+		Args: []any{sql.Named("queue", queue), sql.Named("now", now)}, Result: ch})
+	result := <-ch
+	if result.Err != nil {
+		return nil, result.Err
+	}
+	defer func() { _ = result.Rows.Close() }()
+
+	out := map[string]types.WorkCounts{}
+	for result.Rows.Next() {
+		var owner string
+		var c types.WorkCounts
+		if err := result.Rows.Scan(&owner, &c.Queued, &c.Leased, &c.Done); err != nil {
+			return nil, err
+		}
+		out[owner] = c
+	}
+	return out, result.Rows.Err()
 }
 
 // DeleteQueue implements repository.WorkQueue.
