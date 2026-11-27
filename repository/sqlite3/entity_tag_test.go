@@ -170,6 +170,14 @@ func TestFindEntityTags(t *testing.T) {
 			names:  []string{"fake"},
 			count:  1,
 		},
+		"fqdn with a name holding a quote": {
+			entity: fqdn,
+			before: before2,
+			after:  after2,
+			since:  time.Time{},
+			names:  []string{"fake", "o'brien"},
+			count:  1,
+		},
 	}
 
 	for tname, test := range tests {

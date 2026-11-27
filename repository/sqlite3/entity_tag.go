@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -216,11 +215,6 @@ WHERE et.entity_id = :entity_id`
 		args = append(args, sql.Named("since", since.UTC()))
 	}
 
-	if len(names) > 0 {
-		key += "." + strings.Join(names, ".")
-		list := `('` + strings.Join(names, `', '`) + `')`
-		q += " AND et.property_name IN " + list
-	}
 	if values, vargs := inClause(names); values != "" && len(vargs) > 0 {
 		key += fmt.Sprintf(".names%d", len(vargs))
 		q += " AND et.property_name IN " + values
