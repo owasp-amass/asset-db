@@ -8,6 +8,7 @@ package valuequery
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -62,9 +63,42 @@ func CheckKey(key string) error {
 	return nil
 }
 
+// likeEscaper escapes LIKE's wildcards and its escape character.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 // LikePattern escapes value for a case-insensitive LIKE contains match with
 // ESCAPE '\'.
 func LikePattern(value string) string {
-	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return "%" + r.Replace(strings.ToLower(value)) + "%"
+	return "%" + likeEscaper.Replace(strings.ToLower(value)) + "%"
+}
+
+// LikePrefix escapes prefix for a case-insensitive LIKE prefix match with
+// ESCAPE '\'.
+func LikePrefix(prefix string) string {
+	return likeEscaper.Replace(strings.ToLower(prefix)) + "%"
+}
+
+// MaxHistogramPrefixes bounds the value prefixes one histogram filters by.
+const MaxHistogramPrefixes = 64
+
+// CheckHistogram validates the arguments of a value histogram: an asset
+// type, a property name or attribute key, and at most MaxHistogramPrefixes
+// prefixes of at most 128 characters, none empty.
+func CheckHistogram(atype oam.AssetType, name string, prefixes []string) error {
+	if strings.TrimSpace(string(atype)) == "" {
+		return errors.New("asset type required")
+	}
+	if name == "" || len(name) > 128 {
+		return errors.New("property name or attribute key required (at most 128 characters)")
+	}
+	if len(prefixes) > MaxHistogramPrefixes {
+		return fmt.Errorf("a value histogram filters by at most %d prefixes", MaxHistogramPrefixes)
+	}
+	for _, p := range prefixes {
+		if p == "" || len(p) > 128 {
+			return errors.New("a value prefix is 1 to 128 characters")
+		}
+	}
+
+	return nil
 }
