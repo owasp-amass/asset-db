@@ -46,12 +46,28 @@ func (r *PostgresRepository) AppendJournal(ctx context.Context, rec *types.Journ
 
 // ReadJournal implements repository.JournalStore.
 func (r *PostgresRepository) ReadJournal(ctx context.Context, topic string, after int64, limit int) ([]*types.JournalRecord, error) {
+	return r.ReadJournalFiltered(ctx, topic, types.JournalFilter{}, after, limit)
+}
+
+// ReadJournalFiltered implements repository.JournalStore. Only the filter's
+// conditions are added to the query, so each read uses the index that fits
+// it: (topic, key, seq) or (topic, kind, seq).
+func (r *PostgresRepository) ReadJournalFiltered(ctx context.Context, topic string, f types.JournalFilter,
+	after int64, limit int) ([]*types.JournalRecord, error) {
+	q := `SELECT ` + journalColumns + ` FROM public.journal WHERE topic = @topic AND seq > @after`
 	args := pgx.NamedArgs{"topic": topic, "after": after, "limit": nil}
+	if f.Key != "" {
+		q += ` AND key = @key`
+		args["key"] = f.Key
+	}
+	if len(f.Kinds) > 0 {
+		q += ` AND kind = ANY(@kinds::text[])`
+		args["kinds"] = f.Kinds
+	}
 	if limit > 0 {
 		args["limit"] = limit
 	}
-	return r.queryJournal(ctx, `SELECT `+journalColumns+` FROM public.journal
-        WHERE topic = @topic AND seq > @after ORDER BY seq LIMIT @limit::integer`, args)
+	return r.queryJournal(ctx, q+` ORDER BY seq LIMIT @limit::integer`, args)
 }
 
 // LatestJournal implements repository.JournalStore.

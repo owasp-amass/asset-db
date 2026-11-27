@@ -9,6 +9,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/asset-db/types"
@@ -46,13 +48,37 @@ func (r *SqliteRepository) AppendJournal(ctx context.Context, rec *types.Journal
 
 // ReadJournal implements repository.JournalStore.
 func (r *SqliteRepository) ReadJournal(ctx context.Context, topic string, after int64, limit int) ([]*types.JournalRecord, error) {
-	q := `SELECT ` + journalColumns + ` FROM journal WHERE topic = :topic AND seq > :after ORDER BY seq`
+	return r.ReadJournalFiltered(ctx, topic, types.JournalFilter{}, after, limit)
+}
+
+// ReadJournalFiltered implements repository.JournalStore. Only the filter's
+// conditions are added to the query, so each read uses the index that fits
+// it: (topic, key, seq) or (topic, kind, seq).
+func (r *SqliteRepository) ReadJournalFiltered(ctx context.Context, topic string, f types.JournalFilter,
+	after int64, limit int) ([]*types.JournalRecord, error) {
+	q := `SELECT ` + journalColumns + ` FROM journal WHERE topic = :topic AND seq > :after`
 	args := []any{sql.Named("topic", topic), sql.Named("after", after)}
+	if f.Key != "" {
+		q += ` AND key = :key`
+		args = append(args, sql.Named("key", f.Key))
+	}
+	if len(f.Kinds) > 0 {
+		marks := make([]string, len(f.Kinds))
+		for i, k := range f.Kinds {
+			name := fmt.Sprintf("kind%d", i)
+			marks[i] = ":" + name
+			args = append(args, sql.Named(name, k))
+		}
+		q += ` AND kind IN (` + strings.Join(marks, ", ") + `)`
+	}
+	q += ` ORDER BY seq`
 	if limit > 0 {
-		q += " LIMIT :limit"
+		q += ` LIMIT :limit`
 		args = append(args, sql.Named("limit", limit))
 	}
-	return r.queryJournal(ctx, "journal.read", q, args...)
+	// the reader keeps a prepared statement by name: each shape of the query
+	// is named by its text
+	return r.queryJournal(ctx, q, q, args...)
 }
 
 // LatestJournal implements repository.JournalStore.

@@ -38,6 +38,14 @@ type JournalRecord struct {
 	Cause int64 `json:"cause,omitempty"`
 }
 
+// JournalFilter narrows a read of a topic's records: to the records with
+// Key, when it is set, and to the records of Kinds, when it has any. The
+// zero filter reads every record.
+type JournalFilter struct {
+	Key   string
+	Kinds []string
+}
+
 // Validate checks a record before it is appended.
 func (r *JournalRecord) Validate() error {
 	if r == nil {

@@ -24,6 +24,10 @@ type JournalStore interface {
 	// ReadJournal returns the topic's records after the sequence number
 	// after (all when 0), in order, at most limit (all when 0).
 	ReadJournal(ctx context.Context, topic string, after int64, limit int) ([]*types.JournalRecord, error)
+	// ReadJournalFiltered reads as ReadJournal does, only the records the
+	// filter lets through: those with its key, and of its kinds.
+	ReadJournalFiltered(ctx context.Context, topic string, f types.JournalFilter, after int64,
+		limit int) ([]*types.JournalRecord, error)
 	// LatestJournal returns the topic's newest record with the key, or an
 	// error when it has none.
 	LatestJournal(ctx context.Context, topic, key string) (*types.JournalRecord, error)

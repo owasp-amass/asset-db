@@ -71,6 +71,31 @@ func TestSQLiteJournal(t *testing.T) {
 	if assert.Len(t, runs, 1) {
 		assert.JSONEq(t, `{}`, string(runs[0].Data), "a record without data holds {}")
 	}
+
+	// filtered reads: by key, by kinds, by both after a record
+	third, err := db.AppendJournal(ctx, &types.JournalRecord{Topic: "review", Kind: "proposal", Key: "own-3"})
+	require.NoError(t, err)
+	recs, err = db.ReadJournalFiltered(ctx, "review", types.JournalFilter{Key: "own-1"}, 0, 0)
+	require.NoError(t, err, "reading a key's records")
+	assert.Len(t, recs, 2, "only the key's records are read")
+	recs, err = db.ReadJournalFiltered(ctx, "review", types.JournalFilter{Kinds: []string{"proposal"}}, 0, 0)
+	require.NoError(t, err, "reading a kind's records")
+	if assert.Len(t, recs, 2, "only the kind's records are read") {
+		assert.Equal(t, first.Seq, recs[0].Seq, "records are in order")
+		assert.Equal(t, third.Seq, recs[1].Seq)
+	}
+	recs, err = db.ReadJournalFiltered(ctx, "review", types.JournalFilter{Key: "own-1",
+		Kinds: []string{"outcome", "proposal"}}, first.Seq, 0)
+	require.NoError(t, err, "reading a key's kinds after a record")
+	if assert.Len(t, recs, 1, "only the key's later records of the kinds are read") {
+		assert.Equal(t, second.Seq, recs[0].Seq)
+	}
+	recs, err = db.ReadJournalFiltered(ctx, "review", types.JournalFilter{Kinds: []string{"proposal"}}, 0, 1)
+	require.NoError(t, err)
+	assert.Len(t, recs, 1, "the limit holds for a filtered read")
+	recs, err = db.ReadJournalFiltered(ctx, "runs", types.JournalFilter{Kinds: []string{"proposal"}}, 0, 0)
+	require.NoError(t, err)
+	assert.Empty(t, recs, "another topic's records are not read")
 }
 
 // A lease has one holder at a time; its holder renews it, and anyone takes

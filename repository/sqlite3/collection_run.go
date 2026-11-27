@@ -121,7 +121,9 @@ func (r *SqliteRepository) FindRuns(ctx context.Context, since time.Time, limit 
 		args = append(args, sql.Named("limit", limit))
 	}
 
-	return r.queryRuns(ctx, "collection_run.find", q, args...)
+	// the reader keeps a prepared statement by name: each shape of the query
+	// is named by its text
+	return r.queryRuns(ctx, q, q, args...)
 }
 
 func (r *SqliteRepository) write(ctx context.Context, name, query string, args ...any) error {
