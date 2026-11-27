@@ -18,9 +18,10 @@ import (
 // tools sharing the database claim, lease and finish, so each item is
 // worked on by one owner at a time.
 type WorkQueue interface {
-	// EnqueueWork puts keys of the kind in the queue as queued work. A key
-	// already in the queue keeps its place but returns to queued, whatever
-	// its state, so a caller that must not repeat work checks HasWork first.
+	// EnqueueWork puts keys of the kind in the queue as queued work, once
+	// each. A key already done returns to queued, keeping its place, for
+	// another look; a key queued or leased is left as it is, so two callers
+	// enqueueing the same key never have it worked on twice at once.
 	EnqueueWork(ctx context.Context, queue, kind string, keys ...string) error
 	// HasWork returns those of keys that are in the queue, in any state.
 	HasWork(ctx context.Context, queue string, keys ...string) (map[string]bool, error)

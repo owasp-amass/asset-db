@@ -36,7 +36,8 @@ func (r *PostgresRepository) EnqueueWork(ctx context.Context, queue, kind string
 	j := NewExecJob(ctx, `INSERT INTO public.work_item (queue, key, kind)
         SELECT @queue, k, @kind FROM unnest(@keys::text[]) AS k
         ON CONFLICT (queue, key) DO UPDATE SET kind = excluded.kind, state = 0, owner = '',
-          lease_until = NULL, updated_at = timezone('utc', now())`,
+          lease_until = NULL, updated_at = timezone('utc', now())
+        WHERE work_item.state = 2`,
 		pgx.NamedArgs{"queue": queue, "kind": kind, "keys": keys}, func(pgconn.CommandTag) error { return nil })
 	r.wpool.Submit(j)
 	return j.Wait()

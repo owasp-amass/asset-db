@@ -46,7 +46,8 @@ func (r *SqliteRepository) EnqueueWork(ctx context.Context, queue, kind string, 
 	return r.write(ctx, "work.enqueue", `INSERT INTO work_item (queue, key, kind, enqueued_at, updated_at)
         SELECT :queue, value, :kind, :now, :now FROM json_each(:keys) WHERE true
         ON CONFLICT (queue, key) DO UPDATE SET kind = excluded.kind, state = 0, owner = '',
-          lease_until = NULL, updated_at = excluded.updated_at`,
+          lease_until = NULL, updated_at = excluded.updated_at
+        WHERE work_item.state = 2`,
 		sql.Named("queue", queue), sql.Named("kind", kind), sql.Named("now", now), sql.Named("keys", string(list)))
 }
 
@@ -109,6 +110,8 @@ func (r *SqliteRepository) ClaimWork(ctx context.Context, queue, kind, owner str
 		Args: []any{sql.Named("queue", queue), sql.Named("kind", kind), sql.Named("owner", owner),
 			sql.Named("until", until), sql.Named("now", now), sql.Named("n", n)},
 		Rows: func(rows *sql.Rows) error {
+			// a retried write runs this again
+			got = got[:0]
 			for rows.Next() {
 				var c claimed
 				if err := rows.Scan(&c.id, &c.key); err != nil {
@@ -147,6 +150,8 @@ func (r *SqliteRepository) RenewWork(ctx context.Context, queue, owner string, t
 		Args: []any{sql.Named("queue", queue), sql.Named("owner", owner), sql.Named("until", until),
 			sql.Named("now", now)},
 		Rows: func(rows *sql.Rows) error {
+			// a retried write runs this again
+			n = 0
 			for rows.Next() {
 				n++
 			}

@@ -84,6 +84,12 @@ func TestPostgresWorkQueue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got, "a lease without an end does not expire")
 
+	// enqueuing a leased item leaves it with its owner
+	require.NoError(t, db.EnqueueWork(ctx, q, fqdn, "b"))
+	got, err = db.ClaimWork(ctx, q, fqdn, "w4", 5, time.Hour)
+	require.NoError(t, err)
+	assert.Empty(t, got, "a leased item is not queued again")
+
 	// enqueuing a done item queues it again, in its first place
 	require.NoError(t, db.EnqueueWork(ctx, q, fqdn, "e", "a"))
 	got, err = db.ClaimWork(ctx, q, fqdn, "w3", 5, time.Hour)
