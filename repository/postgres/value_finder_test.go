@@ -79,6 +79,14 @@ func TestPostgresFindEntitiesByValue(t *testing.T) {
 	assert.Len(t, ents, 1)
 	assert.True(t, more)
 
+	// the next page starts after the last entity of this one
+	next, more, err := db.FindEntitiesByTagValueAfter(ctx, oam.FQDN, "dns_record", "vf123", true, time.Time{},
+		ents[0].ID, 1)
+	require.NoError(t, err)
+	require.Len(t, next, 1)
+	assert.False(t, more)
+	assert.NotEqual(t, ents[0].ID, next[0].ID)
+
 	cert := func(serial, cn, skid string) {
 		_, err := db.CreateAsset(ctx, &oamcert.TLSCertificate{Version: "3", SerialNumber: serial,
 			SubjectCommonName: cn, IssuerCommonName: "Example CA", NotBefore: "2026-01-01T00:00:00Z",

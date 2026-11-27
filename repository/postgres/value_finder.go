@@ -19,10 +19,20 @@ import (
 
 // FindEntitiesByTagValue implements repository.ValueFinder.
 func (r *PostgresRepository) FindEntitiesByTagValue(ctx context.Context, atype oam.AssetType, name, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
+	return r.FindEntitiesByTagValueAfter(ctx, atype, name, value, contains, since, "", limit)
+}
+
+// FindEntitiesByTagValueAfter implements repository.ValueFinder.
+func (r *PostgresRepository) FindEntitiesByTagValueAfter(ctx context.Context, atype oam.AssetType, name, value string,
+	contains bool, since time.Time, after string, limit int) ([]*types.Entity, bool, error) {
 	if r == nil || r.DB == nil {
 		return nil, false, errors.New("missing PostgreSQL reader")
 	}
 	if err := valuequery.Check(atype, name, value, limit); err != nil {
+		return nil, false, err
+	}
+	afterID, err := valuequery.After(after)
+	if err != nil {
 		return nil, false, err
 	}
 
@@ -44,6 +54,10 @@ func (r *PostgresRepository) FindEntitiesByTagValue(ctx context.Context, atype o
 		args = append(args, since.UTC())
 		query += fmt.Sprintf(" AND g.updated_at >= $%d", len(args))
 	}
+	if afterID > 0 {
+		args = append(args, afterID)
+		query += fmt.Sprintf(" AND e.entity_id > $%d", len(args))
+	}
 
 	args = append(args, limit+1)
 	return r.entitiesByID(ctx, query+fmt.Sprintf(" ORDER BY e.entity_id LIMIT $%d", len(args)), args, limit)
@@ -51,10 +65,20 @@ func (r *PostgresRepository) FindEntitiesByTagValue(ctx context.Context, atype o
 
 // FindEntitiesByAttribute implements repository.ValueFinder.
 func (r *PostgresRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
+	return r.FindEntitiesByAttributeAfter(ctx, atype, key, value, contains, since, "", limit)
+}
+
+// FindEntitiesByAttributeAfter implements repository.ValueFinder.
+func (r *PostgresRepository) FindEntitiesByAttributeAfter(ctx context.Context, atype oam.AssetType, key, value string,
+	contains bool, since time.Time, after string, limit int) ([]*types.Entity, bool, error) {
 	if r == nil || r.DB == nil {
 		return nil, false, errors.New("missing PostgreSQL reader")
 	}
 	if err := valuequery.Check(atype, key, value, limit); err != nil {
+		return nil, false, err
+	}
+	afterID, err := valuequery.After(after)
+	if err != nil {
 		return nil, false, err
 	}
 	if err := valuequery.CheckKey(key); err != nil {
@@ -89,6 +113,10 @@ func (r *PostgresRepository) FindEntitiesByAttribute(ctx context.Context, atype 
 	if !since.IsZero() {
 		args = append(args, since.UTC())
 		query += fmt.Sprintf(" AND e.updated_at >= $%d", len(args))
+	}
+	if afterID > 0 {
+		args = append(args, afterID)
+		query += fmt.Sprintf(" AND e.entity_id > $%d", len(args))
 	}
 
 	args = append(args, limit+1)

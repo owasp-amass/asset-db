@@ -18,10 +18,20 @@ import (
 
 // FindEntitiesByTagValue implements repository.ValueFinder.
 func (r *SqliteRepository) FindEntitiesByTagValue(ctx context.Context, atype oam.AssetType, name, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
+	return r.FindEntitiesByTagValueAfter(ctx, atype, name, value, contains, since, "", limit)
+}
+
+// FindEntitiesByTagValueAfter implements repository.ValueFinder.
+func (r *SqliteRepository) FindEntitiesByTagValueAfter(ctx context.Context, atype oam.AssetType, name, value string,
+	contains bool, since time.Time, after string, limit int) ([]*types.Entity, bool, error) {
 	if r == nil || r.rpool == nil {
 		return nil, false, errors.New("missing SQLite reader")
 	}
 	if err := valuequery.Check(atype, name, value, limit); err != nil {
+		return nil, false, err
+	}
+	afterID, err := valuequery.After(after)
+	if err != nil {
 		return nil, false, err
 	}
 
@@ -39,16 +49,30 @@ func (r *SqliteRepository) FindEntitiesByTagValue(ctx context.Context, atype oam
 		query += " AND g.updated_at >= ?"
 		args = append(args, since.UTC())
 	}
+	if afterID > 0 {
+		query += " AND e.entity_id > ?"
+		args = append(args, afterID)
+	}
 
 	return r.entitiesByID(ctx, query+" ORDER BY e.entity_id LIMIT ?", append(args, limit+1), limit)
 }
 
 // FindEntitiesByAttribute implements repository.ValueFinder.
 func (r *SqliteRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
+	return r.FindEntitiesByAttributeAfter(ctx, atype, key, value, contains, since, "", limit)
+}
+
+// FindEntitiesByAttributeAfter implements repository.ValueFinder.
+func (r *SqliteRepository) FindEntitiesByAttributeAfter(ctx context.Context, atype oam.AssetType, key, value string,
+	contains bool, since time.Time, after string, limit int) ([]*types.Entity, bool, error) {
 	if r == nil || r.rpool == nil {
 		return nil, false, errors.New("missing SQLite reader")
 	}
 	if err := valuequery.Check(atype, key, value, limit); err != nil {
+		return nil, false, err
+	}
+	afterID, err := valuequery.After(after)
+	if err != nil {
 		return nil, false, err
 	}
 	if err := valuequery.CheckKey(key); err != nil {
@@ -82,6 +106,10 @@ func (r *SqliteRepository) FindEntitiesByAttribute(ctx context.Context, atype oa
 	if !since.IsZero() {
 		query += " AND e.updated_at >= ?"
 		args = append(args, since.UTC())
+	}
+	if afterID > 0 {
+		query += " AND e.entity_id > ?"
+		args = append(args, afterID)
 	}
 
 	return r.entitiesByID(ctx, query+" ORDER BY e.entity_id LIMIT ?", append(args, limit+1), limit)

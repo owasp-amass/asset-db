@@ -22,7 +22,13 @@ import (
 // its data (DNS records) or property_value (simple properties), the fields
 // Property.Value returns.
 func (neo *NeoRepository) FindEntitiesByTagValue(ctx context.Context, atype oam.AssetType, name, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
-	query, params, err := tagValueQuery(atype, name, value, contains, since, limit)
+	return neo.FindEntitiesByTagValueAfter(ctx, atype, name, value, contains, since, "", limit)
+}
+
+// FindEntitiesByTagValueAfter implements repository.ValueFinder.
+func (neo *NeoRepository) FindEntitiesByTagValueAfter(ctx context.Context, atype oam.AssetType, name, value string,
+	contains bool, since time.Time, after string, limit int) ([]*types.Entity, bool, error) {
+	query, params, err := tagValueQuery(atype, name, value, contains, since, after, limit)
 	if err != nil {
 		return nil, false, err
 	}
@@ -33,7 +39,8 @@ func (neo *NeoRepository) FindEntitiesByTagValue(ctx context.Context, atype oam.
 // tagValueQuery builds the Cypher query and parameters for
 // FindEntitiesByTagValue. Every value is a parameter; the asset type label,
 // which cannot be, is checked against OAM's asset types.
-func tagValueQuery(atype oam.AssetType, name, value string, contains bool, since time.Time, limit int) (string, map[string]any, error) {
+func tagValueQuery(atype oam.AssetType, name, value string, contains bool, since time.Time, after string,
+	limit int) (string, map[string]any, error) {
 	if err := valuequery.Check(atype, name, value, limit); err != nil {
 		return "", nil, err
 	}
@@ -54,15 +61,26 @@ func tagValueQuery(atype oam.AssetType, name, value string, contains bool, since
 		params["since"] = timeToNeo4jTime(since)
 	}
 
+	page := ""
+	if after != "" {
+		page = " WHERE a.entity_id > $after"
+		params["after"] = after
+	}
 	query := "MATCH (p:EntityTag {property_name: $name}) WHERE " + match +
-		" WITH DISTINCT p.entity_id AS eid MATCH (a:Entity:" + label + " {entity_id: eid})" +
+		" WITH DISTINCT p.entity_id AS eid MATCH (a:Entity:" + label + " {entity_id: eid})" + page +
 		" RETURN a ORDER BY a.entity_id LIMIT $limit"
 	return query, params, nil
 }
 
 // FindEntitiesByAttribute implements repository.ValueFinder.
 func (neo *NeoRepository) FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error) {
-	query, params, err := attributeQuery(atype, key, value, contains, since, limit)
+	return neo.FindEntitiesByAttributeAfter(ctx, atype, key, value, contains, since, "", limit)
+}
+
+// FindEntitiesByAttributeAfter implements repository.ValueFinder.
+func (neo *NeoRepository) FindEntitiesByAttributeAfter(ctx context.Context, atype oam.AssetType, key, value string,
+	contains bool, since time.Time, after string, limit int) ([]*types.Entity, bool, error) {
+	query, params, err := attributeQuery(atype, key, value, contains, since, after, limit)
 	if err != nil {
 		return nil, false, err
 	}
@@ -72,7 +90,8 @@ func (neo *NeoRepository) FindEntitiesByAttribute(ctx context.Context, atype oam
 
 // attributeQuery builds the Cypher query and parameters for
 // FindEntitiesByAttribute; the key is a parameter too (a[$key]).
-func attributeQuery(atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) (string, map[string]any, error) {
+func attributeQuery(atype oam.AssetType, key, value string, contains bool, since time.Time, after string,
+	limit int) (string, map[string]any, error) {
 	if err := valuequery.Check(atype, key, value, limit); err != nil {
 		return "", nil, err
 	}
@@ -95,6 +114,10 @@ func attributeQuery(atype oam.AssetType, key, value string, contains bool, since
 	if !since.IsZero() {
 		where += " AND a.updated_at >= $since"
 		params["since"] = timeToNeo4jTime(since)
+	}
+	if after != "" {
+		where += " AND a.entity_id > $after"
+		params["after"] = after
 	}
 
 	return "MATCH (a:Entity:" + label + ") WHERE " + where + " RETURN a ORDER BY a.entity_id LIMIT $limit", params, nil

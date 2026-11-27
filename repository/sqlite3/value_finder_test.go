@@ -66,6 +66,16 @@ func TestFindEntitiesByTagValue(t *testing.T) {
 	assert.Len(t, ents, 2)
 	assert.True(t, more)
 
+	// the next page starts after the last entity of this one
+	next, more, err := db.FindEntitiesByTagValueAfter(ctx, oam.FQDN, "dns_record", "google-site-verification", true,
+		time.Time{}, ents[1].ID, 2)
+	require.NoError(t, err)
+	require.Len(t, next, 1)
+	assert.False(t, more)
+	assert.NotContains(t, []string{ents[0].ID, ents[1].ID}, next[0].ID)
+	_, _, err = db.FindEntitiesByTagValueAfter(ctx, oam.FQDN, "dns_record", "x", false, time.Time{}, "not-an-id", 2)
+	assert.Error(t, err, "a cursor that is not an entity ID")
+
 	ents, _, err = db.FindEntitiesByTagValue(ctx, oam.IPAddress, "dns_record", "google-site-verification=abc123",
 		false, time.Time{}, 10)
 	require.NoError(t, err)

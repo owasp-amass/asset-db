@@ -19,7 +19,9 @@ import (
 // correlating evidence: it finds the other entities that carry a value one
 // entity has, such as the same DNS TXT verification token or the same
 // certificate key identifier. Rows are limited at the database layer, and
-// more=true means at least one further match exists.
+// more=true means at least one further match exists. Matches come in entity
+// ID order; the After variants read the page after the entity ID after (the
+// last ID of the previous page), so every match can be read.
 type ValueFinder interface {
 	// FindEntitiesByTagValue finds entities of atype with a tag whose
 	// property name is name and whose value equals value, or contains it
@@ -31,6 +33,14 @@ type ValueFinder interface {
 	// object or list attribute (a service's headers) is matched as its JSON
 	// text.
 	FindEntitiesByAttribute(ctx context.Context, atype oam.AssetType, key, value string, contains bool, since time.Time, limit int) ([]*types.Entity, bool, error)
+	// FindEntitiesByTagValueAfter is FindEntitiesByTagValue's page after the
+	// entity ID after ("" for the first page).
+	FindEntitiesByTagValueAfter(ctx context.Context, atype oam.AssetType, name, value string, contains bool,
+		since time.Time, after string, limit int) ([]*types.Entity, bool, error)
+	// FindEntitiesByAttributeAfter is FindEntitiesByAttribute's page after the
+	// entity ID after ("" for the first page).
+	FindEntitiesByAttributeAfter(ctx context.Context, atype oam.AssetType, key, value string, contains bool,
+		since time.Time, after string, limit int) ([]*types.Entity, bool, error)
 }
 
 var (

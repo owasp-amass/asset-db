@@ -9,6 +9,7 @@ package valuequery
 import (
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 
 	oam "github.com/owasp-amass/open-asset-model"
@@ -35,6 +36,20 @@ func Check(atype oam.AssetType, name, value string, limit int) error {
 	}
 
 	return nil
+}
+
+// After parses a page cursor: the entity ID after which a page starts, or
+// 0 for the first page.
+func After(after string) (int64, error) {
+	if after == "" {
+		return 0, nil
+	}
+	id, err := strconv.ParseInt(after, 10, 64)
+	if err != nil || id < 1 {
+		return 0, errors.New("the page cursor must be an entity ID")
+	}
+
+	return id, nil
 }
 
 // CheckKey validates an attribute key, which is written into the
