@@ -45,16 +45,14 @@ func TestPostgresWorkQueue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got, "nothing is claimed twice")
 
-	c, err := db.CountWork(ctx, q, fqdn)
-	require.NoError(t, err)
+	c := countWork(t, db, q, fqdn)
 	assert.Equal(t, types.WorkCounts{Leased: 3}, c)
 
 	assert.ErrorIs(t, db.AckWork(ctx, q, "a", "w2"), types.ErrWorkNotLeased, "only the owner acks")
 	require.NoError(t, db.AckWork(ctx, q, "a", "w1"), "acking")
 	require.NoError(t, db.ReleaseWork(ctx, q, "b", "w2"), "another owner's release does nothing")
 	require.NoError(t, db.ReleaseWork(ctx, q, "b", "w1"), "releasing")
-	c, err = db.CountWork(ctx, q, fqdn)
-	require.NoError(t, err)
+	c = countWork(t, db, q, fqdn)
 	assert.Equal(t, types.WorkCounts{Queued: 1, Leased: 1, Done: 1}, c)
 
 	got, err = db.ClaimWork(ctx, q, fqdn, "w2", 5, time.Hour)
@@ -73,8 +71,7 @@ func TestPostgresWorkQueue(t *testing.T) {
 	_, err = db.ClaimWork(ctx, q, "IPAddress", "w1", 1, 20*time.Millisecond)
 	require.NoError(t, err)
 	time.Sleep(100 * time.Millisecond)
-	c, err = db.CountWork(ctx, q, "IPAddress")
-	require.NoError(t, err)
+	c = countWork(t, db, q, "IPAddress")
 	assert.Equal(t, types.WorkCounts{Queued: 1}, c, "an expired lease counts as queued")
 	got, err = db.ClaimWork(ctx, q, "IPAddress", "w2", 1, 0)
 	require.NoError(t, err)
@@ -96,15 +93,26 @@ func TestPostgresWorkQueue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "e"}, got, "the item keeps its place")
 
-	c, err = db.CountWork(ctx, q, "")
-	require.NoError(t, err)
+	c = countWork(t, db, q, "")
 	assert.Equal(t, types.WorkCounts{Leased: 5}, c, "every kind")
 
 	require.NoError(t, db.DeleteQueue(ctx, q), "deleting the queue")
-	c, err = db.CountWork(ctx, q, "")
-	require.NoError(t, err)
+	c = countWork(t, db, q, "")
 	assert.Equal(t, types.WorkCounts{}, c, "the queue is gone")
-	c, err = db.CountWork(ctx, "job-2", "")
-	require.NoError(t, err)
+	c = countWork(t, db, "job-2", "")
 	assert.Equal(t, types.WorkCounts{Queued: 1}, c, "other queues are kept")
+}
+
+// countWork counts a queue's items of a kind, or of every kind when kind is
+// empty.
+func countWork(t *testing.T, db interface {
+	CountWorkByKind(context.Context, string) (types.WorkByKind, error)
+}, queue, kind string) types.WorkCounts {
+	t.Helper()
+	byKind, err := db.CountWorkByKind(context.Background(), queue)
+	require.NoError(t, err)
+	if kind == "" {
+		return byKind.Total()
+	}
+	return byKind[kind]
 }

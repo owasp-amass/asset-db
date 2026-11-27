@@ -176,23 +176,32 @@ func (r *PostgresRepository) ReleaseWork(ctx context.Context, queue, key, owner 
 	return j.Wait()
 }
 
-// CountWork implements repository.WorkQueue.
-func (r *PostgresRepository) CountWork(ctx context.Context, queue, kind string) (types.WorkCounts, error) {
-	var c types.WorkCounts
-	j := NewRowJob(ctx, `SELECT
+// CountWorkByKind implements repository.WorkQueue.
+func (r *PostgresRepository) CountWorkByKind(ctx context.Context, queue string) (types.WorkByKind, error) {
+	out := types.WorkByKind{}
+	j := NewRowsJob(ctx, `SELECT kind,
           COALESCE(SUM(CASE WHEN state = 0 OR (state = 1 AND lease_until <= timezone('utc', now()))
             THEN 1 ELSE 0 END), 0),
           COALESCE(SUM(CASE WHEN state = 1 AND (lease_until IS NULL OR lease_until > timezone('utc', now()))
             THEN 1 ELSE 0 END), 0),
           COALESCE(SUM(CASE WHEN state = 2 THEN 1 ELSE 0 END), 0)
-        FROM public.work_item WHERE queue = @queue AND (@kind::text = '' OR kind = @kind::text)`,
-		pgx.NamedArgs{"queue": queue, "kind": kind},
-		func(row pgx.Row) error { return row.Scan(&c.Queued, &c.Leased, &c.Done) })
+        FROM public.work_item WHERE queue = @queue GROUP BY kind`,
+		pgx.NamedArgs{"queue": queue}, func(rows pgx.Rows) error {
+			for rows.Next() {
+				var kind string
+				var c types.WorkCounts
+				if err := rows.Scan(&kind, &c.Queued, &c.Leased, &c.Done); err != nil {
+					return err
+				}
+				out[kind] = c
+			}
+			return rows.Err()
+		})
 	r.rpool.Submit(j)
 	if err := j.Wait(); err != nil {
-		return types.WorkCounts{}, err
+		return nil, err
 	}
-	return c, nil
+	return out, nil
 }
 
 // CountWorkByOwner implements repository.WorkQueue.

@@ -28,6 +28,20 @@ type WorkCounts struct {
 	Done   int64 `json:"done"`
 }
 
+// WorkByKind are a queue's counts by kind of work.
+type WorkByKind map[string]WorkCounts
+
+// Total is the counts over every kind.
+func (m WorkByKind) Total() WorkCounts {
+	var t WorkCounts
+	for _, c := range m {
+		t.Queued += c.Queued
+		t.Leased += c.Leased
+		t.Done += c.Done
+	}
+	return t
+}
+
 // ErrWorkNotLeased is returned when an owner acks an item it does not
 // lease.
 var ErrWorkNotLeased = errors.New("the work item is not leased to this owner")

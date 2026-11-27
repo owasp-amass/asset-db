@@ -39,9 +39,9 @@ type WorkQueue interface {
 	// ReleaseWork returns a leased item to queued; given an owner, only an
 	// item the owner leases. Releasing an item not leased does nothing.
 	ReleaseWork(ctx context.Context, queue, key, owner string) error
-	// CountWork counts the queue's items of the kind, or of every kind when
-	// kind is empty, in each state.
-	CountWork(ctx context.Context, queue, kind string) (types.WorkCounts, error)
+	// CountWorkByKind counts the queue's items in each state, by kind, in
+	// one read.
+	CountWorkByKind(ctx context.Context, queue string) (types.WorkByKind, error)
 	// CountWorkByOwner counts, by owner, the queue's items each leases (an
 	// expired lease counted as queued) and those each did.
 	CountWorkByOwner(ctx context.Context, queue string) (map[string]types.WorkCounts, error)
