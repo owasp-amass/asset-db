@@ -10,6 +10,7 @@ import (
 	"github.com/owasp-amass/asset-db/repository/postgres"
 	"github.com/owasp-amass/asset-db/repository/sqlite3"
 	"github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
 // DegreeReader is implemented by repositories that can count, for relation
@@ -23,6 +24,11 @@ type DegreeReader interface {
 	// edges from it. Entities without such edges are not counted, and a
 	// label no edge has is absent.
 	DegreeHistograms(ctx context.Context, direction string, labels []string) (map[string]types.DegreeHistogram, error)
+	// DegreeHistogramWhere is one label's histogram, counting only entities of
+	// atype whose stored attribute key equals value: the fingerprint
+	// Identifiers of one id_type, say.
+	DegreeHistogramWhere(ctx context.Context, direction, label string, atype oam.AssetType, key,
+		value string) (types.DegreeHistogram, error)
 }
 
 var (

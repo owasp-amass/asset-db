@@ -123,6 +123,8 @@ func promotedColumn(table, key string) string {
 	switch table + "." + key {
 	case "identifier.id":
 		return "id_value"
+	case "identifier.id_type":
+		return "id_type"
 	case "url.url":
 		return "raw_url"
 	}

@@ -17,6 +17,15 @@ const MaxDegreeLabels = 64
 // number of edges with the label: degree -> entities.
 type DegreeHistogram map[int]int64
 
+// ValidateDegreeFilter checks the filter of a degree read: a value of at
+// most 1024 characters.
+func ValidateDegreeFilter(value string) error {
+	if value == "" || len(value) > 1024 {
+		return errors.New("a degree read's filter value is 1 to 1024 characters")
+	}
+	return nil
+}
+
 // ValidateDegreeRead checks a degree read: a direction of "in" or "out", and
 // 1..MaxDegreeLabels labels, none empty.
 func ValidateDegreeRead(direction string, labels []string) error {
