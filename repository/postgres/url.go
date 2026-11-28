@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
+	"github.com/owasp-amass/asset-db/internal/urlkey"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
@@ -61,7 +62,10 @@ func (r *PostgresRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int6
 		return 0, fmt.Errorf("the host cannot be empty")
 	}
 
-	record, err := a.JSON()
+	// stored with only its scheme and host lowercased (urlkey)
+	keyed := *a
+	keyed.Raw = urlkey.Key(a.Raw)
+	record, err := keyed.JSON()
 	if err != nil {
 		return 0, err
 	}
@@ -116,7 +120,7 @@ func (r *PostgresRepository) findURLsByContent(ctx context.Context, filters dbt.
 		return nil, errors.New("no filters provided")
 	}
 
-	filtersJSON, err := json.Marshal(filters)
+	filtersJSON, err := json.Marshal(keyedURLFilters(filters))
 	if err != nil {
 		return nil, err
 	}
@@ -236,4 +240,19 @@ func (r *PostgresRepository) buildURLEntity(eid, rid int64, createdAt, updatedAt
 		LastSeen:  updatedAt.In(time.UTC).Local(),
 		Asset:     a,
 	}, nil
+}
+
+// keyedURLFilters is filters with its url value in the form URLs are stored
+// in (urlkey.Key).
+func keyedURLFilters(filters dbt.ContentFilters) dbt.ContentFilters {
+	raw, ok := filters["url"].(string)
+	if !ok {
+		return filters
+	}
+	out := make(dbt.ContentFilters, len(filters))
+	for k, v := range filters {
+		out[k] = v
+	}
+	out["url"] = urlkey.Key(raw)
+	return out
 }

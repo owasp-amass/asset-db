@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgtype/zeronull"
+	"github.com/owasp-amass/asset-db/internal/urlkey"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamfile "github.com/owasp-amass/open-asset-model/file"
 )
@@ -49,7 +50,10 @@ func (r *PostgresRepository) upsertFile(ctx context.Context, a *oamfile.File) (i
 		return 0, errors.New("file URL cannot be empty")
 	}
 
-	record, err := a.JSON()
+	// stored with only its scheme and host lowercased (urlkey)
+	keyed := *a
+	keyed.URL = urlkey.Key(a.URL)
+	record, err := keyed.JSON()
 	if err != nil {
 		return 0, err
 	}
@@ -107,7 +111,7 @@ func (r *PostgresRepository) findFilesByContent(ctx context.Context, filters dbt
 		return nil, errors.New("no filters provided")
 	}
 
-	filtersJSON, err := json.Marshal(filters)
+	filtersJSON, err := json.Marshal(keyedURLFilters(filters))
 	if err != nil {
 		return nil, err
 	}

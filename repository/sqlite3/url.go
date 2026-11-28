@@ -13,15 +13,18 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/owasp-amass/asset-db/internal/urlkey"
 	"github.com/owasp-amass/asset-db/types"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 	_ "modernc.org/sqlite"
 )
 
-// Params: :raw_url, :scheme:, :attrs
+// Params: :raw_url, :scheme:, :attrs. The raw URL is stored as urlkey.Key gives
+// it: only its scheme and host are case-insensitive (RFC 3986 section 6.2.2.1),
+// so its path, query and fragment keep their case.
 const upsertURLText = `
 INSERT INTO url(raw_url, scheme, attrs)
-VALUES (lower(:raw_url), :scheme, :attrs)
+VALUES (:raw_url, :scheme, :attrs)
 ON CONFLICT(raw_url) DO UPDATE SET
   scheme     = COALESCE(excluded.scheme, url.scheme),
   attrs      = json_patch(url.attrs,     excluded.attrs),
@@ -31,7 +34,7 @@ ON CONFLICT(raw_url) DO UPDATE SET
 const selectEntityIDByURLText = `
 SELECT entity_id FROM entity
 WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'url' LIMIT 1)
-  AND natural_key = lower(:raw_url)
+  AND natural_key = :raw_url
 LIMIT 1`
 
 // Param: :row_id
@@ -79,7 +82,7 @@ func (r *SqliteRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int64,
 		Name:    "asset.url.upsert",
 		SQLText: upsertURLText,
 		Args: []any{
-			sql.Named("raw_url", a.Raw),
+			sql.Named("raw_url", urlkey.Key(a.Raw)),
 			sql.Named("scheme", a.Scheme),
 			sql.Named("attrs", string(attrsJSON)),
 		},
@@ -95,7 +98,7 @@ func (r *SqliteRepository) upsertURL(ctx context.Context, a *oamurl.URL) (int64,
 		Ctx:     ctx,
 		Name:    "asset.url.entity_id_by_url",
 		SQLText: selectEntityIDByURLText,
-		Args:    []any{sql.Named("raw_url", a.Raw)},
+		Args:    []any{sql.Named("raw_url", urlkey.Key(a.Raw))},
 		Result:  ch,
 	})
 

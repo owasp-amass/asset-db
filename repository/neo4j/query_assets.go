@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/owasp-amass/asset-db/internal/iprange"
+	"github.com/owasp-amass/asset-db/internal/urlkey"
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -76,7 +77,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["status"] = v.Status
 		m["dnssec"] = v.DNSSEC
 	case *file.File:
-		m["url"] = v.URL
+		m["url"] = urlkey.Key(v.URL)
 		m["name"] = v.Name
 		m["type"] = v.Type
 		m["size"] = v.Size
@@ -215,7 +216,7 @@ func entityPropsMap(entity *types.Entity) (map[string]interface{}, error) {
 		m["authority_key_id"] = v.AuthorityKeyID
 		m["public_key_sha256"] = v.PublicKeySHA256
 	case *url.URL:
-		m["url"] = v.Raw
+		m["url"] = urlkey.Key(v.Raw)
 		m["scheme"] = v.Scheme
 		m["username"] = v.Username
 		m["password"] = v.Password
@@ -246,7 +247,7 @@ func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
 	case *oamreg.DomainRecord:
 		filter["domain"] = v.Domain
 	case *file.File:
-		filter["url"] = v.URL
+		filter["url"] = urlkey.Key(v.URL)
 	case *dns.FQDN:
 		filter["name"] = v.Name
 	case *financial.FundsTransfer:
@@ -284,7 +285,7 @@ func defaultContentFilter(asset oam.Asset) (types.ContentFilters, error) {
 		filter["authority_key_id"] = v.AuthorityKeyID
 		filter["subject_key_id"] = v.SubjectKeyID
 	case *url.URL:
-		filter["url"] = v.Raw
+		filter["url"] = urlkey.Key(v.Raw)
 	}
 	if len(filter) == 0 {
 		return nil, errors.New("asset type not supported")

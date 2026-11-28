@@ -12,15 +12,17 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/owasp-amass/asset-db/internal/urlkey"
 	"github.com/owasp-amass/asset-db/types"
 	oamfile "github.com/owasp-amass/open-asset-model/file"
 	_ "modernc.org/sqlite"
 )
 
-// Params: :file_url, :basename, :file_type, :attrs
+// Params: :file_url, :basename, :file_type, :attrs. The URL is stored as
+// urlkey.Key gives it, keeping the case of its path and query.
 const upsertFileText = `
 INSERT INTO file(file_url, basename, file_type, attrs)
-VALUES (lower(:file_url), :basename, :file_type, :attrs)
+VALUES (:file_url, :basename, :file_type, :attrs)
 ON CONFLICT(file_url) DO UPDATE SET
     basename   = COALESCE(excluded.basename,  file.basename),
     file_type  = COALESCE(excluded.file_type, file.file_type),
@@ -31,7 +33,7 @@ ON CONFLICT(file_url) DO UPDATE SET
 const selectEntityIDByFileText = `
 SELECT entity_id FROM entity
 WHERE etype_id = (SELECT id FROM entity_type_lu WHERE name = 'file' LIMIT 1)
-  AND natural_key = lower(:file_url)
+  AND natural_key = :file_url
 LIMIT 1`
 
 // Param: :row_id
@@ -65,7 +67,7 @@ func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int
 		Name:    "asset.file.upsert",
 		SQLText: upsertFileText,
 		Args: []any{
-			sql.Named("file_url", a.URL),
+			sql.Named("file_url", urlkey.Key(a.URL)),
 			sql.Named("basename", a.Name),
 			sql.Named("file_type", a.Type),
 			sql.Named("attrs", string(attrsJSON)),
@@ -81,7 +83,7 @@ func (r *SqliteRepository) upsertFile(ctx context.Context, a *oamfile.File) (int
 		Ctx:     ctx,
 		Name:    "asset.file.entity_id_by_file",
 		SQLText: selectEntityIDByFileText,
-		Args:    []any{sql.Named("file_url", a.URL)},
+		Args:    []any{sql.Named("file_url", urlkey.Key(a.URL))},
 		Result:  ch,
 	})
 

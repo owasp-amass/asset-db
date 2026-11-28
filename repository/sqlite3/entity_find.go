@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/owasp-amass/asset-db/internal/urlkey"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	_ "modernc.org/sqlite"
@@ -168,6 +169,11 @@ func buildWhere(table string, reg regEntry, since time.Time, filters dbt.Content
 		if strings.HasPrefix(col, "lower(") || strings.HasSuffix(col, "norm") {
 			if s, ok := val.(string); ok {
 				val = strings.ToLower(s)
+			}
+		}
+		if (table == "url" || table == "file") && k == "url" {
+			if s, ok := val.(string); ok {
+				val = urlkey.Key(s)
 			}
 		}
 
