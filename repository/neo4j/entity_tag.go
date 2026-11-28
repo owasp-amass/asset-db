@@ -183,7 +183,7 @@ func (neo *NeoRepository) DeleteEntityTag(ctx context.Context, id string) error 
 	defer cancel()
 
 	_, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-		"MATCH (n:EntityTag {tag_id: $tid}) DETACH DELETE n",
+		"MATCH (n:EntityTag {tag_id: $tid}) DETACH DELETE n"+countDeletion,
 		map[string]interface{}{
 			"tid": id,
 		},

@@ -420,7 +420,7 @@ func (r *PostgresRepository) deleteEntityByID(ctx context.Context, eid int64, al
 	}
 
 	// Delete the entity (FKs should take care of edges, tag maps if schema has CASCADE)
-	j := NewExecJob(ctx, `DELETE FROM entity WHERE entity_id = @entity_id`, pgx.NamedArgs{
+	j := NewExecJob(ctx, countedDelete(`DELETE FROM entity WHERE entity_id = @entity_id`), pgx.NamedArgs{
 		"entity_id": eid,
 	}, func(tag pgconn.CommandTag) error {
 		if tag.RowsAffected() == 0 {

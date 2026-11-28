@@ -173,7 +173,7 @@ func (r *PostgresRepository) tagsForEntity(ctx context.Context, eid int64, since
 
 // removeEntityTag deletes a specific tag from an entity.
 func (r *PostgresRepository) removeEntityTag(ctx context.Context, tid int64) (int64, error) {
-	j := NewExecJob(ctx, `DELETE FROM public.entity_tag WHERE tag_id = @tag_id`, pgx.NamedArgs{
+	j := NewExecJob(ctx, countedDelete(`DELETE FROM public.entity_tag WHERE tag_id = @tag_id`), pgx.NamedArgs{
 		"tag_id": tid,
 	}, func(tag pgconn.CommandTag) error {
 		if tag.RowsAffected() == 0 {

@@ -183,7 +183,7 @@ func (neo *NeoRepository) DeleteEdgeTag(ctx context.Context, id string) error {
 	defer cancel()
 
 	_, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-		"MATCH (n:EdgeTag {tag_id: $tid}) DETACH DELETE n",
+		"MATCH (n:EdgeTag {tag_id: $tid}) DETACH DELETE n"+countDeletion,
 		map[string]interface{}{
 			"tid": id,
 		},

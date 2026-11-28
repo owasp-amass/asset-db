@@ -71,6 +71,7 @@ func (r *SqliteRepository) deleteEntityByID(ctx context.Context, eid int64, also
 		Name:    "entity.delete.by_id",
 		SQLText: `DELETE FROM entity WHERE entity_id = :entity_id`,
 		Args:    []any{sql.Named("entity_id", eid)},
+		Also:    countDeletion,
 		Result:  done,
 	})
 	return <-done

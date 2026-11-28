@@ -28,7 +28,10 @@ type writeJob struct {
 	Returning []any
 	// Rows, when set, reads every row the statement returns (a RETURNING
 	// clause that may return several); it is used instead of Returning.
-	Rows   func(*sql.Rows) error
+	Rows func(*sql.Rows) error
+	// Also, when set, is a statement run after SQLText, in the same
+	// savepoint, when SQLText succeeds; it takes no arguments.
+	Also   string
 	Result chan error
 }
 
@@ -263,6 +266,9 @@ func (ww *writeWorker) flushJobs(jobs []*writeJob) ([]*writeJob, error) {
 			err = tx.StmtContext(job.Ctx, lease.Stmt).QueryRow(job.Args...).Scan(job.Returning...)
 		default:
 			_, err = tx.StmtContext(job.Ctx, lease.Stmt).Exec(job.Args...)
+		}
+		if err == nil && job.Also != "" {
+			_, err = tx.ExecContext(job.Ctx, job.Also)
 		}
 		if err != nil {
 			// Roll back just this job, keep going

@@ -321,7 +321,7 @@ func (r *PostgresRepository) findEdgesForEntity(ctx context.Context, eid int64, 
 
 // deleteEdgeByID removes a single edge and cascades its tag mappings (if FK CASCADE present).
 func (r *PostgresRepository) deleteEdgeByID(ctx context.Context, id int64) error {
-	j := NewExecJob(ctx, `DELETE FROM edge WHERE edge_id = @edge_id`, pgx.NamedArgs{
+	j := NewExecJob(ctx, countedDelete(`DELETE FROM edge WHERE edge_id = @edge_id`), pgx.NamedArgs{
 		"edge_id": id,
 	}, func(tag pgconn.CommandTag) error {
 		if tag.RowsAffected() == 0 {

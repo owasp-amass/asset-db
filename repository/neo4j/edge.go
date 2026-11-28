@@ -349,7 +349,7 @@ func (neo *NeoRepository) DeleteEdge(ctx context.Context, id string) error {
 	defer cancel()
 
 	_, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-		"MATCH ()-[r]->() WHERE elementId(r) = $eid DELETE r",
+		"MATCH ()-[r]->() WHERE elementId(r) = $eid DELETE r"+countDeletion,
 		map[string]interface{}{
 			"eid": id,
 		},

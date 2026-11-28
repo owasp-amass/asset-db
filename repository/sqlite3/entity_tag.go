@@ -148,6 +148,7 @@ func (r *SqliteRepository) DeleteEntityTag(ctx context.Context, id string) error
 		Name:    "entity.tag.delete",
 		SQLText: `DELETE FROM entity_tag WHERE tag_id = :tag_id`,
 		Args:    []any{sql.Named("tag_id", tid)},
+		Also:    countDeletion,
 		Result:  done,
 	})
 	return <-done

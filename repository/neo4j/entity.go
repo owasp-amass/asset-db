@@ -275,7 +275,7 @@ func (neo *NeoRepository) DeleteEntity(ctx context.Context, id string) error {
 	defer cancel()
 
 	_, err := neo4jdb.ExecuteQuery(tctx, neo.DB,
-		"MATCH (n:Entity {entity_id: $eid}) DETACH DELETE n",
+		"MATCH (n:Entity {entity_id: $eid}) DETACH DELETE n"+countDeletion,
 		map[string]interface{}{
 			"eid": id,
 		},

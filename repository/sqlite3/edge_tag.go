@@ -144,6 +144,7 @@ func (r *SqliteRepository) DeleteEdgeTag(ctx context.Context, id string) error {
 		Name:    "edge.tag.delete",
 		SQLText: `DELETE FROM edge_tag WHERE tag_id = :tag_id`,
 		Args:    []any{sql.Named("tag_id", tid)},
+		Also:    countDeletion,
 		Result:  done,
 	})
 	return <-done
